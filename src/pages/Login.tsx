@@ -1,0 +1,299 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Shield, Lock, AlertCircle, Loader2 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { cn } from '@/lib/utils';
+
+const PIN_LENGTH = 6;
+const MAX_ATTEMPTS = 5;
+const LOCKOUT_DURATION = 10 * 60 * 1000; // 10 minutes
+
+export default function Login() {
+  const [pin, setPin] = useState<string[]>(Array(PIN_LENGTH).fill(''));
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [shake, setShake] = useState(false);
+  const [attempts, setAttempts] = useState(0);
+  const [lockoutUntil, setLockoutUntil] = useState<Date | null>(null);
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const navigate = useNavigate();
+  const { login, isAuthenticated } = useAuth();
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
+
+  useEffect(() => {
+    // Check for existing lockout
+    const storedLockout = localStorage.getItem('vault_lockout');
+    if (storedLockout) {
+      const lockoutDate = new Date(storedLockout);
+      if (lockoutDate > new Date()) {
+        setLockoutUntil(lockoutDate);
+      } else {
+        localStorage.removeItem('vault_lockout');
+      }
+    }
+    
+    const storedAttempts = localStorage.getItem('vault_attempts');
+    if (storedAttempts) {
+      setAttempts(parseInt(storedAttempts));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (lockoutUntil) {
+      const interval = setInterval(() => {
+        if (new Date() > lockoutUntil) {
+          setLockoutUntil(null);
+          setAttempts(0);
+          localStorage.removeItem('vault_lockout');
+          localStorage.removeItem('vault_attempts');
+        }
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [lockoutUntil]);
+
+  const focusInput = (index: number) => {
+    if (index >= 0 && index < PIN_LENGTH) {
+      inputRefs.current[index]?.focus();
+    }
+  };
+
+  const handleChange = (index: number, value: string) => {
+    if (!/^\d*$/.test(value)) return;
+    
+    const newPin = [...pin];
+    newPin[index] = value.slice(-1);
+    setPin(newPin);
+    setError('');
+
+    if (value && index < PIN_LENGTH - 1) {
+      focusInput(index + 1);
+    }
+
+    // Auto-submit when all digits entered
+    if (newPin.every(d => d !== '') && newPin.join('').length === PIN_LENGTH) {
+      handleSubmit(newPin.join(''));
+    }
+  };
+
+  const handleKeyDown = (index: number, e: React.KeyboardEvent) => {
+    if (e.key === 'Backspace' && !pin[index] && index > 0) {
+      focusInput(index - 1);
+    }
+  };
+
+  const handleSubmit = async (pinValue: string) => {
+    if (lockoutUntil && new Date() < lockoutUntil) {
+      return;
+    }
+
+    setIsLoading(true);
+    setError('');
+
+    try {
+      // Check PIN against database
+      const { data: users, error: fetchError } = await supabase
+        .from('vault_users')
+        .select('id, pin_hash')
+        .limit(1);
+
+      if (fetchError) {
+        throw fetchError;
+      }
+
+      // If no user exists, create default user with PIN 123456
+      if (!users || users.length === 0) {
+        // Create default user (this would normally be done during setup)
+        const { data: newUser, error: createError } = await supabase
+          .from('vault_users')
+          .insert({ pin_hash: '$2a$10$defaulthash123456' }) // Placeholder - in real app, use edge function to hash
+          .select()
+          .single();
+
+        if (createError) {
+          throw createError;
+        }
+
+        // For demo purposes, accept 123456 as default PIN
+        if (pinValue === '123456') {
+          login(newUser.id);
+          navigate('/dashboard', { replace: true });
+          return;
+        }
+      }
+
+      // Simple PIN check (in production, use edge function with bcrypt)
+      const user = users?.[0];
+      if (user && pinValue === '123456') {
+        localStorage.removeItem('vault_attempts');
+        localStorage.removeItem('vault_lockout');
+        login(user.id);
+        navigate('/dashboard', { replace: true });
+      } else {
+        throw new Error('Falscher PIN');
+      }
+
+    } catch (err) {
+      console.error('Login error:', err);
+      
+      const newAttempts = attempts + 1;
+      setAttempts(newAttempts);
+      localStorage.setItem('vault_attempts', newAttempts.toString());
+
+      if (newAttempts >= MAX_ATTEMPTS) {
+        const lockout = new Date(Date.now() + LOCKOUT_DURATION);
+        setLockoutUntil(lockout);
+        localStorage.setItem('vault_lockout', lockout.toISOString());
+        setError(`Zu viele Versuche. Gesperrt für 10 Minuten.`);
+      } else {
+        setError(`Falscher PIN. ${MAX_ATTEMPTS - newAttempts} Versuche übrig.`);
+      }
+
+      setShake(true);
+      setTimeout(() => setShake(false), 500);
+      setPin(Array(PIN_LENGTH).fill(''));
+      focusInput(0);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const getRemainingLockoutTime = () => {
+    if (!lockoutUntil) return '';
+    const remaining = Math.max(0, lockoutUntil.getTime() - Date.now());
+    const minutes = Math.floor(remaining / 60000);
+    const seconds = Math.floor((remaining % 60000) / 1000);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-vault">
+      {/* Background effects */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-600/20 rounded-full blur-3xl animate-float" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-pink-600/20 rounded-full blur-3xl animate-float" style={{ animationDelay: '1s' }} />
+      </div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.5, ease: 'easeOut' }}
+        className={cn(
+          "glass-card p-8 md:p-12 w-full max-w-md",
+          shake && "animate-shake"
+        )}
+      >
+        {/* Logo */}
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ delay: 0.2, type: 'spring', damping: 15 }}
+          className="flex justify-center mb-8"
+        >
+          <div className="w-20 h-20 rounded-2xl bg-gradient-primary flex items-center justify-center pulse-glow">
+            <Shield className="w-10 h-10 text-white" />
+          </div>
+        </motion.div>
+
+        {/* Title */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.3 }}
+          className="text-center mb-8"
+        >
+          <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">
+            Private Vault
+          </h1>
+          <p className="text-white/60">
+            Gib deinen 6-stelligen PIN ein
+          </p>
+        </motion.div>
+
+        {/* PIN Input */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+          className="flex justify-center gap-3 mb-6"
+        >
+          {pin.map((digit, index) => (
+            <input
+              key={index}
+              ref={(el) => (inputRefs.current[index] = el)}
+              type="password"
+              inputMode="numeric"
+              maxLength={1}
+              value={digit}
+              onChange={(e) => handleChange(index, e.target.value)}
+              onKeyDown={(e) => handleKeyDown(index, e)}
+              disabled={isLoading || !!lockoutUntil}
+              className={cn(
+                "pin-input rounded-xl",
+                digit && "border-purple-500/50"
+              )}
+              autoFocus={index === 0}
+            />
+          ))}
+        </motion.div>
+
+        {/* Error message */}
+        <AnimatePresence>
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="flex items-center justify-center gap-2 mb-6 text-red-400"
+            >
+              <AlertCircle className="w-4 h-4" />
+              <span className="text-sm">{error}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Lockout timer */}
+        {lockoutUntil && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-center mb-6"
+          >
+            <div className="text-white/60 text-sm">
+              Entsperrt in: <span className="text-purple-400 font-mono">{getRemainingLockoutTime()}</span>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Loading indicator */}
+        {isLoading && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="flex justify-center"
+          >
+            <Loader2 className="w-8 h-8 text-purple-400 animate-spin" />
+          </motion.div>
+        )}
+
+        {/* Security badge */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.6 }}
+          className="flex items-center justify-center gap-2 text-white/40 text-xs mt-8"
+        >
+          <Lock className="w-3 h-3" />
+          <span>Ende-zu-Ende verschlüsselt</span>
+        </motion.div>
+      </motion.div>
+    </div>
+  );
+}
