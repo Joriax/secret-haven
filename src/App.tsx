@@ -11,6 +11,7 @@ import Dashboard from "./pages/Dashboard";
 import Notes from "./pages/Notes";
 import Photos from "./pages/Photos";
 import Files from "./pages/Files";
+import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -30,6 +31,7 @@ const App = () => (
               <Route path="/notes" element={<Notes />} />
               <Route path="/photos" element={<Photos />} />
               <Route path="/files" element={<Files />} />
+              <Route path="/settings" element={<Settings />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

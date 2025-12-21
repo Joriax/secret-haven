@@ -98,49 +98,26 @@ export default function Login() {
     setError('');
 
     try {
-      // Check PIN against database
-      const { data: users, error: fetchError } = await supabase
-        .from('vault_users')
-        .select('id, pin_hash')
-        .limit(1);
+      // Call edge function for secure PIN verification
+      const { data, error: invokeError } = await supabase.functions.invoke('verify-pin', {
+        body: { action: 'verify', pin: pinValue }
+      });
 
-      if (fetchError) {
-        throw fetchError;
+      if (invokeError) {
+        console.error('Edge function error:', invokeError);
+        throw new Error('Verbindungsfehler');
       }
 
-      // If no user exists, create default user with PIN 123456
-      if (!users || users.length === 0) {
-        // Create default user (this would normally be done during setup)
-        const { data: newUser, error: createError } = await supabase
-          .from('vault_users')
-          .insert({ pin_hash: '$2a$10$defaulthash123456' }) // Placeholder - in real app, use edge function to hash
-          .select()
-          .single();
-
-        if (createError) {
-          throw createError;
-        }
-
-        // For demo purposes, accept 123456 as default PIN
-        if (pinValue === '123456') {
-          login(newUser.id);
-          navigate('/dashboard', { replace: true });
-          return;
-        }
-      }
-
-      // Simple PIN check (in production, use edge function with bcrypt)
-      const user = users?.[0];
-      if (user && pinValue === '123456') {
+      if (data?.success && data?.userId) {
         localStorage.removeItem('vault_attempts');
         localStorage.removeItem('vault_lockout');
-        login(user.id);
+        login(data.userId);
         navigate('/dashboard', { replace: true });
       } else {
-        throw new Error('Falscher PIN');
+        throw new Error(data?.error || 'Falscher PIN');
       }
 
-    } catch (err) {
+    } catch (err: any) {
       console.error('Login error:', err);
       
       const newAttempts = attempts + 1;
@@ -153,7 +130,7 @@ export default function Login() {
         localStorage.setItem('vault_lockout', lockout.toISOString());
         setError(`Zu viele Versuche. Gesperrt für 10 Minuten.`);
       } else {
-        setError(`Falscher PIN. ${MAX_ATTEMPTS - newAttempts} Versuche übrig.`);
+        setError(err.message || `Falscher PIN. ${MAX_ATTEMPTS - newAttempts} Versuche übrig.`);
       }
 
       setShake(true);
@@ -214,6 +191,9 @@ export default function Login() {
           </h1>
           <p className="text-white/60">
             Gib deinen 6-stelligen PIN ein
+          </p>
+          <p className="text-white/40 text-xs mt-2">
+            Standard-PIN: 123456
           </p>
         </motion.div>
 
