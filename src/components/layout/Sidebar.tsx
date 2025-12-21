@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
   LayoutDashboard, 
@@ -9,7 +9,8 @@ import {
   LogOut,
   Shield,
   Menu,
-  X
+  X,
+  Settings
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
@@ -24,11 +25,18 @@ const navItems = [
   { icon: FileText, label: 'Notizen', path: '/notes' },
   { icon: Image, label: 'Fotos', path: '/photos' },
   { icon: FolderOpen, label: 'Dateien', path: '/files' },
+  { icon: Settings, label: 'Einstellungen', path: '/settings' },
 ];
 
 export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login', { replace: true });
+  };
 
   return (
     <>
@@ -117,7 +125,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
         {/* Logout */}
         <div className="p-4 border-t border-white/5">
           <button
-            onClick={logout}
+            onClick={handleLogout}
             className={cn(
               "flex items-center gap-3 px-4 py-3 w-full rounded-xl",
               "text-white/70 hover:text-red-400 hover:bg-red-500/10",
