@@ -1,11 +1,27 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import * as bcrypt from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Simple hash function using Web Crypto API (compatible with Edge Functions)
+async function hashPin(pin: string, salt?: string): Promise<string> {
+  const actualSalt = salt || crypto.randomUUID();
+  const encoder = new TextEncoder();
+  const data = encoder.encode(pin + actualSalt);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return `${actualSalt}:${hashHex}`;
+}
+
+async function verifyPin(pin: string, storedHash: string): Promise<boolean> {
+  const [salt] = storedHash.split(':');
+  const newHash = await hashPin(pin, salt);
+  return newHash === storedHash;
+}
 
 serve(async (req) => {
   // Handle CORS preflight
@@ -34,7 +50,7 @@ serve(async (req) => {
       // Get user from database
       const { data: users, error: fetchError } = await supabase
         .from('vault_users')
-        .select('id, pin_hash')
+        .select('id, pin_hash, decoy_pin_hash')
         .limit(1);
 
       if (fetchError) {
@@ -45,7 +61,7 @@ serve(async (req) => {
       // If no user exists, create default user with PIN 123456
       if (!users || users.length === 0) {
         console.log('No user found, creating default user with PIN 123456');
-        const defaultHash = await bcrypt.hash('123456');
+        const defaultHash = await hashPin('123456');
         
         const { data: newUser, error: createError } = await supabase
           .from('vault_users')
@@ -62,7 +78,7 @@ serve(async (req) => {
         if (pin === '123456') {
           console.log('Login successful with default PIN');
           return new Response(
-            JSON.stringify({ success: true, userId: newUser.id }),
+            JSON.stringify({ success: true, userId: newUser.id, isDecoy: false }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         } else {
@@ -76,13 +92,25 @@ serve(async (req) => {
 
       const user = users[0];
       
-      // Verify PIN with bcrypt
-      const isValid = await bcrypt.compare(pin, user.pin_hash);
+      // Check if it's the decoy PIN first
+      if (user.decoy_pin_hash) {
+        const isDecoy = await verifyPin(pin, user.decoy_pin_hash);
+        if (isDecoy) {
+          console.log('Decoy PIN verification successful');
+          return new Response(
+            JSON.stringify({ success: true, userId: user.id, isDecoy: true }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+      
+      // Verify main PIN
+      const isValid = await verifyPin(pin, user.pin_hash);
       
       if (isValid) {
         console.log('PIN verification successful');
         return new Response(
-          JSON.stringify({ success: true, userId: user.id }),
+          JSON.stringify({ success: true, userId: user.id, isDecoy: false }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       } else {
@@ -125,7 +153,7 @@ serve(async (req) => {
         );
       }
 
-      const isValid = await bcrypt.compare(pin, user.pin_hash);
+      const isValid = await verifyPin(pin, user.pin_hash);
       if (!isValid) {
         console.log('Current PIN verification failed');
         return new Response(
@@ -135,7 +163,7 @@ serve(async (req) => {
       }
 
       // Hash new PIN and update
-      const newHash = await bcrypt.hash(newPin);
+      const newHash = await hashPin(newPin);
       const { error: updateError } = await supabase
         .from('vault_users')
         .update({ pin_hash: newHash, updated_at: new Date().toISOString() })
@@ -147,6 +175,63 @@ serve(async (req) => {
       }
 
       console.log('PIN changed successfully');
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    else if (action === 'set-decoy') {
+      // Set decoy PIN
+      if (!userId) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Nicht autorisiert' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+        );
+      }
+
+      if (!pin || pin.length !== 6 || !newPin || newPin.length !== 6) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'PINs müssen 6 Ziffern haben' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
+      }
+
+      // Verify current main PIN first
+      const { data: user, error: fetchError } = await supabase
+        .from('vault_users')
+        .select('id, pin_hash')
+        .eq('id', userId)
+        .single();
+
+      if (fetchError || !user) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Benutzer nicht gefunden' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
+        );
+      }
+
+      const isValid = await verifyPin(pin, user.pin_hash);
+      if (!isValid) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Aktueller PIN ist falsch' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+        );
+      }
+
+      // Hash decoy PIN and update
+      const decoyHash = await hashPin(newPin);
+      const { error: updateError } = await supabase
+        .from('vault_users')
+        .update({ decoy_pin_hash: decoyHash, updated_at: new Date().toISOString() })
+        .eq('id', userId);
+
+      if (updateError) {
+        console.error('Error setting decoy PIN:', updateError);
+        throw updateError;
+      }
+
+      console.log('Decoy PIN set successfully');
       return new Response(
         JSON.stringify({ success: true }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
