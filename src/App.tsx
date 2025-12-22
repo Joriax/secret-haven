@@ -12,6 +12,9 @@ import Notes from "./pages/Notes";
 import Photos from "./pages/Photos";
 import Files from "./pages/Files";
 import Settings from "./pages/Settings";
+import SecretTexts from "./pages/SecretTexts";
+import SecurityLogs from "./pages/SecurityLogs";
+import Trash from "./pages/Trash";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -31,6 +34,9 @@ const App = () => (
               <Route path="/notes" element={<Notes />} />
               <Route path="/photos" element={<Photos />} />
               <Route path="/files" element={<Files />} />
+              <Route path="/secret-texts" element={<SecretTexts />} />
+              <Route path="/security-logs" element={<SecurityLogs />} />
+              <Route path="/trash" element={<Trash />} />
               <Route path="/settings" element={<Settings />} />
             </Route>
             <Route path="*" element={<NotFound />} />

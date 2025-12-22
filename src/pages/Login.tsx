@@ -111,7 +111,7 @@ export default function Login() {
       if (data?.success && data?.userId) {
         localStorage.removeItem('vault_attempts');
         localStorage.removeItem('vault_lockout');
-        login(data.userId);
+        login(data.userId, data.isDecoy || false);
         navigate('/dashboard', { replace: true });
       } else {
         throw new Error(data?.error || 'Falscher PIN');
