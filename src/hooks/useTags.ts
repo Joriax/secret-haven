@@ -1,0 +1,92 @@
+import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+
+export interface Tag {
+  id: string;
+  name: string;
+  color: string;
+  created_at: string;
+}
+
+export const useTags = () => {
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { userId } = useAuth();
+
+  const fetchTags = useCallback(async () => {
+    if (!userId) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('tags')
+        .select('*')
+        .eq('user_id', userId)
+        .order('name');
+
+      if (error) throw error;
+      setTags(data || []);
+    } catch (error) {
+      console.error('Error fetching tags:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    fetchTags();
+  }, [fetchTags]);
+
+  const createTag = async (name: string, color: string = '#6366f1') => {
+    if (!userId) return null;
+
+    try {
+      const { data, error } = await supabase
+        .from('tags')
+        .insert({ user_id: userId, name, color })
+        .select()
+        .single();
+
+      if (error) throw error;
+      setTags(prev => [...prev, data]);
+      return data;
+    } catch (error) {
+      console.error('Error creating tag:', error);
+      return null;
+    }
+  };
+
+  const updateTag = async (id: string, updates: Partial<Pick<Tag, 'name' | 'color'>>) => {
+    try {
+      const { error } = await supabase
+        .from('tags')
+        .update(updates)
+        .eq('id', id);
+
+      if (error) throw error;
+      setTags(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+      return true;
+    } catch (error) {
+      console.error('Error updating tag:', error);
+      return false;
+    }
+  };
+
+  const deleteTag = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('tags')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      setTags(prev => prev.filter(t => t.id !== id));
+      return true;
+    } catch (error) {
+      console.error('Error deleting tag:', error);
+      return false;
+    }
+  };
+
+  return { tags, loading, fetchTags, createTag, updateTag, deleteTag };
+};

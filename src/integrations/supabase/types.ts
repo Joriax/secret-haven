@@ -45,26 +45,35 @@ export type Database = {
       }
       files: {
         Row: {
+          deleted_at: string | null
           filename: string
           id: string
+          is_favorite: boolean | null
           mime_type: string
           size: number
+          tags: string[] | null
           uploaded_at: string | null
           user_id: string
         }
         Insert: {
+          deleted_at?: string | null
           filename: string
           id?: string
+          is_favorite?: boolean | null
           mime_type: string
           size: number
+          tags?: string[] | null
           uploaded_at?: string | null
           user_id: string
         }
         Update: {
+          deleted_at?: string | null
           filename?: string
           id?: string
+          is_favorite?: boolean | null
           mime_type?: string
           size?: number
+          tags?: string[] | null
           uploaded_at?: string | null
           user_id?: string
         }
@@ -78,11 +87,54 @@ export type Database = {
           },
         ]
       }
-      notes: {
+      note_versions: {
         Row: {
           content: string | null
           created_at: string | null
           id: string
+          note_id: string
+          title: string
+          user_id: string
+          version_number: number
+        }
+        Insert: {
+          content?: string | null
+          created_at?: string | null
+          id?: string
+          note_id: string
+          title: string
+          user_id: string
+          version_number: number
+        }
+        Update: {
+          content?: string | null
+          created_at?: string | null
+          id?: string
+          note_id?: string
+          title?: string
+          user_id?: string
+          version_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "note_versions_note_id_fkey"
+            columns: ["note_id"]
+            isOneToOne: false
+            referencedRelation: "notes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notes: {
+        Row: {
+          content: string | null
+          created_at: string | null
+          deleted_at: string | null
+          id: string
+          is_favorite: boolean | null
+          is_secure: boolean | null
+          secure_content: string | null
+          tags: string[] | null
           title: string
           updated_at: string | null
           user_id: string
@@ -90,7 +142,12 @@ export type Database = {
         Insert: {
           content?: string | null
           created_at?: string | null
+          deleted_at?: string | null
           id?: string
+          is_favorite?: boolean | null
+          is_secure?: boolean | null
+          secure_content?: string | null
+          tags?: string[] | null
           title?: string
           updated_at?: string | null
           user_id: string
@@ -98,7 +155,12 @@ export type Database = {
         Update: {
           content?: string | null
           created_at?: string | null
+          deleted_at?: string | null
           id?: string
+          is_favorite?: boolean | null
+          is_secure?: boolean | null
+          secure_content?: string | null
+          tags?: string[] | null
           title?: string
           updated_at?: string | null
           user_id?: string
@@ -117,8 +179,11 @@ export type Database = {
         Row: {
           album_id: string | null
           caption: string | null
+          deleted_at: string | null
           filename: string
           id: string
+          is_favorite: boolean | null
+          tags: string[] | null
           taken_at: string | null
           uploaded_at: string | null
           user_id: string
@@ -126,8 +191,11 @@ export type Database = {
         Insert: {
           album_id?: string | null
           caption?: string | null
+          deleted_at?: string | null
           filename: string
           id?: string
+          is_favorite?: boolean | null
+          tags?: string[] | null
           taken_at?: string | null
           uploaded_at?: string | null
           user_id: string
@@ -135,8 +203,11 @@ export type Database = {
         Update: {
           album_id?: string | null
           caption?: string | null
+          deleted_at?: string | null
           filename?: string
           id?: string
+          is_favorite?: boolean | null
+          tags?: string[] | null
           taken_at?: string | null
           uploaded_at?: string | null
           user_id?: string
@@ -158,24 +229,135 @@ export type Database = {
           },
         ]
       }
+      secret_texts: {
+        Row: {
+          created_at: string | null
+          encrypted_content: string
+          id: string
+          title: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          encrypted_content: string
+          id?: string
+          title?: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          encrypted_content?: string
+          id?: string
+          title?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      security_logs: {
+        Row: {
+          created_at: string | null
+          details: Json | null
+          event_type: string
+          id: string
+          ip_address: string | null
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          details?: Json | null
+          event_type: string
+          id?: string
+          ip_address?: string | null
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          details?: Json | null
+          event_type?: string
+          id?: string
+          ip_address?: string | null
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      tags: {
+        Row: {
+          color: string | null
+          created_at: string | null
+          id: string
+          name: string
+          user_id: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string | null
+          id?: string
+          name: string
+          user_id: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string | null
+          id?: string
+          name?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       vault_users: {
         Row: {
           created_at: string | null
+          decoy_pin_hash: string | null
           id: string
           pin_hash: string
+          recovery_key: string | null
           updated_at: string | null
         }
         Insert: {
           created_at?: string | null
+          decoy_pin_hash?: string | null
           id?: string
           pin_hash: string
+          recovery_key?: string | null
           updated_at?: string | null
         }
         Update: {
           created_at?: string | null
+          decoy_pin_hash?: string | null
           id?: string
           pin_hash?: string
+          recovery_key?: string | null
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      view_history: {
+        Row: {
+          id: string
+          item_id: string
+          item_type: string
+          user_id: string
+          viewed_at: string | null
+        }
+        Insert: {
+          id?: string
+          item_id: string
+          item_type: string
+          user_id: string
+          viewed_at?: string | null
+        }
+        Update: {
+          id?: string
+          item_id?: string
+          item_type?: string
+          user_id?: string
+          viewed_at?: string | null
         }
         Relationships: []
       }

@@ -10,7 +10,10 @@ import {
   Shield,
   Menu,
   X,
-  Settings
+  Settings,
+  Lock,
+  Trash2,
+  Search
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
@@ -18,6 +21,7 @@ import { cn } from '@/lib/utils';
 interface SidebarProps {
   isOpen: boolean;
   onToggle: () => void;
+  onSearchOpen?: () => void;
 }
 
 const navItems = [
@@ -25,18 +29,26 @@ const navItems = [
   { icon: FileText, label: 'Notizen', path: '/notes' },
   { icon: Image, label: 'Fotos', path: '/photos' },
   { icon: FolderOpen, label: 'Dateien', path: '/files' },
+  { icon: Lock, label: 'Geheimer Safe', path: '/secret-texts' },
+  { icon: Shield, label: 'Sicherheit', path: '/security-logs' },
+  { icon: Trash2, label: 'Papierkorb', path: '/trash' },
   { icon: Settings, label: 'Einstellungen', path: '/settings' },
 ];
 
-export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onSearchOpen }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { logout, isDecoyMode } = useAuth();
 
   const handleLogout = () => {
     logout();
     navigate('/login', { replace: true });
   };
+
+  // In decoy mode, hide sensitive items
+  const visibleItems = isDecoyMode 
+    ? navItems.filter(item => !['Geheimer Safe', 'Sicherheit'].includes(item.label))
+    : navItems;
 
   return (
     <>
@@ -77,19 +89,40 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
         {/* Logo */}
         <div className="p-6 border-b border-white/5">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-primary flex items-center justify-center neon-glow-sm">
+            <div className={cn(
+              "w-10 h-10 rounded-xl flex items-center justify-center neon-glow-sm",
+              isDecoyMode ? "bg-gray-600" : "bg-gradient-primary"
+            )}>
               <Shield className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-white">Private Vault</h1>
-              <p className="text-xs text-white/50">Sicher & Verschlüsselt</p>
+              <h1 className="text-lg font-bold text-white">
+                {isDecoyMode ? 'Vault' : 'Private Vault'}
+              </h1>
+              <p className="text-xs text-white/50">
+                {isDecoyMode ? 'Sicher' : 'Sicher & Verschlüsselt'}
+              </p>
             </div>
           </div>
         </div>
 
+        {/* Search Button */}
+        {onSearchOpen && (
+          <div className="px-4 pt-4">
+            <button
+              onClick={onSearchOpen}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/50 transition-colors"
+            >
+              <Search className="w-4 h-4" />
+              <span className="text-sm">Suche...</span>
+              <kbd className="ml-auto text-xs bg-white/10 px-2 py-0.5 rounded">⌘K</kbd>
+            </button>
+          </div>
+        )}
+
         {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-2">
-          {navItems.map((item) => {
+        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+          {visibleItems.map((item) => {
             const isActive = location.pathname === item.path;
             return (
               <NavLink
@@ -121,6 +154,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
             );
           })}
         </nav>
+
+        {/* Decoy Mode Indicator */}
+        {isDecoyMode && (
+          <div className="mx-4 mb-2 p-3 rounded-xl bg-yellow-500/10 border border-yellow-500/20">
+            <p className="text-yellow-400 text-xs text-center">Eingeschränkter Modus</p>
+          </div>
+        )}
 
         {/* Logout */}
         <div className="p-4 border-t border-white/5">
