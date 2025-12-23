@@ -1,7 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { FileText, Image, FolderOpen, Plus, TrendingUp, Clock } from 'lucide-react';
+import { 
+  FileText, 
+  Image, 
+  FolderOpen, 
+  Plus, 
+  TrendingUp, 
+  Clock, 
+  Star, 
+  Lock, 
+  Calendar,
+  HardDrive
+} from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
@@ -10,6 +21,9 @@ interface Stats {
   notes: number;
   photos: number;
   files: number;
+  favorites: number;
+  secureNotes: number;
+  totalSize: number;
 }
 
 interface RecentItem {
@@ -17,6 +31,7 @@ interface RecentItem {
   type: 'note' | 'photo' | 'file';
   title: string;
   date: string;
+  isFavorite?: boolean;
 }
 
 const dashboardCards = [
@@ -43,13 +58,18 @@ const dashboardCards = [
   },
 ];
 
+const quickFolders = [
+  { title: 'Zuletzt hinzugefügt', icon: Calendar, path: '/notes' },
+  { title: 'Zuletzt angesehen', icon: Clock, path: '/notes' },
+  { title: 'Favoriten', icon: Star, path: '/notes' },
+  { title: 'Sichere Notizen', icon: Lock, path: '/secret-texts' },
+];
+
 const containerVariants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
-    transition: {
-      staggerChildren: 0.1,
-    },
+    transition: { staggerChildren: 0.1 },
   },
 };
 
@@ -63,29 +83,55 @@ const itemVariants = {
 };
 
 export default function Dashboard() {
-  const [stats, setStats] = useState<Stats>({ notes: 0, photos: 0, files: 0 });
+  const [stats, setStats] = useState<Stats>({ notes: 0, photos: 0, files: 0, favorites: 0, secureNotes: 0, totalSize: 0 });
   const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const { userId } = useAuth();
+  const { userId, isDecoyMode } = useAuth();
 
   useEffect(() => {
     const fetchData = async () => {
       if (!userId) return;
 
       try {
-        const [notesRes, photosRes, filesRes, recentNotesRes, recentPhotosRes, recentFilesRes] = await Promise.all([
-          supabase.from('notes').select('id', { count: 'exact', head: true }).eq('user_id', userId),
-          supabase.from('photos').select('id', { count: 'exact', head: true }).eq('user_id', userId),
-          supabase.from('files').select('id', { count: 'exact', head: true }).eq('user_id', userId),
-          supabase.from('notes').select('id, title, updated_at').eq('user_id', userId).order('updated_at', { ascending: false }).limit(3),
-          supabase.from('photos').select('id, filename, uploaded_at').eq('user_id', userId).order('uploaded_at', { ascending: false }).limit(3),
-          supabase.from('files').select('id, filename, uploaded_at').eq('user_id', userId).order('uploaded_at', { ascending: false }).limit(3),
+        // In decoy mode, show minimal/empty stats
+        if (isDecoyMode) {
+          setStats({ notes: 0, photos: 0, files: 0, favorites: 0, secureNotes: 0, totalSize: 0 });
+          setRecentItems([]);
+          setIsLoading(false);
+          return;
+        }
+
+        const [
+          notesRes, 
+          photosRes, 
+          filesRes, 
+          favoritesRes,
+          secureNotesRes,
+          recentNotesRes, 
+          recentPhotosRes, 
+          recentFilesRes,
+          viewHistoryRes
+        ] = await Promise.all([
+          supabase.from('notes').select('id', { count: 'exact', head: true }).eq('user_id', userId).is('deleted_at', null),
+          supabase.from('photos').select('id', { count: 'exact', head: true }).eq('user_id', userId).is('deleted_at', null),
+          supabase.from('files').select('id, size', { count: 'exact' }).eq('user_id', userId).is('deleted_at', null),
+          supabase.from('notes').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('is_favorite', true).is('deleted_at', null),
+          supabase.from('notes').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('is_secure', true).is('deleted_at', null),
+          supabase.from('notes').select('id, title, updated_at, is_favorite').eq('user_id', userId).is('deleted_at', null).order('updated_at', { ascending: false }).limit(3),
+          supabase.from('photos').select('id, filename, uploaded_at, is_favorite').eq('user_id', userId).is('deleted_at', null).order('uploaded_at', { ascending: false }).limit(3),
+          supabase.from('files').select('id, filename, uploaded_at, is_favorite').eq('user_id', userId).is('deleted_at', null).order('uploaded_at', { ascending: false }).limit(3),
+          supabase.from('view_history').select('*').eq('user_id', userId).order('viewed_at', { ascending: false }).limit(5),
         ]);
+
+        const totalSize = filesRes.data?.reduce((acc, f) => acc + (f.size || 0), 0) || 0;
 
         setStats({
           notes: notesRes.count || 0,
           photos: photosRes.count || 0,
           files: filesRes.count || 0,
+          favorites: favoritesRes.count || 0,
+          secureNotes: secureNotesRes.count || 0,
+          totalSize,
         });
 
         // Combine and sort recent items
@@ -95,18 +141,21 @@ export default function Dashboard() {
             type: 'note' as const,
             title: n.title,
             date: n.updated_at,
+            isFavorite: n.is_favorite,
           })),
           ...(recentPhotosRes.data || []).map(p => ({
             id: p.id,
             type: 'photo' as const,
             title: p.filename.replace(/^\d+-/, ''),
             date: p.uploaded_at,
+            isFavorite: p.is_favorite,
           })),
           ...(recentFilesRes.data || []).map(f => ({
             id: f.id,
             type: 'file' as const,
             title: f.filename.replace(/^\d+-/, ''),
             date: f.uploaded_at,
+            isFavorite: f.is_favorite,
           })),
         ];
 
@@ -120,7 +169,7 @@ export default function Dashboard() {
     };
 
     fetchData();
-  }, [userId]);
+  }, [userId, isDecoyMode]);
 
   const totalItems = stats.notes + stats.photos + stats.files;
 
@@ -155,6 +204,14 @@ export default function Dashboard() {
     return date.toLocaleDateString('de-DE', { day: '2-digit', month: 'short' });
   };
 
+  const formatSize = (bytes: number) => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  };
+
   return (
     <motion.div
       initial="hidden"
@@ -165,10 +222,10 @@ export default function Dashboard() {
       {/* Header */}
       <motion.div variants={itemVariants}>
         <h1 className="text-3xl md:text-4xl font-bold text-white mb-2">
-          Willkommen zurück
+          {isDecoyMode ? 'Willkommen' : 'Willkommen zurück'}
         </h1>
         <p className="text-white/60">
-          Dein sicherer privater Tresor
+          {isDecoyMode ? 'Dein Vault' : 'Dein sicherer privater Tresor'}
         </p>
       </motion.div>
 
@@ -184,7 +241,7 @@ export default function Dashboard() {
           </div>
         </div>
         
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
           {dashboardCards.map((card) => (
             <div key={card.statKey} className="text-center">
               <div className="stats-number mb-1">
@@ -192,6 +249,39 @@ export default function Dashboard() {
               </div>
               <div className="text-white/50 text-sm">{card.title}</div>
             </div>
+          ))}
+          <div className="text-center">
+            <div className="stats-number mb-1">{isLoading ? '-' : stats.favorites}</div>
+            <div className="text-white/50 text-sm">Favoriten</div>
+          </div>
+          <div className="text-center">
+            <div className="stats-number mb-1">{isLoading ? '-' : stats.secureNotes}</div>
+            <div className="text-white/50 text-sm">Sicher</div>
+          </div>
+          <div className="text-center">
+            <div className="stats-number mb-1">{isLoading ? '-' : formatSize(stats.totalSize)}</div>
+            <div className="text-white/50 text-sm">Speicher</div>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Quick Folders */}
+      <motion.div variants={itemVariants}>
+        <h2 className="text-lg font-semibold text-white mb-4">Schnellzugriff</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {quickFolders.map((folder) => (
+            <Link key={folder.title} to={folder.path}>
+              <motion.div
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className="glass-card-hover p-4 flex items-center gap-3"
+              >
+                <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                  <folder.icon className="w-5 h-5 text-purple-400" />
+                </div>
+                <span className="text-white text-sm font-medium">{folder.title}</span>
+              </motion.div>
+            </Link>
           ))}
         </div>
       </motion.div>
@@ -290,9 +380,12 @@ export default function Dashboard() {
                       )} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-white font-medium truncate group-hover:text-purple-300 transition-colors">
-                        {item.title}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        {item.isFavorite && <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />}
+                        <p className="text-white font-medium truncate group-hover:text-purple-300 transition-colors">
+                          {item.title}
+                        </p>
+                      </div>
                       <p className="text-xs text-white/40">{formatDate(item.date)}</p>
                     </div>
                   </motion.div>

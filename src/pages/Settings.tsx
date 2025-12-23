@@ -1,22 +1,63 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings as SettingsIcon, Lock, Shield, LogOut, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { 
+  Settings as SettingsIcon, 
+  Lock, 
+  Shield, 
+  LogOut, 
+  Loader2, 
+  CheckCircle, 
+  AlertCircle,
+  Eye,
+  EyeOff,
+  Key,
+  Copy,
+  Download,
+  Upload,
+  RefreshCw
+} from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { generateRecoveryKey, encryptText, decryptText } from '@/lib/encryption';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 const PIN_LENGTH = 6;
 
 export default function Settings() {
   const [showPinChange, setShowPinChange] = useState(false);
+  const [showDecoyPin, setShowDecoyPin] = useState(false);
+  const [showRecoveryKey, setShowRecoveryKey] = useState(false);
+  const [showBackup, setShowBackup] = useState(false);
   const [currentPin, setCurrentPin] = useState('');
   const [newPin, setNewPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
+  const [decoyPin, setDecoyPin] = useState('');
+  const [confirmDecoyPin, setConfirmDecoyPin] = useState('');
+  const [recoveryKey, setRecoveryKey] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [backupPassword, setBackupPassword] = useState('');
   const { userId, logout } = useAuth();
   const navigate = useNavigate();
+
+  // Fetch existing recovery key
+  useEffect(() => {
+    const fetchRecoveryKey = async () => {
+      if (!userId) return;
+      const { data } = await supabase
+        .from('vault_users')
+        .select('recovery_key')
+        .eq('id', userId)
+        .single();
+      
+      if (data?.recovery_key) {
+        setRecoveryKey(data.recovery_key);
+      }
+    };
+    fetchRecoveryKey();
+  }, [userId]);
 
   const handleLogout = () => {
     logout();
@@ -26,7 +67,6 @@ export default function Settings() {
   const handlePinChange = async () => {
     setMessage(null);
 
-    // Validation
     if (currentPin.length !== PIN_LENGTH || !/^\d+$/.test(currentPin)) {
       setMessage({ type: 'error', text: 'Aktueller PIN muss 6 Ziffern haben' });
       return;
@@ -50,9 +90,7 @@ export default function Settings() {
         body: { action: 'change', pin: currentPin, newPin, userId }
       });
 
-      if (error) {
-        throw new Error('Verbindungsfehler');
-      }
+      if (error) throw new Error('Verbindungsfehler');
 
       if (data?.success) {
         setMessage({ type: 'success', text: 'PIN erfolgreich geändert!' });
@@ -65,6 +103,128 @@ export default function Settings() {
       }
     } catch (err: any) {
       setMessage({ type: 'error', text: err.message || 'Fehler beim Ändern des PINs' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSetDecoyPin = async () => {
+    setMessage(null);
+
+    if (currentPin.length !== PIN_LENGTH || !/^\d+$/.test(currentPin)) {
+      setMessage({ type: 'error', text: 'Aktueller PIN muss 6 Ziffern haben' });
+      return;
+    }
+    if (decoyPin.length !== PIN_LENGTH || !/^\d+$/.test(decoyPin)) {
+      setMessage({ type: 'error', text: 'Tarn-PIN muss 6 Ziffern haben' });
+      return;
+    }
+    if (decoyPin !== confirmDecoyPin) {
+      setMessage({ type: 'error', text: 'Tarn-PINs stimmen nicht überein' });
+      return;
+    }
+    if (currentPin === decoyPin) {
+      setMessage({ type: 'error', text: 'Tarn-PIN muss anders als Haupt-PIN sein' });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('verify-pin', {
+        body: { action: 'set-decoy', pin: currentPin, newPin: decoyPin, userId }
+      });
+
+      if (error) throw new Error('Verbindungsfehler');
+
+      if (data?.success) {
+        setMessage({ type: 'success', text: 'Tarn-PIN erfolgreich gesetzt!' });
+        setCurrentPin('');
+        setDecoyPin('');
+        setConfirmDecoyPin('');
+        setTimeout(() => setShowDecoyPin(false), 2000);
+        toast.success('Tarn-PIN aktiviert', { description: 'Bei Eingabe des Tarn-PINs wird ein leerer Vault angezeigt.' });
+      } else {
+        throw new Error(data?.error || 'Tarn-PIN konnte nicht gesetzt werden');
+      }
+    } catch (err: any) {
+      setMessage({ type: 'error', text: err.message || 'Fehler beim Setzen des Tarn-PINs' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const generateNewRecoveryKey = async () => {
+    if (!userId) return;
+
+    setIsLoading(true);
+    try {
+      const newKey = generateRecoveryKey();
+      const { error } = await supabase
+        .from('vault_users')
+        .update({ recovery_key: newKey })
+        .eq('id', userId);
+
+      if (error) throw error;
+
+      setRecoveryKey(newKey);
+      toast.success('Recovery-Key generiert', { description: 'Speichere ihn sicher ab!' });
+    } catch (err) {
+      toast.error('Fehler beim Generieren des Recovery-Keys');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const copyRecoveryKey = () => {
+    navigator.clipboard.writeText(recoveryKey);
+    toast.success('Recovery-Key kopiert');
+  };
+
+  const handleBackup = async () => {
+    if (!userId || !backupPassword) {
+      toast.error('Bitte gib ein Backup-Passwort ein');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      // Fetch all user data
+      const [notesRes, photosRes, filesRes, secretsRes, tagsRes] = await Promise.all([
+        supabase.from('notes').select('*').eq('user_id', userId),
+        supabase.from('photos').select('*').eq('user_id', userId),
+        supabase.from('files').select('*').eq('user_id', userId),
+        supabase.from('secret_texts').select('*').eq('user_id', userId),
+        supabase.from('tags').select('*').eq('user_id', userId),
+      ]);
+
+      const backupData = {
+        version: '1.0',
+        created_at: new Date().toISOString(),
+        notes: notesRes.data || [],
+        photos: photosRes.data || [],
+        files: filesRes.data || [],
+        secret_texts: secretsRes.data || [],
+        tags: tagsRes.data || [],
+      };
+
+      const encrypted = await encryptText(JSON.stringify(backupData), backupPassword);
+      
+      // Download as file
+      const blob = new Blob([encrypted], { type: 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `vault-backup-${new Date().toISOString().split('T')[0]}.vlt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast.success('Backup erstellt', { description: 'Die verschlüsselte Datei wurde heruntergeladen.' });
+      setBackupPassword('');
+    } catch (err) {
+      console.error('Backup error:', err);
+      toast.error('Fehler beim Erstellen des Backups');
     } finally {
       setIsLoading(false);
     }
@@ -94,10 +254,10 @@ export default function Settings() {
           <h2 className="text-lg font-semibold text-white">Sicherheit</h2>
         </div>
 
-        {/* Change PIN */}
         <div className="space-y-4">
+          {/* Change PIN */}
           <button
-            onClick={() => setShowPinChange(!showPinChange)}
+            onClick={() => { setShowPinChange(!showPinChange); setShowDecoyPin(false); setShowRecoveryKey(false); setMessage(null); }}
             className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-white/5 transition-colors group"
           >
             <div className="flex items-center gap-4">
@@ -109,12 +269,7 @@ export default function Settings() {
                 <p className="text-sm text-white/50">Ändere deinen 6-stelligen Zugangs-PIN</p>
               </div>
             </div>
-            <motion.div
-              animate={{ rotate: showPinChange ? 180 : 0 }}
-              className="text-white/40"
-            >
-              ▼
-            </motion.div>
+            <motion.div animate={{ rotate: showPinChange ? 180 : 0 }} className="text-white/40">▼</motion.div>
           </button>
 
           <AnimatePresence>
@@ -163,7 +318,6 @@ export default function Settings() {
                     />
                   </div>
 
-                  {/* Message */}
                   <AnimatePresence>
                     {message && (
                       <motion.div
@@ -175,11 +329,7 @@ export default function Settings() {
                           message.type === 'success' ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
                         )}
                       >
-                        {message.type === 'success' ? (
-                          <CheckCircle className="w-4 h-4" />
-                        ) : (
-                          <AlertCircle className="w-4 h-4" />
-                        )}
+                        {message.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
                         <span className="text-sm">{message.text}</span>
                       </motion.div>
                     )}
@@ -190,9 +340,7 @@ export default function Settings() {
                     disabled={isLoading}
                     className="w-full py-3 rounded-xl bg-gradient-primary hover:shadow-glow transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                   >
-                    {isLoading ? (
-                      <Loader2 className="w-5 h-5 text-white animate-spin" />
-                    ) : (
+                    {isLoading ? <Loader2 className="w-5 h-5 text-white animate-spin" /> : (
                       <>
                         <Lock className="w-4 h-4 text-white" />
                         <span className="text-white font-medium">PIN ändern</span>
@@ -203,7 +351,245 @@ export default function Settings() {
               </motion.div>
             )}
           </AnimatePresence>
+
+          {/* Decoy PIN */}
+          <button
+            onClick={() => { setShowDecoyPin(!showDecoyPin); setShowPinChange(false); setShowRecoveryKey(false); setMessage(null); }}
+            className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-white/5 transition-colors group"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 rounded-lg bg-yellow-500/20 flex items-center justify-center">
+                <EyeOff className="w-5 h-5 text-yellow-400" />
+              </div>
+              <div className="text-left">
+                <h3 className="font-medium text-white">Tarn-PIN (Fake Vault)</h3>
+                <p className="text-sm text-white/50">Zweiter PIN zeigt leeren/harmlosen Vault</p>
+              </div>
+            </div>
+            <motion.div animate={{ rotate: showDecoyPin ? 180 : 0 }} className="text-white/40">▼</motion.div>
+          </button>
+
+          <AnimatePresence>
+            {showDecoyPin && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="p-4 space-y-4 bg-white/5 rounded-xl">
+                  <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+                    <p className="text-yellow-400 text-sm">
+                      Der Tarn-PIN zeigt einen leeren Vault an, falls du gezwungen wirst, dein Gerät zu entsperren.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm text-white/60 mb-2">Aktueller Haupt-PIN</label>
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={currentPin}
+                      onChange={(e) => setCurrentPin(e.target.value.replace(/\D/g, ''))}
+                      placeholder="••••••"
+                      className="w-full px-4 py-3 rounded-xl vault-input text-white placeholder:text-white/30 text-center tracking-widest"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-white/60 mb-2">Neuer Tarn-PIN</label>
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={decoyPin}
+                      onChange={(e) => setDecoyPin(e.target.value.replace(/\D/g, ''))}
+                      placeholder="••••••"
+                      className="w-full px-4 py-3 rounded-xl vault-input text-white placeholder:text-white/30 text-center tracking-widest"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-white/60 mb-2">Tarn-PIN bestätigen</label>
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={confirmDecoyPin}
+                      onChange={(e) => setConfirmDecoyPin(e.target.value.replace(/\D/g, ''))}
+                      placeholder="••••••"
+                      className="w-full px-4 py-3 rounded-xl vault-input text-white placeholder:text-white/30 text-center tracking-widest"
+                    />
+                  </div>
+
+                  <AnimatePresence>
+                    {message && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className={cn(
+                          "flex items-center gap-2 p-3 rounded-lg",
+                          message.type === 'success' ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
+                        )}
+                      >
+                        {message.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+                        <span className="text-sm">{message.text}</span>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  <button
+                    onClick={handleSetDecoyPin}
+                    disabled={isLoading}
+                    className="w-full py-3 rounded-xl bg-gradient-to-r from-yellow-600 to-orange-600 hover:shadow-glow transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isLoading ? <Loader2 className="w-5 h-5 text-white animate-spin" /> : (
+                      <>
+                        <EyeOff className="w-4 h-4 text-white" />
+                        <span className="text-white font-medium">Tarn-PIN aktivieren</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Recovery Key */}
+          <button
+            onClick={() => { setShowRecoveryKey(!showRecoveryKey); setShowPinChange(false); setShowDecoyPin(false); }}
+            className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-white/5 transition-colors group"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                <Key className="w-5 h-5 text-blue-400" />
+              </div>
+              <div className="text-left">
+                <h3 className="font-medium text-white">Recovery-Schlüssel</h3>
+                <p className="text-sm text-white/50">Backup-Code für Notfallzugriff</p>
+              </div>
+            </div>
+            <motion.div animate={{ rotate: showRecoveryKey ? 180 : 0 }} className="text-white/40">▼</motion.div>
+          </button>
+
+          <AnimatePresence>
+            {showRecoveryKey && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="p-4 space-y-4 bg-white/5 rounded-xl">
+                  {recoveryKey ? (
+                    <>
+                      <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                        <p className="text-blue-400 text-sm mb-2">Dein Recovery-Schlüssel:</p>
+                        <div className="font-mono text-lg text-white bg-black/30 p-3 rounded-lg text-center break-all">
+                          {recoveryKey}
+                        </div>
+                      </div>
+                      <div className="flex gap-3">
+                        <button
+                          onClick={copyRecoveryKey}
+                          className="flex-1 py-3 rounded-xl border border-white/10 hover:bg-white/5 transition-all flex items-center justify-center gap-2"
+                        >
+                          <Copy className="w-4 h-4 text-white" />
+                          <span className="text-white">Kopieren</span>
+                        </button>
+                        <button
+                          onClick={generateNewRecoveryKey}
+                          disabled={isLoading}
+                          className="flex-1 py-3 rounded-xl border border-white/10 hover:bg-white/5 transition-all flex items-center justify-center gap-2"
+                        >
+                          <RefreshCw className={cn("w-4 h-4 text-white", isLoading && "animate-spin")} />
+                          <span className="text-white">Neu generieren</span>
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-white/60 text-sm">
+                        Generiere einen Recovery-Schlüssel, um im Notfall Zugriff zu erhalten.
+                      </p>
+                      <button
+                        onClick={generateNewRecoveryKey}
+                        disabled={isLoading}
+                        className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                        {isLoading ? <Loader2 className="w-5 h-5 text-white animate-spin" /> : (
+                          <>
+                            <Key className="w-4 h-4 text-white" />
+                            <span className="text-white font-medium">Recovery-Key generieren</span>
+                          </>
+                        )}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
+      </div>
+
+      {/* Backup Section */}
+      <div className="glass-card p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <Download className="w-5 h-5 text-green-400" />
+          <h2 className="text-lg font-semibold text-white">Backup & Wiederherstellung</h2>
+        </div>
+
+        <button
+          onClick={() => setShowBackup(!showBackup)}
+          className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-white/5 transition-colors group"
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
+              <Download className="w-5 h-5 text-green-400" />
+            </div>
+            <div className="text-left">
+              <h3 className="font-medium text-white">Verschlüsseltes Backup</h3>
+              <p className="text-sm text-white/50">Exportiere alle Daten als .vlt Datei</p>
+            </div>
+          </div>
+          <motion.div animate={{ rotate: showBackup ? 180 : 0 }} className="text-white/40">▼</motion.div>
+        </button>
+
+        <AnimatePresence>
+          {showBackup && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="p-4 space-y-4 bg-white/5 rounded-xl mt-4">
+                <div>
+                  <label className="block text-sm text-white/60 mb-2">Backup-Passwort</label>
+                  <input
+                    type="password"
+                    value={backupPassword}
+                    onChange={(e) => setBackupPassword(e.target.value)}
+                    placeholder="Sicheres Passwort für die Verschlüsselung"
+                    className="w-full px-4 py-3 rounded-xl vault-input text-white placeholder:text-white/30"
+                  />
+                </div>
+                <button
+                  onClick={handleBackup}
+                  disabled={isLoading || !backupPassword}
+                  className="w-full py-3 rounded-xl bg-green-600 hover:bg-green-500 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isLoading ? <Loader2 className="w-5 h-5 text-white animate-spin" /> : (
+                    <>
+                      <Download className="w-4 h-4 text-white" />
+                      <span className="text-white font-medium">Backup erstellen</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Logout */}
