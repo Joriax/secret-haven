@@ -47,7 +47,8 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ isOpen, onClose }) =
       setQuery('');
       clearResults();
     }
-  }, [isOpen, clearResults]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   useEffect(() => {
     const debounce = setTimeout(() => {

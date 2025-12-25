@@ -56,17 +56,14 @@ export const useSecurityLogs = () => {
   };
 
   const clearLogs = async () => {
-    if (!userId) return;
+    if (!userId) return false;
 
     try {
-      const { error } = await supabase
-        .from('security_logs')
-        .delete()
-        .eq('user_id', userId);
-
-      if (error) throw error;
-      setLogs([]);
-      return true;
+      // We can't delete from client since RLS doesn't allow it
+      // Instead we'll use an edge function or just clear local state
+      // For now, just inform user
+      console.log('Note: Logs can only be cleared by admin');
+      return false;
     } catch (error) {
       console.error('Error clearing logs:', error);
       return false;
