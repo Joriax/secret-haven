@@ -521,7 +521,7 @@ export default function Dashboard() {
               </div>
 
               {/* Content */}
-              <h3 className="text-lg sm:text-xl font-semibold text-foreground mb-1 sm:mb-2 group-hover:text-gradient transition-all">
+              <h3 className="text-lg sm:text-xl font-semibold text-foreground mb-1 sm:mb-2 group-hover:text-primary transition-colors">
                 {card.title}
               </h3>
               <p className="text-muted-foreground text-sm mb-3 sm:mb-4">

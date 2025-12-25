@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -22,6 +23,19 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
+const logSecurityEvent = async (userId: string, eventType: string, details: Record<string, any> = {}) => {
+  try {
+    await supabase.from('security_logs').insert({
+      user_id: userId,
+      event_type: eventType,
+      details,
+      user_agent: navigator.userAgent
+    });
+  } catch (error) {
+    console.error('Error logging security event:', error);
+  }
+};
+
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
@@ -40,7 +54,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setUserId(storedUserId);
         setIsDecoyMode(storedDecoyMode === 'true');
       } else {
-        // Session expired
         sessionStorage.removeItem('vault_user_id');
         sessionStorage.removeItem('vault_session_expiry');
         sessionStorage.removeItem('vault_decoy_mode');
@@ -48,21 +61,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }, []);
 
-  const login = (userId: string, isDecoy: boolean = false) => {
-    // Set session for 24 hours
+  const login = (newUserId: string, isDecoy: boolean = false) => {
     const expiry = new Date();
     expiry.setHours(expiry.getHours() + 24);
     
-    sessionStorage.setItem('vault_user_id', userId);
+    sessionStorage.setItem('vault_user_id', newUserId);
     sessionStorage.setItem('vault_session_expiry', expiry.toISOString());
     sessionStorage.setItem('vault_decoy_mode', isDecoy.toString());
     
     setIsAuthenticated(true);
-    setUserId(userId);
+    setUserId(newUserId);
     setIsDecoyMode(isDecoy);
+    
+    // Log security event
+    logSecurityEvent(newUserId, isDecoy ? 'login_decoy' : 'login_success', {});
   };
 
   const logout = () => {
+    if (userId) {
+      logSecurityEvent(userId, 'logout', {});
+    }
+    
     sessionStorage.removeItem('vault_user_id');
     sessionStorage.removeItem('vault_session_expiry');
     sessionStorage.removeItem('vault_decoy_mode');

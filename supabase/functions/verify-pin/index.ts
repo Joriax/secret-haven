@@ -34,7 +34,7 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { action, pin, newPin, userId } = await req.json();
+    const { action, pin, newPin, userId, recoveryKey } = await req.json();
     console.log(`PIN action requested: ${action}`);
 
     if (action === 'verify') {
@@ -120,7 +120,38 @@ serve(async (req) => {
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
         );
       }
-    } 
+    }
+
+    else if (action === 'verify-recovery') {
+      // Verify with recovery key
+      if (!recoveryKey || recoveryKey.length < 10) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Ungültiger Recovery-Key' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
+      }
+
+      // Get user with matching recovery key
+      const { data: user, error: fetchError } = await supabase
+        .from('vault_users')
+        .select('id, recovery_key')
+        .eq('recovery_key', recoveryKey)
+        .single();
+
+      if (fetchError || !user) {
+        console.log('Recovery key not found');
+        return new Response(
+          JSON.stringify({ success: false, error: 'Recovery-Key nicht gefunden' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+        );
+      }
+
+      console.log('Recovery key verification successful');
+      return new Response(
+        JSON.stringify({ success: true, userId: user.id, isDecoy: false }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
     
     else if (action === 'change') {
       // Change PIN

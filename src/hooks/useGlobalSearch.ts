@@ -121,7 +121,7 @@ export const useGlobalSearch = () => {
     }
   }, [userId, isDecoyMode]);
 
-  const clearResults = () => setResults([]);
+  const clearResults = useCallback(() => setResults([]), []);
 
   return { results, loading, search, clearResults };
 };
