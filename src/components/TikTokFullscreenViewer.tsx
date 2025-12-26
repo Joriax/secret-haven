@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence, PanInfo } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { TikTokVideo } from '@/hooks/useTikTokVideos';
 import {
@@ -31,24 +31,12 @@ export function TikTokFullscreenViewer({
   onDelete,
 }: TikTokFullscreenViewerProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const isScrolling = useRef(false);
-  const lastScrollTime = useRef(0);
+  const [direction, setDirection] = useState(0);
 
   // Reset to initial index when opening
   useEffect(() => {
     if (isOpen) {
       setCurrentIndex(initialIndex);
-      // Scroll to initial position after a short delay
-      setTimeout(() => {
-        if (scrollContainerRef.current) {
-          const videoHeight = scrollContainerRef.current.clientHeight;
-          scrollContainerRef.current.scrollTo({
-            top: initialIndex * videoHeight,
-            behavior: 'instant'
-          });
-        }
-      }, 50);
     }
   }, [isOpen, initialIndex]);
 
@@ -64,72 +52,33 @@ export function TikTokFullscreenViewer({
     };
   }, [isOpen]);
 
-  const scrollToVideo = useCallback((index: number) => {
-    if (!scrollContainerRef.current) return;
-    const container = scrollContainerRef.current;
-    const videoHeight = container.clientHeight;
-    container.scrollTo({
-      top: index * videoHeight,
-      behavior: 'smooth'
-    });
-  }, []);
+  const goToPrevious = useCallback(() => {
+    if (currentIndex > 0) {
+      setDirection(-1);
+      setCurrentIndex(prev => prev - 1);
+    }
+  }, [currentIndex]);
 
-  const handleScroll = useCallback(() => {
-    if (!scrollContainerRef.current || isScrolling.current) return;
-    
-    const now = Date.now();
-    if (now - lastScrollTime.current < 100) return;
-    lastScrollTime.current = now;
-
-    const container = scrollContainerRef.current;
-    const videoHeight = container.clientHeight;
-    const scrollTop = container.scrollTop;
-    const newIndex = Math.round(scrollTop / videoHeight);
-    
-    if (newIndex !== currentIndex && newIndex >= 0 && newIndex < videos.length) {
-      setCurrentIndex(newIndex);
+  const goToNext = useCallback(() => {
+    if (currentIndex < videos.length - 1) {
+      setDirection(1);
+      setCurrentIndex(prev => prev + 1);
     }
   }, [currentIndex, videos.length]);
 
-  const handleScrollEnd = useCallback(() => {
-    if (!scrollContainerRef.current) return;
+  // Handle drag/swipe
+  const handleDragEnd = useCallback((event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+    const threshold = 50;
+    const velocity = info.velocity.y;
+    const offset = info.offset.y;
     
-    const container = scrollContainerRef.current;
-    const videoHeight = container.clientHeight;
-    const scrollTop = container.scrollTop;
-    const targetIndex = Math.round(scrollTop / videoHeight);
-    
-    isScrolling.current = true;
-    container.scrollTo({
-      top: targetIndex * videoHeight,
-      behavior: 'smooth'
-    });
-    
-    setTimeout(() => {
-      isScrolling.current = false;
-    }, 300);
-  }, []);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    
-    const container = scrollContainerRef.current;
-    if (!container) return;
-
-    let scrollTimeout: NodeJS.Timeout;
-    
-    const onScroll = () => {
-      handleScroll();
-      clearTimeout(scrollTimeout);
-      scrollTimeout = setTimeout(handleScrollEnd, 150);
-    };
-
-    container.addEventListener('scroll', onScroll, { passive: true });
-    return () => {
-      container.removeEventListener('scroll', onScroll);
-      clearTimeout(scrollTimeout);
-    };
-  }, [handleScroll, handleScrollEnd, isOpen]);
+    // Swipe up = next video, swipe down = previous video
+    if (offset < -threshold || velocity < -300) {
+      goToNext();
+    } else if (offset > threshold || velocity > 300) {
+      goToPrevious();
+    }
+  }, [goToNext, goToPrevious]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -140,20 +89,16 @@ export function TikTokFullscreenViewer({
         onClose();
       } else if (e.key === 'ArrowDown' || e.key === 'j') {
         e.preventDefault();
-        const newIndex = Math.min(currentIndex + 1, videos.length - 1);
-        setCurrentIndex(newIndex);
-        scrollToVideo(newIndex);
+        goToNext();
       } else if (e.key === 'ArrowUp' || e.key === 'k') {
         e.preventDefault();
-        const newIndex = Math.max(currentIndex - 1, 0);
-        setCurrentIndex(newIndex);
-        scrollToVideo(newIndex);
+        goToPrevious();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, currentIndex, videos.length, scrollToVideo, onClose]);
+  }, [isOpen, goToNext, goToPrevious, onClose]);
 
   const getEmbedUrl = (video: TikTokVideo) => {
     if (video.video_id) {
@@ -166,170 +111,184 @@ export function TikTokFullscreenViewer({
     window.open(url, '_blank');
   };
 
-  const goToPrevious = () => {
-    if (currentIndex > 0) {
-      const newIndex = currentIndex - 1;
-      setCurrentIndex(newIndex);
-      scrollToVideo(newIndex);
-    }
-  };
-
-  const goToNext = () => {
-    if (currentIndex < videos.length - 1) {
-      const newIndex = currentIndex + 1;
-      setCurrentIndex(newIndex);
-      scrollToVideo(newIndex);
-    }
-  };
-
   if (!isOpen || videos.length === 0) return null;
 
+  const currentVideo = videos[currentIndex];
+
+  const slideVariants = {
+    enter: (direction: number) => ({
+      y: direction > 0 ? '100%' : '-100%',
+      opacity: 0,
+    }),
+    center: {
+      y: 0,
+      opacity: 1,
+    },
+    exit: (direction: number) => ({
+      y: direction > 0 ? '-100%' : '100%',
+      opacity: 0,
+    }),
+  };
+
   return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 bg-black"
+    <div className="fixed inset-0 z-50 bg-black">
+      {/* Close Button */}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="absolute top-4 left-4 z-50 h-10 w-10 rounded-full bg-white/10 backdrop-blur-sm text-white hover:bg-white/20"
+        onClick={onClose}
       >
-        {/* Close Button */}
+        <X className="h-5 w-5" />
+      </Button>
+
+      {/* Navigation Arrows - Desktop */}
+      <div className="hidden md:flex absolute left-4 top-1/2 -translate-y-1/2 z-50 flex-col gap-2">
         <Button
           variant="ghost"
           size="icon"
-          className="absolute top-4 left-4 z-50 h-10 w-10 rounded-full bg-white/10 backdrop-blur-sm text-white hover:bg-white/20"
-          onClick={onClose}
+          className="h-10 w-10 rounded-full bg-white/10 backdrop-blur-sm text-white hover:bg-white/20 disabled:opacity-30"
+          onClick={goToPrevious}
+          disabled={currentIndex === 0}
         >
-          <X className="h-5 w-5" />
+          <ChevronUp className="h-5 w-5" />
         </Button>
-
-        {/* Navigation Arrows - Desktop */}
-        <div className="hidden md:flex absolute left-4 top-1/2 -translate-y-1/2 z-50 flex-col gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-10 w-10 rounded-full bg-white/10 backdrop-blur-sm text-white hover:bg-white/20 disabled:opacity-30"
-            onClick={goToPrevious}
-            disabled={currentIndex === 0}
-          >
-            <ChevronUp className="h-5 w-5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-10 w-10 rounded-full bg-white/10 backdrop-blur-sm text-white hover:bg-white/20 disabled:opacity-30"
-            onClick={goToNext}
-            disabled={currentIndex === videos.length - 1}
-          >
-            <ChevronDown className="h-5 w-5" />
-          </Button>
-        </div>
-
-        {/* Video Container with Snap Scroll */}
-        <div 
-          ref={scrollContainerRef}
-          className="h-full w-full overflow-y-auto snap-y snap-mandatory"
-          style={{ scrollSnapType: 'y mandatory' }}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-10 w-10 rounded-full bg-white/10 backdrop-blur-sm text-white hover:bg-white/20 disabled:opacity-30"
+          onClick={goToNext}
+          disabled={currentIndex === videos.length - 1}
         >
-          {videos.map((video, index) => (
-            <div 
-              key={video.id}
-              className="h-full w-full snap-start snap-always relative flex items-center justify-center"
-            >
-              {getEmbedUrl(video) ? (
-                <iframe
-                  src={getEmbedUrl(video)!}
-                  className="w-full h-full max-w-[400px] mx-auto"
-                  style={{ border: 'none' }}
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
-              ) : (
-                <div className="flex flex-col items-center justify-center text-white">
-                  <Play className="h-16 w-16 mb-4 opacity-50" />
-                  <p className="text-sm opacity-70">Video kann nicht geladen werden</p>
-                  <Button 
-                    variant="outline" 
-                    className="mt-4 border-white/30 text-white hover:bg-white/10"
-                    onClick={() => openInTikTok(video.url)}
-                  >
-                    <ExternalLink className="h-4 w-4 mr-2" />
-                    In TikTok öffnen
-                  </Button>
-                </div>
-              )}
+          <ChevronDown className="h-5 w-5" />
+        </Button>
+      </div>
 
-              {/* Side Actions */}
-              <div className="absolute right-4 bottom-20 flex flex-col gap-4">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-12 w-12 rounded-full bg-white/10 backdrop-blur-sm text-white hover:bg-white/20"
-                  onClick={() => onToggleFavorite(video.id)}
-                >
-                  <Heart 
-                    className={cn(
-                      "h-6 w-6",
-                      video.is_favorite && "fill-red-500 text-red-500"
-                    )} 
-                  />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-12 w-12 rounded-full bg-white/10 backdrop-blur-sm text-white hover:bg-white/20"
-                  onClick={() => openInTikTok(video.url)}
-                >
-                  <ExternalLink className="h-6 w-6" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-12 w-12 rounded-full bg-white/10 backdrop-blur-sm text-white hover:bg-white/20 hover:text-red-400"
-                  onClick={() => onDelete(video.id)}
-                >
-                  <Trash2 className="h-6 w-6" />
-                </Button>
-              </div>
-
-              {/* Video Info */}
-              <div className="absolute left-4 bottom-20 max-w-[200px] text-white">
-                {video.author_name && (
-                  <p className="font-semibold text-sm">@{video.author_name}</p>
-                )}
-                {video.title && (
-                  <p className="text-xs opacity-80 line-clamp-2 mt-1">{video.title}</p>
-                )}
-              </div>
-
-              {/* Progress Indicator */}
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/70 text-sm">
-                {index + 1} / {videos.length}
-              </div>
+      {/* Video Container with Swipe */}
+      <AnimatePresence initial={false} custom={direction} mode="wait">
+        <motion.div
+          key={currentIndex}
+          custom={direction}
+          variants={slideVariants}
+          initial="enter"
+          animate="center"
+          exit="exit"
+          transition={{
+            y: { type: 'spring', stiffness: 300, damping: 30 },
+            opacity: { duration: 0.2 },
+          }}
+          drag="y"
+          dragConstraints={{ top: 0, bottom: 0 }}
+          dragElastic={0.2}
+          onDragEnd={handleDragEnd}
+          className="h-full w-full absolute inset-0 flex items-center justify-center touch-pan-x"
+        >
+          {getEmbedUrl(currentVideo) ? (
+            <iframe
+              src={getEmbedUrl(currentVideo)!}
+              className="w-full h-full max-w-[400px] mx-auto pointer-events-auto"
+              style={{ border: 'none' }}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          ) : (
+            <div className="flex flex-col items-center justify-center text-white">
+              <Play className="h-16 w-16 mb-4 opacity-50" />
+              <p className="text-sm opacity-70">Video kann nicht geladen werden</p>
+              <Button 
+                variant="outline" 
+                className="mt-4 border-white/30 text-white hover:bg-white/10"
+                onClick={() => openInTikTok(currentVideo.url)}
+              >
+                <ExternalLink className="h-4 w-4 mr-2" />
+                In TikTok öffnen
+              </Button>
             </div>
-          ))}
-        </div>
+          )}
 
-        {/* Progress Dots - Mobile */}
-        <div className="md:hidden absolute right-2 top-1/2 -translate-y-1/2 flex flex-col gap-1 z-50">
-          {videos.slice(
-            Math.max(0, currentIndex - 2),
-            Math.min(videos.length, currentIndex + 3)
-          ).map((_, i) => {
-            const actualIndex = Math.max(0, currentIndex - 2) + i;
-            return (
-              <div
-                key={actualIndex}
+          {/* Side Actions */}
+          <div className="absolute right-4 bottom-20 flex flex-col gap-4 z-10">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-12 w-12 rounded-full bg-white/10 backdrop-blur-sm text-white hover:bg-white/20"
+              onClick={() => onToggleFavorite(currentVideo.id)}
+            >
+              <Heart 
                 className={cn(
-                  "w-1.5 rounded-full transition-all",
-                  actualIndex === currentIndex 
-                    ? "h-4 bg-white" 
-                    : "h-1.5 bg-white/40"
-                )}
+                  "h-6 w-6",
+                  currentVideo.is_favorite && "fill-red-500 text-red-500"
+                )} 
               />
-            );
-          })}
-        </div>
-      </motion.div>
-    </AnimatePresence>
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-12 w-12 rounded-full bg-white/10 backdrop-blur-sm text-white hover:bg-white/20"
+              onClick={() => openInTikTok(currentVideo.url)}
+            >
+              <ExternalLink className="h-6 w-6" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-12 w-12 rounded-full bg-white/10 backdrop-blur-sm text-white hover:bg-white/20 hover:text-red-400"
+              onClick={() => onDelete(currentVideo.id)}
+            >
+              <Trash2 className="h-6 w-6" />
+            </Button>
+          </div>
+
+          {/* Video Info */}
+          <div className="absolute left-4 bottom-20 max-w-[200px] text-white z-10">
+            {currentVideo.author_name && (
+              <p className="font-semibold text-sm">@{currentVideo.author_name}</p>
+            )}
+            {currentVideo.title && (
+              <p className="text-xs opacity-80 line-clamp-2 mt-1">{currentVideo.title}</p>
+            )}
+          </div>
+
+          {/* Progress Indicator */}
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/70 text-sm z-10">
+            {currentIndex + 1} / {videos.length}
+          </div>
+
+          {/* Swipe Hint - shown briefly */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none md:hidden">
+            <motion.div
+              initial={{ opacity: 0.6 }}
+              animate={{ opacity: 0 }}
+              transition={{ delay: 1.5, duration: 0.5 }}
+              className="flex flex-col items-center text-white/50 text-xs"
+            >
+              <ChevronUp className="h-6 w-6 animate-bounce" />
+              <span>Wischen zum Wechseln</span>
+            </motion.div>
+          </div>
+        </motion.div>
+      </AnimatePresence>
+
+      {/* Progress Dots - Mobile */}
+      <div className="md:hidden absolute right-2 top-1/2 -translate-y-1/2 flex flex-col gap-1 z-50">
+        {videos.slice(
+          Math.max(0, currentIndex - 2),
+          Math.min(videos.length, currentIndex + 3)
+        ).map((_, i) => {
+          const actualIndex = Math.max(0, currentIndex - 2) + i;
+          return (
+            <div
+              key={actualIndex}
+              className={cn(
+                "w-1.5 rounded-full transition-all",
+                actualIndex === currentIndex 
+                  ? "h-4 bg-white" 
+                  : "h-1.5 bg-white/40"
+              )}
+            />
+          );
+        })}
+      </div>
+    </div>
   );
 }
