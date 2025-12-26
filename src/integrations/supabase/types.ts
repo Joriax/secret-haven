@@ -87,6 +87,33 @@ export type Database = {
           },
         ]
       }
+      note_folders: {
+        Row: {
+          color: string | null
+          created_at: string | null
+          icon: string | null
+          id: string
+          name: string
+          user_id: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string | null
+          icon?: string | null
+          id?: string
+          name: string
+          user_id: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string | null
+          icon?: string | null
+          id?: string
+          name?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       note_versions: {
         Row: {
           content: string | null
@@ -130,6 +157,7 @@ export type Database = {
           content: string | null
           created_at: string | null
           deleted_at: string | null
+          folder_id: string | null
           id: string
           is_favorite: boolean | null
           is_secure: boolean | null
@@ -143,6 +171,7 @@ export type Database = {
           content?: string | null
           created_at?: string | null
           deleted_at?: string | null
+          folder_id?: string | null
           id?: string
           is_favorite?: boolean | null
           is_secure?: boolean | null
@@ -156,6 +185,7 @@ export type Database = {
           content?: string | null
           created_at?: string | null
           deleted_at?: string | null
+          folder_id?: string | null
           id?: string
           is_favorite?: boolean | null
           is_secure?: boolean | null
@@ -166,6 +196,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "notes_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "note_folders"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "notes_user_id_fkey"
             columns: ["user_id"]
