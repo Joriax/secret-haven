@@ -40,11 +40,13 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTags, Tag as TagType } from '@/hooks/useTags';
 import { useNoteFolders } from '@/hooks/useNoteFolders';
 import { useViewHistory } from '@/hooks/useViewHistory';
+import { useNoteAttachments } from '@/hooks/useNoteAttachments';
 import { encryptText, decryptText } from '@/lib/encryption';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
 import { NoteFolderSidebar } from '@/components/NoteFolderSidebar';
+import { NoteAttachmentsPanel } from '@/components/NoteAttachmentsPanel';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -112,6 +114,14 @@ export default function Notes() {
   const { tags, createTag } = useTags();
   const { folders, createFolder, updateFolder, deleteFolder } = useNoteFolders();
   const { recordView } = useViewHistory();
+  const { 
+    attachments, 
+    isLoading: attachmentsLoading, 
+    isUploading: attachmentsUploading, 
+    fetchAttachments, 
+    uploadAttachment, 
+    deleteAttachment 
+  } = useNoteAttachments(selectedNote?.id || null);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [showFolderSidebar, setShowFolderSidebar] = useState(true);
 
@@ -143,6 +153,13 @@ export default function Notes() {
   useEffect(() => {
     fetchNotes();
   }, [fetchNotes]);
+
+  // Fetch attachments when note changes
+  useEffect(() => {
+    if (selectedNote?.id) {
+      fetchAttachments();
+    }
+  }, [selectedNote?.id, fetchAttachments]);
 
   // Real-time updates
   useEffect(() => {
@@ -1067,8 +1084,18 @@ export default function Notes() {
                   )}
                 </div>
 
+                {/* Attachments Panel */}
+                <NoteAttachmentsPanel
+                  attachments={attachments}
+                  isLoading={attachmentsLoading}
+                  isUploading={attachmentsUploading}
+                  isEditing={true}
+                  onUpload={uploadAttachment}
+                  onDelete={deleteAttachment}
+                />
+
                 <div className="px-6 py-3 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
-                  <span>{getWordCount(editContent)} Wörter • {editContent.length} Zeichen</span>
+                  <span>{getWordCount(editContent)} Wörter • {editContent.length} Zeichen • {attachments.length} Anhänge</span>
                   <span className="flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
                     Auto-Save aktiv
@@ -1076,34 +1103,48 @@ export default function Notes() {
                 </div>
               </div>
             ) : (
-              <div className="flex-1 overflow-y-auto p-6">
-                <h1 className="text-2xl font-bold text-foreground mb-6">{selectedNote.title}</h1>
-                <div className="prose prose-neutral dark:prose-invert max-w-none">
-                  <ReactMarkdown
-                    components={{
-                      code: ({ className, children }) => (
-                        <code className={cn(className, "bg-muted rounded px-2 py-1 text-primary font-mono text-sm")}>
-                          {children}
-                        </code>
-                      ),
-                      pre: ({ children }) => (
-                        <pre className="bg-muted rounded-xl p-4 overflow-x-auto border border-border">
-                          {children}
-                        </pre>
-                      ),
-                      h1: ({ children }) => <h1 className="text-2xl font-bold text-foreground mt-6 mb-4">{children}</h1>,
-                      h2: ({ children }) => <h2 className="text-xl font-bold text-foreground mt-5 mb-3">{children}</h2>,
-                      h3: ({ children }) => <h3 className="text-lg font-bold text-foreground mt-4 mb-2">{children}</h3>,
-                      p: ({ children }) => <p className="text-foreground mb-4 leading-relaxed">{children}</p>,
-                      ul: ({ children }) => <ul className="list-disc list-inside text-foreground mb-4 space-y-1">{children}</ul>,
-                      ol: ({ children }) => <ol className="list-decimal list-inside text-foreground mb-4 space-y-1">{children}</ol>,
-                      a: ({ href, children }) => <a href={href} className="text-primary hover:underline">{children}</a>,
-                      blockquote: ({ children }) => <blockquote className="border-l-4 border-primary pl-4 italic text-muted-foreground my-4">{children}</blockquote>,
-                    }}
-                  >
-                    {editContent || '*Keine Inhalte*'}
-                  </ReactMarkdown>
+              <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="flex-1 overflow-y-auto p-6">
+                  <h1 className="text-2xl font-bold text-foreground mb-6">{selectedNote.title}</h1>
+                  <div className="prose prose-neutral dark:prose-invert max-w-none">
+                    <ReactMarkdown
+                      components={{
+                        code: ({ className, children }) => (
+                          <code className={cn(className, "bg-muted rounded px-2 py-1 text-primary font-mono text-sm")}>
+                            {children}
+                          </code>
+                        ),
+                        pre: ({ children }) => (
+                          <pre className="bg-muted rounded-xl p-4 overflow-x-auto border border-border">
+                            {children}
+                          </pre>
+                        ),
+                        h1: ({ children }) => <h1 className="text-2xl font-bold text-foreground mt-6 mb-4">{children}</h1>,
+                        h2: ({ children }) => <h2 className="text-xl font-bold text-foreground mt-5 mb-3">{children}</h2>,
+                        h3: ({ children }) => <h3 className="text-lg font-bold text-foreground mt-4 mb-2">{children}</h3>,
+                        p: ({ children }) => <p className="text-foreground mb-4 leading-relaxed">{children}</p>,
+                        ul: ({ children }) => <ul className="list-disc list-inside text-foreground mb-4 space-y-1">{children}</ul>,
+                        ol: ({ children }) => <ol className="list-decimal list-inside text-foreground mb-4 space-y-1">{children}</ol>,
+                        a: ({ href, children }) => <a href={href} className="text-primary hover:underline">{children}</a>,
+                        blockquote: ({ children }) => <blockquote className="border-l-4 border-primary pl-4 italic text-muted-foreground my-4">{children}</blockquote>,
+                      }}
+                    >
+                      {editContent || '*Keine Inhalte*'}
+                    </ReactMarkdown>
+                  </div>
                 </div>
+
+                {/* Attachments Panel in View Mode */}
+                {attachments.length > 0 && (
+                  <NoteAttachmentsPanel
+                    attachments={attachments}
+                    isLoading={attachmentsLoading}
+                    isUploading={false}
+                    isEditing={false}
+                    onUpload={() => {}}
+                    onDelete={() => {}}
+                  />
+                )}
               </div>
             )}
           </motion.div>

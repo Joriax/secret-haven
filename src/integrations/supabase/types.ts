@@ -87,6 +87,47 @@ export type Database = {
           },
         ]
       }
+      note_attachments: {
+        Row: {
+          created_at: string | null
+          filename: string
+          id: string
+          mime_type: string
+          note_id: string
+          original_name: string
+          size: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          filename: string
+          id?: string
+          mime_type: string
+          note_id: string
+          original_name: string
+          size: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          filename?: string
+          id?: string
+          mime_type?: string
+          note_id?: string
+          original_name?: string
+          size?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "note_attachments_note_id_fkey"
+            columns: ["note_id"]
+            isOneToOne: false
+            referencedRelation: "notes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       note_folders: {
         Row: {
           color: string | null
