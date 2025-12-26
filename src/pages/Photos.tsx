@@ -37,6 +37,7 @@ import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
 import { RenameDialog } from '@/components/RenameDialog';
 import { MultiSelectBar } from '@/components/MultiSelect';
 import { TagManager } from '@/components/TagManager';
+import { AlbumSidebar } from '@/components/AlbumSidebar';
 import { toast } from 'sonner';
 
 interface MediaItem {
@@ -87,6 +88,7 @@ export default function Photos() {
   const [searchQuery, setSearchQuery] = useState('');
   const [draggedItem, setDraggedItem] = useState<MediaItem | null>(null);
   const [dragOverAlbum, setDragOverAlbum] = useState<string | null>(null);
+  const [isAlbumSidebarOpen, setIsAlbumSidebarOpen] = useState(true);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -613,7 +615,20 @@ export default function Photos() {
   const currentLightboxItem = lightboxIndex !== null ? filteredMedia[lightboxIndex] : null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
+      {/* Album Sidebar for Drag and Drop */}
+      {!selectedAlbum && viewMode !== 'albums' && (
+        <AlbumSidebar
+          albums={albums}
+          isOpen={isAlbumSidebarOpen}
+          onToggle={() => setIsAlbumSidebarOpen(!isAlbumSidebarOpen)}
+          dragOverAlbum={dragOverAlbum}
+          onDragOver={handleAlbumDragOver}
+          onDragLeave={handleAlbumDragLeave}
+          onDrop={handleAlbumDrop}
+          onCreateAlbum={() => setShowNewAlbumModal(true)}
+        />
+      )}
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
