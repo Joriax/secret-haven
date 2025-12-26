@@ -16,6 +16,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { encryptText, decryptText } from '@/lib/encryption';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+import { useSecurityLogs } from '@/hooks/useSecurityLogs';
 
 interface SecretText {
   id: string;
@@ -39,6 +41,7 @@ export default function SecretTexts() {
   const [editTitle, setEditTitle] = useState('');
   const [editContent, setEditContent] = useState('');
   const { userId, isDecoyMode } = useAuth();
+  const { logEvent } = useSecurityLogs();
 
   const fetchTexts = useCallback(async () => {
     if (!userId || isDecoyMode) {
@@ -89,8 +92,11 @@ export default function SecretTexts() {
       setEditTitle('Neuer geheimer Text');
       setEditContent('');
       setIsUnlocked(true);
+      toast.success('Neuer geheimer Text erstellt');
+      logEvent('secret_text_create', { title: 'Neuer geheimer Text' });
     } catch (err) {
       console.error('Error creating secret text:', err);
+      toast.error('Fehler beim Erstellen');
     }
   };
 
@@ -98,15 +104,24 @@ export default function SecretTexts() {
     if (!selectedText || !password) return;
 
     setError('');
-    const decrypted = await decryptText(selectedText.encrypted_content, password);
-    
-    if (decrypted !== null) {
-      setDecryptedContent(decrypted);
-      setEditTitle(selectedText.title);
-      setEditContent(decrypted);
-      setIsUnlocked(true);
-    } else {
-      setError('Falsches Passwort');
+    try {
+      const decrypted = await decryptText(selectedText.encrypted_content, password);
+      
+      if (decrypted !== null) {
+        setDecryptedContent(decrypted);
+        setEditTitle(selectedText.title);
+        setEditContent(decrypted);
+        setIsUnlocked(true);
+        toast.success('Text entschlüsselt');
+        logEvent('secret_text_unlock', { title: selectedText.title });
+      } else {
+        setError('Falsches Passwort');
+        toast.error('Falsches Passwort');
+        logEvent('secret_text_unlock_failed', { title: selectedText.title });
+      }
+    } catch (err) {
+      setError('Fehler beim Entschlüsseln');
+      toast.error('Fehler beim Entschlüsseln');
     }
   };
 
@@ -132,14 +147,18 @@ export default function SecretTexts() {
           : t
       ));
       setSelectedText(prev => prev ? { ...prev, title: editTitle, encrypted_content: encrypted } : null);
+      toast.success('Gespeichert');
+      logEvent('secret_text_save', { title: editTitle });
     } catch (err) {
       console.error('Error saving secret text:', err);
+      toast.error('Fehler beim Speichern');
     } finally {
       setSaving(false);
     }
   };
 
   const deleteText = async (id: string) => {
+    const textToDelete = texts.find(t => t.id === id);
     try {
       const { error } = await supabase
         .from('secret_texts')
@@ -153,8 +172,11 @@ export default function SecretTexts() {
         setIsUnlocked(false);
         setDecryptedContent('');
       }
+      toast.success('Gelöscht');
+      logEvent('secret_text_delete', { title: textToDelete?.title });
     } catch (err) {
       console.error('Error deleting secret text:', err);
+      toast.error('Fehler beim Löschen');
     }
   };
 

@@ -43,8 +43,8 @@ import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
 import { RenameDialog } from '@/components/RenameDialog';
 import { MultiSelectBar } from '@/components/MultiSelect';
 import { TagManager } from '@/components/TagManager';
-import { AlbumSidebar } from '@/components/AlbumSidebar';
 import { toast } from 'sonner';
+import { useSecurityLogs } from '@/hooks/useSecurityLogs';
 
 interface MediaItem {
   id: string;
@@ -116,6 +116,7 @@ export default function Photos() {
   const { userId } = useAuth();
   const location = useLocation();
   const { tags } = useTags();
+  const { logEvent } = useSecurityLogs();
 
   const fetchData = useCallback(async () => {
     if (!userId) return;
@@ -248,6 +249,7 @@ export default function Photos() {
         setUploadProgress((uploaded / totalFiles) * 100);
       }
       toast.success(`${uploaded} ${uploaded === 1 ? 'Datei' : 'Dateien'} hochgeladen`);
+      logEvent('photo_upload', { count: uploaded, album: selectedAlbum?.name || null });
     } catch (error) {
       console.error('Error uploading:', error);
       toast.error('Fehler beim Hochladen');
@@ -297,6 +299,7 @@ export default function Photos() {
       setMedia(prev => prev.filter(m => m.id !== item.id));
       setDeleteConfirm({ isOpen: false, item: null });
       setLightboxIndex(null);
+      logEvent('photo_delete', { filename: item.filename });
       toast.success('In Papierkorb verschoben');
     } catch (error) {
       console.error('Error deleting:', error);
@@ -319,6 +322,7 @@ export default function Photos() {
       setSelectedItems(new Set());
       setIsMultiSelectMode(false);
       setDeleteConfirm({ isOpen: false, item: null });
+      logEvent('photo_bulk_delete', { count: selectedItems.size });
       toast.success(`${selectedItems.size} Elemente in Papierkorb verschoben`);
     } catch (error) {
       console.error('Error deleting:', error);
@@ -478,6 +482,7 @@ export default function Photos() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       toast.success('Download gestartet');
+      logEvent('photo_download', { filename: item.filename });
     } catch (error) {
       console.error('Error downloading:', error);
       toast.error('Fehler beim Download');
@@ -863,19 +868,6 @@ export default function Photos() {
 
   return (
     <div className="space-y-6 relative">
-      {/* Album Sidebar for Drag and Drop */}
-      {!selectedAlbum && viewMode !== 'albums' && (
-        <AlbumSidebar
-          albums={albums}
-          isOpen={isAlbumSidebarOpen}
-          onToggle={() => setIsAlbumSidebarOpen(!isAlbumSidebarOpen)}
-          dragOverAlbum={dragOverAlbum}
-          onDragOver={handleAlbumDragOver}
-          onDragLeave={handleAlbumDragLeave}
-          onDrop={handleAlbumDrop}
-          onCreateAlbum={() => setShowNewAlbumModal(true)}
-        />
-      )}
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
@@ -932,25 +924,31 @@ export default function Photos() {
                   <span className="hidden sm:inline">Sortieren</span>
                 </button>
                 {showSortMenu && (
-                  <div className="absolute top-full right-0 mt-2 w-48 glass-card p-2 z-20">
-                    {sortOptions.map(option => (
-                      <button
-                        key={option.id}
-                        onClick={() => {
-                          setSortMode(option.id);
-                          setShowSortMenu(false);
-                        }}
-                        className={cn(
-                          "w-full px-3 py-2 rounded-lg text-left text-sm transition-all",
-                          sortMode === option.id 
-                            ? "bg-primary/20 text-primary" 
-                            : "hover:bg-muted text-foreground"
-                        )}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
+                  <>
+                    <div 
+                      className="fixed inset-0 z-40" 
+                      onClick={() => setShowSortMenu(false)}
+                    />
+                    <div className="absolute top-full right-0 mt-2 w-48 bg-card border border-border shadow-xl rounded-xl p-2 z-50">
+                      {sortOptions.map(option => (
+                        <button
+                          key={option.id}
+                          onClick={() => {
+                            setSortMode(option.id);
+                            setShowSortMenu(false);
+                          }}
+                          className={cn(
+                            "w-full px-3 py-2 rounded-lg text-left text-sm transition-all",
+                            sortMode === option.id 
+                              ? "bg-primary/20 text-primary" 
+                              : "hover:bg-muted text-foreground"
+                          )}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </>
                 )}
               </div>
             )}
@@ -1316,35 +1314,45 @@ export default function Photos() {
 
                   {/* Tag Selector Dropdown */}
                   {showTagSelector === item.id && (
-                    <div 
-                      className="absolute top-full left-0 mt-2 w-48 glass-card p-2 z-20"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {tags.map(tag => (
-                        <button
-                          key={tag.id}
-                          onClick={() => {
-                            const newTags = item.tags?.includes(tag.id)
-                              ? item.tags.filter(t => t !== tag.id)
-                              : [...(item.tags || []), tag.id];
-                            updateMediaTags(item.id, newTags);
-                          }}
-                          className={cn(
-                            "w-full px-3 py-2 rounded-lg text-left flex items-center gap-2 transition-all text-sm",
-                            item.tags?.includes(tag.id) ? "bg-white/10" : "hover:bg-white/5"
-                          )}
-                        >
-                          <span className="w-3 h-3 rounded-full" style={{ backgroundColor: tag.color }} />
-                          <span className="text-foreground">{tag.name}</span>
-                        </button>
-                      ))}
-                      <button
-                        onClick={() => setShowTagSelector(null)}
-                        className="w-full mt-2 px-3 py-2 rounded-lg text-center text-sm text-muted-foreground hover:bg-muted"
+                    <>
+                      <div 
+                        className="fixed inset-0 z-40" 
+                        onClick={(e) => { e.stopPropagation(); setShowTagSelector(null); }}
+                      />
+                      <div 
+                        className="absolute top-full left-0 mt-2 w-48 bg-card border border-border shadow-xl rounded-xl p-2 z-50"
+                        onClick={(e) => e.stopPropagation()}
                       >
-                        Schließen
-                      </button>
-                    </div>
+                        {tags.length === 0 ? (
+                          <p className="text-muted-foreground text-sm p-2 text-center">Keine Tags vorhanden</p>
+                        ) : (
+                          tags.map(tag => (
+                            <button
+                              key={tag.id}
+                              onClick={() => {
+                                const newTags = item.tags?.includes(tag.id)
+                                  ? item.tags.filter(t => t !== tag.id)
+                                  : [...(item.tags || []), tag.id];
+                                updateMediaTags(item.id, newTags);
+                              }}
+                              className={cn(
+                                "w-full px-3 py-2 rounded-lg text-left flex items-center gap-2 transition-all text-sm",
+                                item.tags?.includes(tag.id) ? "bg-primary/20" : "hover:bg-muted"
+                              )}
+                            >
+                              <span className="w-3 h-3 rounded-full" style={{ backgroundColor: tag.color }} />
+                              <span className="text-foreground">{tag.name}</span>
+                            </button>
+                          ))
+                        )}
+                        <button
+                          onClick={() => setShowTagSelector(null)}
+                          className="w-full mt-2 px-3 py-2 rounded-lg text-center text-sm text-muted-foreground hover:bg-muted border-t border-border"
+                        >
+                          Schließen
+                        </button>
+                      </div>
+                    </>
                   )}
                 </div>
               ))}
