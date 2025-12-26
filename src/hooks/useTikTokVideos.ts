@@ -76,11 +76,32 @@ export function useTikTokVideos() {
     fetchVideos();
   }, [fetchVideos]);
 
-  const addVideo = async (url: string, title?: string, authorName?: string) => {
+  const fetchMetadata = async (url: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('fetch-tiktok-metadata', {
+        body: { url },
+      });
+      
+      if (error) {
+        console.error('Error fetching metadata:', error);
+        return null;
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Error fetching metadata:', error);
+      return null;
+    }
+  };
+
+  const addVideo = async (url: string) => {
     if (!userId) return null;
 
     try {
       const videoId = extractVideoId(url);
+      
+      // Fetch metadata from TikTok
+      const metadata = await fetchMetadata(url);
       
       const { data, error } = await supabase
         .from('tiktok_videos')
@@ -88,8 +109,9 @@ export function useTikTokVideos() {
           user_id: userId,
           url,
           video_id: videoId,
-          title: title || '',
-          author_name: authorName || null,
+          title: metadata?.title || '',
+          author_name: metadata?.author_name || null,
+          thumbnail_url: metadata?.thumbnail_url || null,
         })
         .select()
         .single();

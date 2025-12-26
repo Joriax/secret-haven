@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.cleanup-trash]
 verify_jwt = false
+
+[functions.fetch-tiktok-metadata]
+verify_jwt = false
