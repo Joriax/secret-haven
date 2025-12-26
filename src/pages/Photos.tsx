@@ -21,14 +21,20 @@ import {
   LayoutGrid,
   Maximize2,
   Volume2,
-  VolumeX
+  VolumeX,
+  Tag,
+  CheckSquare,
+  Square
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTags } from '@/hooks/useTags';
 import { cn } from '@/lib/utils';
 import { useLocation } from 'react-router-dom';
 import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
 import { RenameDialog } from '@/components/RenameDialog';
+import { MultiSelectBar } from '@/components/MultiSelect';
+import { TagManager } from '@/components/TagManager';
 import { toast } from 'sonner';
 
 interface MediaItem {
@@ -42,6 +48,7 @@ interface MediaItem {
   is_favorite?: boolean;
   type: 'photo' | 'video';
   mime_type?: string;
+  tags?: string[];
 }
 
 interface Album {
@@ -65,10 +72,15 @@ export default function Photos() {
   const [showNewAlbumModal, setShowNewAlbumModal] = useState(false);
   const [newAlbumName, setNewAlbumName] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>('all');
-  const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; item: MediaItem | null }>({ isOpen: false, item: null });
+  const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; item: MediaItem | null; isMulti?: boolean }>({ isOpen: false, item: null });
   const [renameDialog, setRenameDialog] = useState<{ isOpen: boolean; item: MediaItem | null }>({ isOpen: false, item: null });
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
+  const [showBulkTagManager, setShowBulkTagManager] = useState(false);
+  const [showTagSelector, setShowTagSelector] = useState<string | null>(null);
+  const [selectedTagFilter, setSelectedTagFilter] = useState<string | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -76,6 +88,7 @@ export default function Photos() {
   const touchStartX = useRef<number | null>(null);
   const { userId } = useAuth();
   const location = useLocation();
+  const { tags } = useTags();
 
   const fetchData = useCallback(async () => {
     if (!userId) return;
@@ -264,6 +277,101 @@ export default function Photos() {
     }
   };
 
+  const handleMultiDelete = async () => {
+    if (!userId || selectedItems.size === 0) return;
+
+    try {
+      const { error } = await supabase
+        .from('photos')
+        .update({ deleted_at: new Date().toISOString() })
+        .in('id', Array.from(selectedItems));
+
+      if (error) throw error;
+
+      setMedia(prev => prev.filter(m => !selectedItems.has(m.id)));
+      setSelectedItems(new Set());
+      setIsMultiSelectMode(false);
+      setDeleteConfirm({ isOpen: false, item: null });
+      toast.success(`${selectedItems.size} Elemente in Papierkorb verschoben`);
+    } catch (error) {
+      console.error('Error deleting:', error);
+      toast.error('Fehler beim Löschen');
+    }
+  };
+
+  const toggleItemSelection = (id: string) => {
+    setSelectedItems(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
+
+  const updateMediaTags = async (itemId: string, newTags: string[]) => {
+    try {
+      const { error } = await supabase
+        .from('photos')
+        .update({ tags: newTags })
+        .eq('id', itemId);
+
+      if (error) throw error;
+
+      setMedia(prev => prev.map(m => 
+        m.id === itemId ? { ...m, tags: newTags } : m
+      ));
+      toast.success('Tags aktualisiert');
+    } catch (error) {
+      console.error('Error updating tags:', error);
+    }
+  };
+
+  const handleBulkTagUpdate = async (newTags: string[]) => {
+    if (selectedItems.size === 0) return;
+
+    try {
+      const { error } = await supabase
+        .from('photos')
+        .update({ tags: newTags })
+        .in('id', Array.from(selectedItems));
+
+      if (error) throw error;
+
+      setMedia(prev => prev.map(m => 
+        selectedItems.has(m.id) ? { ...m, tags: newTags } : m
+      ));
+      setShowBulkTagManager(false);
+      toast.success('Tags aktualisiert');
+    } catch (error) {
+      console.error('Error updating tags:', error);
+    }
+  };
+
+  const handleBulkFavorite = async () => {
+    if (selectedItems.size === 0) return;
+
+    try {
+      const { error } = await supabase
+        .from('photos')
+        .update({ is_favorite: true })
+        .in('id', Array.from(selectedItems));
+
+      if (error) throw error;
+
+      setMedia(prev => prev.map(m => 
+        selectedItems.has(m.id) ? { ...m, is_favorite: true } : m
+      ));
+      setSelectedItems(new Set());
+      setIsMultiSelectMode(false);
+      toast.success('Zu Favoriten hinzugefügt');
+    } catch (error) {
+      console.error('Error updating favorites:', error);
+    }
+  };
+
   const handleRename = async (newName: string) => {
     if (!renameDialog.item) return;
 
@@ -448,6 +556,23 @@ export default function Photos() {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            {/* Multi-select toggle */}
+            <button
+              onClick={() => {
+                setIsMultiSelectMode(!isMultiSelectMode);
+                setSelectedItems(new Set());
+              }}
+              className={cn(
+                "flex items-center gap-2 px-3 py-2 rounded-xl border transition-all text-sm",
+                isMultiSelectMode 
+                  ? "bg-primary text-primary-foreground border-primary" 
+                  : "border-border hover:bg-muted"
+              )}
+            >
+              <CheckSquare className="w-4 h-4" />
+              <span className="hidden sm:inline">Auswählen</span>
+            </button>
+
             <button
               onClick={() => setShowNewAlbumModal(true)}
               className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border hover:bg-muted transition-all text-sm"
@@ -852,8 +977,8 @@ export default function Photos() {
       <DeleteConfirmDialog
         isOpen={deleteConfirm.isOpen}
         onClose={() => setDeleteConfirm({ isOpen: false, item: null })}
-        onConfirm={handleDelete}
-        itemName={deleteConfirm.item?.caption || deleteConfirm.item?.filename.replace(/^\d+-/, '')}
+        onConfirm={deleteConfirm.isMulti ? handleMultiDelete : handleDelete}
+        itemName={deleteConfirm.isMulti ? `${selectedItems.size} Elemente` : (deleteConfirm.item?.caption || deleteConfirm.item?.filename.replace(/^\d+-/, ''))}
       />
 
       {/* Rename Dialog */}
@@ -864,6 +989,53 @@ export default function Photos() {
         currentName={renameDialog.item?.caption || ''}
         title="Beschreibung bearbeiten"
       />
+
+      {/* Multi-select action bar */}
+      <MultiSelectBar
+        selectedCount={selectedItems.size}
+        onClear={() => {
+          setSelectedItems(new Set());
+          setIsMultiSelectMode(false);
+        }}
+        onDelete={() => setDeleteConfirm({ isOpen: true, item: null, isMulti: true })}
+        onTag={() => setShowBulkTagManager(true)}
+        onFavorite={handleBulkFavorite}
+      />
+
+      {/* Bulk Tag Manager Modal */}
+      <AnimatePresence>
+        {showBulkTagManager && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+            onClick={() => setShowBulkTagManager(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="glass-card p-6 w-full max-w-md"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 className="text-xl font-bold text-foreground mb-4">
+                Tags für {selectedItems.size} Elemente
+              </h2>
+              <TagManager
+                selectedTags={[]}
+                onTagsChange={handleBulkTagUpdate}
+              />
+              <button
+                onClick={() => setShowBulkTagManager(false)}
+                className="w-full mt-4 px-4 py-3 rounded-xl border border-border text-foreground hover:bg-muted transition-all"
+              >
+                Abbrechen
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

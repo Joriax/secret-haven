@@ -21,7 +21,9 @@ import {
   FolderPlus,
   Grid3X3,
   List,
-  Tag
+  Tag,
+  CheckSquare,
+  Square
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -30,6 +32,8 @@ import { cn } from '@/lib/utils';
 import { useLocation } from 'react-router-dom';
 import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
 import { RenameDialog } from '@/components/RenameDialog';
+import { MultiSelectBar } from '@/components/MultiSelect';
+import { TagManager } from '@/components/TagManager';
 import { toast } from 'sonner';
 
 interface FileItem {
@@ -71,13 +75,16 @@ export default function Files() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; file: FileItem | null }>({ isOpen: false, file: null });
+  const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; file: FileItem | null; isMulti?: boolean }>({ isOpen: false, file: null });
   const [renameDialog, setRenameDialog] = useState<{ isOpen: boolean; file: FileItem | null }>({ isOpen: false, file: null });
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [filterMode, setFilterMode] = useState<FilterMode>('all');
   const [showTagSelector, setShowTagSelector] = useState<string | null>(null);
   const [selectedTagFilter, setSelectedTagFilter] = useState<string | null>(null);
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
+  const [showBulkTagManager, setShowBulkTagManager] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const touchStartX = useRef<number | null>(null);
   const { userId } = useAuth();
@@ -244,6 +251,83 @@ export default function Files() {
     } catch (error) {
       console.error('Error deleting file:', error);
       toast.error('Fehler beim Löschen');
+    }
+  };
+
+  const handleMultiDelete = async () => {
+    if (!userId || selectedItems.size === 0) return;
+
+    try {
+      const { error } = await supabase
+        .from('files')
+        .update({ deleted_at: new Date().toISOString() })
+        .in('id', Array.from(selectedItems));
+
+      if (error) throw error;
+
+      setFiles(files.filter(f => !selectedItems.has(f.id)));
+      setSelectedItems(new Set());
+      setIsMultiSelectMode(false);
+      setDeleteConfirm({ isOpen: false, file: null });
+      toast.success(`${selectedItems.size} Dateien in Papierkorb verschoben`);
+    } catch (error) {
+      console.error('Error deleting files:', error);
+      toast.error('Fehler beim Löschen');
+    }
+  };
+
+  const toggleItemSelection = (id: string) => {
+    setSelectedItems(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
+
+  const handleBulkTagUpdate = async (newTags: string[]) => {
+    if (selectedItems.size === 0) return;
+
+    try {
+      const { error } = await supabase
+        .from('files')
+        .update({ tags: newTags })
+        .in('id', Array.from(selectedItems));
+
+      if (error) throw error;
+
+      setFiles(prev => prev.map(f => 
+        selectedItems.has(f.id) ? { ...f, tags: newTags } : f
+      ));
+      setShowBulkTagManager(false);
+      toast.success('Tags aktualisiert');
+    } catch (error) {
+      console.error('Error updating tags:', error);
+    }
+  };
+
+  const handleBulkFavorite = async () => {
+    if (selectedItems.size === 0) return;
+
+    try {
+      const { error } = await supabase
+        .from('files')
+        .update({ is_favorite: true })
+        .in('id', Array.from(selectedItems));
+
+      if (error) throw error;
+
+      setFiles(prev => prev.map(f => 
+        selectedItems.has(f.id) ? { ...f, is_favorite: true } : f
+      ));
+      setSelectedItems(new Set());
+      setIsMultiSelectMode(false);
+      toast.success('Zu Favoriten hinzugefügt');
+    } catch (error) {
+      console.error('Error updating favorites:', error);
     }
   };
 
@@ -454,6 +538,23 @@ export default function Files() {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Multi-select toggle */}
+            <button
+              onClick={() => {
+                setIsMultiSelectMode(!isMultiSelectMode);
+                setSelectedItems(new Set());
+              }}
+              className={cn(
+                "flex items-center gap-2 px-3 py-2 rounded-xl border transition-all text-sm",
+                isMultiSelectMode 
+                  ? "bg-primary text-primary-foreground border-primary" 
+                  : "border-border hover:bg-muted"
+              )}
+            >
+              <CheckSquare className="w-4 h-4" />
+              <span className="hidden sm:inline">Auswählen</span>
+            </button>
+
             {/* View Mode Toggle */}
             <div className="flex items-center border border-border rounded-xl overflow-hidden">
               <button
@@ -644,9 +745,35 @@ export default function Files() {
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: index * 0.02 }}
-                className="glass-card-hover overflow-hidden cursor-pointer aspect-square relative group"
-                onClick={() => isPreviewable && previewIdx !== -1 && setPreviewIndex(previewIdx)}
+                className={cn(
+                  "glass-card-hover overflow-hidden cursor-pointer aspect-square relative group",
+                  isMultiSelectMode && selectedItems.has(file.id) && "ring-2 ring-primary"
+                )}
+                onClick={() => {
+                  if (isMultiSelectMode) {
+                    toggleItemSelection(file.id);
+                  } else if (isPreviewable && previewIdx !== -1) {
+                    setPreviewIndex(previewIdx);
+                  }
+                }}
               >
+                {/* Selection checkbox */}
+                {isMultiSelectMode && (
+                  <div className="absolute top-2 left-2 z-10">
+                    <div className={cn(
+                      "w-6 h-6 rounded-md flex items-center justify-center transition-colors",
+                      selectedItems.has(file.id) 
+                        ? "bg-primary text-primary-foreground" 
+                        : "bg-black/50 text-white"
+                    )}>
+                      {selectedItems.has(file.id) ? (
+                        <CheckSquare className="w-4 h-4" />
+                      ) : (
+                        <Square className="w-4 h-4" />
+                      )}
+                    </div>
+                  </div>
+                )}
                 {file.mime_type.startsWith('image/') && file.url ? (
                   <img
                     src={file.url}
@@ -963,8 +1090,8 @@ export default function Files() {
       <DeleteConfirmDialog
         isOpen={deleteConfirm.isOpen}
         onClose={() => setDeleteConfirm({ isOpen: false, file: null })}
-        onConfirm={handleDelete}
-        itemName={deleteConfirm.file?.filename.replace(/^\d+-/, '')}
+        onConfirm={deleteConfirm.isMulti ? handleMultiDelete : handleDelete}
+        itemName={deleteConfirm.isMulti ? `${selectedItems.size} Dateien` : deleteConfirm.file?.filename.replace(/^\d+-/, '')}
       />
 
       {/* Rename Dialog */}
@@ -983,6 +1110,55 @@ export default function Files() {
           onClick={() => setShowTagSelector(null)}
         />
       )}
+
+      {/* Multi-select action bar */}
+      <MultiSelectBar
+        selectedCount={selectedItems.size}
+        onClear={() => {
+          setSelectedItems(new Set());
+          setIsMultiSelectMode(false);
+        }}
+        onDelete={() => setDeleteConfirm({ isOpen: true, file: null, isMulti: true })}
+        onTag={() => setShowBulkTagManager(true)}
+        onFavorite={handleBulkFavorite}
+      />
+
+      {/* Bulk Tag Manager Modal */}
+      <AnimatePresence>
+        {showBulkTagManager && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+            onClick={() => setShowBulkTagManager(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="glass-card p-6 w-full max-w-md"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 className="text-xl font-bold text-foreground mb-4">
+                Tags für {selectedItems.size} Dateien
+              </h2>
+              <TagManager
+                selectedTags={[]}
+                onTagsChange={handleBulkTagUpdate}
+              />
+              <div className="flex gap-3 mt-4">
+                <button
+                  onClick={() => setShowBulkTagManager(false)}
+                  className="flex-1 px-4 py-3 rounded-xl border border-border text-foreground hover:bg-muted transition-all"
+                >
+                  Abbrechen
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
