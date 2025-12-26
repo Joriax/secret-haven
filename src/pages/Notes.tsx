@@ -31,16 +31,19 @@ import {
   Heading3,
   Eye,
   EyeOff,
-  CheckSquare
+  CheckSquare,
+  Folder
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTags, Tag as TagType } from '@/hooks/useTags';
+import { useNoteFolders } from '@/hooks/useNoteFolders';
 import { encryptText, decryptText } from '@/lib/encryption';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
+import { NoteFolderSidebar } from '@/components/NoteFolderSidebar';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -57,6 +60,7 @@ interface Note {
   is_secure: boolean;
   is_favorite: boolean;
   tags: string[];
+  folder_id: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -105,6 +109,9 @@ export default function Notes() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { userId, isDecoyMode } = useAuth();
   const { tags, createTag } = useTags();
+  const { folders, createFolder, updateFolder, deleteFolder } = useNoteFolders();
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+  const [showFolderSidebar, setShowFolderSidebar] = useState(true);
 
   const fetchNotes = useCallback(async () => {
     if (!userId) return;
@@ -170,7 +177,7 @@ export default function Notes() {
     };
   }, [editTitle, editContent]);
 
-  const createNote = async () => {
+  const createNote = async (folderId?: string | null) => {
     if (!userId) return;
 
     try {
@@ -183,6 +190,7 @@ export default function Notes() {
           is_favorite: false,
           is_secure: false,
           tags: [],
+          folder_id: folderId ?? selectedFolderId,
         })
         .select()
         .single();
@@ -197,6 +205,26 @@ export default function Notes() {
     } catch (error) {
       console.error('Error creating note:', error);
       toast.error('Fehler beim Erstellen');
+    }
+  };
+
+  const moveNoteToFolder = async (noteId: string, folderId: string | null) => {
+    try {
+      const { error } = await supabase
+        .from('notes')
+        .update({ folder_id: folderId })
+        .eq('id', noteId);
+
+      if (error) throw error;
+
+      setNotes(notes.map(n => n.id === noteId ? { ...n, folder_id: folderId } : n));
+      if (selectedNote?.id === noteId) {
+        setSelectedNote({ ...selectedNote, folder_id: folderId });
+      }
+      toast.success(folderId ? 'In Ordner verschoben' : 'Aus Ordner entfernt');
+    } catch (error) {
+      console.error('Error moving note:', error);
+      toast.error('Fehler beim Verschieben');
     }
   };
 
@@ -484,12 +512,19 @@ export default function Notes() {
     if (filterFavorites && !note.is_favorite) return false;
     if (filterSecure && !note.is_secure) return false;
     if (selectedTagFilter && !note.tags?.includes(selectedTagFilter)) return false;
+    if (selectedFolderId !== null && note.folder_id !== selectedFolderId) return false;
     if (searchQuery) {
       return note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (note.content || '').toLowerCase().includes(searchQuery.toLowerCase());
     }
     return true;
   });
+
+  // Calculate note counts per folder
+  const noteCounts = folders.reduce((acc, folder) => {
+    acc[folder.id] = notes.filter(n => n.folder_id === folder.id).length;
+    return acc;
+  }, {} as Record<string, number>);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('de-DE', {
@@ -547,7 +582,30 @@ export default function Notes() {
   ];
 
   return (
-    <div className="h-[calc(100vh-6rem)] flex flex-col lg:flex-row gap-6">
+    <div className="h-[calc(100vh-6rem)] flex flex-col lg:flex-row gap-4">
+      {/* Folder Sidebar */}
+      {showFolderSidebar && (
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          className={cn(
+            "w-full lg:w-56 glass-card p-4 shrink-0",
+            selectedNote && "hidden lg:block"
+          )}
+        >
+          <NoteFolderSidebar
+            folders={folders}
+            selectedFolderId={selectedFolderId}
+            onSelectFolder={setSelectedFolderId}
+            onCreateFolder={createFolder}
+            onUpdateFolder={updateFolder}
+            onDeleteFolder={deleteFolder}
+            noteCounts={noteCounts}
+            totalNotes={notes.length}
+          />
+        </motion.div>
+      )}
+
       {/* Notes List */}
       <motion.div
         initial={{ opacity: 0, x: -20 }}
@@ -561,7 +619,7 @@ export default function Notes() {
         <div className="flex items-center justify-between p-4 border-b border-border">
           <h1 className="text-xl font-bold text-foreground">Notizen</h1>
           <button
-            onClick={createNote}
+            onClick={() => createNote()}
             className="p-2 rounded-xl bg-gradient-primary hover:shadow-glow transition-all"
           >
             <Plus className="w-5 h-5 text-primary-foreground" />
@@ -638,7 +696,7 @@ export default function Notes() {
               <FileText className="w-12 h-12 mx-auto mb-2 opacity-50" />
               <p>Keine Notizen gefunden</p>
               <button
-                onClick={createNote}
+                onClick={() => createNote()}
                 className="mt-4 px-4 py-2 rounded-xl bg-gradient-primary text-primary-foreground text-sm"
               >
                 Erste Notiz erstellen
@@ -716,6 +774,28 @@ export default function Notes() {
                           Teilen
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
+                        {/* Move to folder */}
+                        {folders.length > 0 && (
+                          <>
+                            <div className="px-2 py-1.5 text-xs text-muted-foreground font-medium">In Ordner verschieben</div>
+                            {note.folder_id && (
+                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); moveNoteToFolder(note.id, null); }}>
+                                <X className="w-4 h-4 mr-2" />
+                                Aus Ordner entfernen
+                              </DropdownMenuItem>
+                            )}
+                            {folders.filter(f => f.id !== note.folder_id).map(folder => (
+                              <DropdownMenuItem 
+                                key={folder.id}
+                                onClick={(e) => { e.stopPropagation(); moveNoteToFolder(note.id, folder.id); }}
+                              >
+                                <Folder className="w-4 h-4 mr-2" style={{ color: folder.color }} />
+                                {folder.name}
+                              </DropdownMenuItem>
+                            ))}
+                            <DropdownMenuSeparator />
+                          </>
+                        )}
                         <DropdownMenuItem 
                           onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ isOpen: true, note }); }}
                           className="text-destructive focus:text-destructive"
@@ -1034,7 +1114,7 @@ export default function Notes() {
               <FileText className="w-16 h-16 mx-auto mb-4 opacity-50" />
               <p className="mb-4">Wähle eine Notiz aus oder erstelle eine neue</p>
               <button
-                onClick={createNote}
+                onClick={() => createNote()}
                 className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-primary text-primary-foreground hover:shadow-glow transition-all"
               >
                 <Plus className="w-5 h-5" />
