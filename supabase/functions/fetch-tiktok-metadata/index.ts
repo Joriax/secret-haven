@@ -53,6 +53,7 @@ serve(async (req) => {
         title: data.title || null,
         author_name: data.author_name || null,
         thumbnail_url: data.thumbnail_url || null,
+        video_id: data.embed_product_id || null,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

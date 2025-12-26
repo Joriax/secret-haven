@@ -98,10 +98,11 @@ export function useTikTokVideos() {
     if (!userId) return null;
 
     try {
-      const videoId = extractVideoId(url);
-      
-      // Fetch metadata from TikTok
+      // Fetch metadata from TikTok (includes video_id for shortened URLs)
       const metadata = await fetchMetadata(url);
+      
+      // Use video_id from metadata if available, otherwise try to extract from URL
+      const videoId = metadata?.video_id || extractVideoId(url);
       
       const { data, error } = await supabase
         .from('tiktok_videos')
