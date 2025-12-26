@@ -38,6 +38,77 @@ export default function Trash() {
   const [emptyTrashDialogOpen, setEmptyTrashDialogOpen] = useState(false);
   const { userId, isDecoyMode } = useAuth();
 
+  // Auto-cleanup expired items (client-side backup for cron job)
+  const cleanupExpiredItems = useCallback(async () => {
+    if (!userId) return;
+
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - TRASH_RETENTION_DAYS);
+    const cutoffDateStr = cutoffDate.toISOString();
+
+    try {
+      // Find and delete expired notes
+      const { data: expiredNotes } = await supabase
+        .from('notes')
+        .select('id')
+        .eq('user_id', userId)
+        .not('deleted_at', 'is', null)
+        .lt('deleted_at', cutoffDateStr);
+
+      if (expiredNotes && expiredNotes.length > 0) {
+        await supabase
+          .from('notes')
+          .delete()
+          .in('id', expiredNotes.map(n => n.id));
+        console.log(`Auto-deleted ${expiredNotes.length} expired notes`);
+      }
+
+      // Find and delete expired photos
+      const { data: expiredPhotos } = await supabase
+        .from('photos')
+        .select('id, filename')
+        .eq('user_id', userId)
+        .not('deleted_at', 'is', null)
+        .lt('deleted_at', cutoffDateStr);
+
+      if (expiredPhotos && expiredPhotos.length > 0) {
+        for (const photo of expiredPhotos) {
+          if (photo.filename) {
+            await supabase.storage.from('photos').remove([`${userId}/${photo.filename}`]);
+          }
+        }
+        await supabase
+          .from('photos')
+          .delete()
+          .in('id', expiredPhotos.map(p => p.id));
+        console.log(`Auto-deleted ${expiredPhotos.length} expired photos`);
+      }
+
+      // Find and delete expired files
+      const { data: expiredFiles } = await supabase
+        .from('files')
+        .select('id, filename')
+        .eq('user_id', userId)
+        .not('deleted_at', 'is', null)
+        .lt('deleted_at', cutoffDateStr);
+
+      if (expiredFiles && expiredFiles.length > 0) {
+        for (const file of expiredFiles) {
+          if (file.filename) {
+            await supabase.storage.from('files').remove([`${userId}/${file.filename}`]);
+          }
+        }
+        await supabase
+          .from('files')
+          .delete()
+          .in('id', expiredFiles.map(f => f.id));
+        console.log(`Auto-deleted ${expiredFiles.length} expired files`);
+      }
+    } catch (err) {
+      console.error('Error during auto-cleanup:', err);
+    }
+  }, [userId]);
+
   const fetchTrashItems = useCallback(async () => {
     if (!userId || isDecoyMode) {
       setItems([]);
@@ -46,6 +117,9 @@ export default function Trash() {
     }
 
     try {
+      // First, cleanup any expired items
+      await cleanupExpiredItems();
+
       const now = new Date();
       const trashItems: TrashItem[] = [];
 
@@ -122,7 +196,7 @@ export default function Trash() {
     } finally {
       setLoading(false);
     }
-  }, [userId, isDecoyMode]);
+  }, [userId, isDecoyMode, cleanupExpiredItems]);
 
   useEffect(() => {
     fetchTrashItems();

@@ -2,3 +2,6 @@ project_id = "zbniouzrkbkyvkpnpwxa"
 
 [functions.verify-pin]
 verify_jwt = false
+
+[functions.cleanup-trash]
+verify_jwt = false
