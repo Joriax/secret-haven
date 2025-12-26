@@ -122,6 +122,7 @@ export type Database = {
           favicon_url: string | null
           folder_id: string | null
           id: string
+          image_url: string | null
           is_favorite: boolean | null
           tags: string[] | null
           title: string
@@ -136,6 +137,7 @@ export type Database = {
           favicon_url?: string | null
           folder_id?: string | null
           id?: string
+          image_url?: string | null
           is_favorite?: boolean | null
           tags?: string[] | null
           title?: string
@@ -150,6 +152,7 @@ export type Database = {
           favicon_url?: string | null
           folder_id?: string | null
           id?: string
+          image_url?: string | null
           is_favorite?: boolean | null
           tags?: string[] | null
           title?: string
