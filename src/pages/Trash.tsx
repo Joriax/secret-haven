@@ -128,6 +128,22 @@ export default function Trash() {
     fetchTrashItems();
   }, [fetchTrashItems]);
 
+  // Real-time updates
+  useEffect(() => {
+    if (!userId) return;
+
+    const channel = supabase
+      .channel('trash-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, fetchTrashItems)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'photos' }, fetchTrashItems)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'files' }, fetchTrashItems)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userId, fetchTrashItems]);
+
   const restoreItem = async (item: TrashItem) => {
     const table = item.type === 'note' ? 'notes' : item.type === 'photo' ? 'photos' : 'files';
     
