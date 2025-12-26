@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Plus, 
@@ -18,7 +18,20 @@ import {
   Share,
   MoreVertical,
   ChevronLeft,
-  Unlock
+  Unlock,
+  Bold,
+  Italic,
+  List,
+  ListOrdered,
+  Quote,
+  Code,
+  Link,
+  Heading1,
+  Heading2,
+  Heading3,
+  Eye,
+  EyeOff,
+  CheckSquare
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { supabase } from '@/integrations/supabase/client';
@@ -88,6 +101,8 @@ export default function Notes() {
   const [showVersions, setShowVersions] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; note: Note | null }>({ isOpen: false, note: null });
   const [autoSaveTimeout, setAutoSaveTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { userId, isDecoyMode } = useAuth();
   const { tags, createTag } = useTags();
 
@@ -489,6 +504,48 @@ export default function Notes() {
     return text.trim().split(/\s+/).filter(Boolean).length;
   };
 
+  // Markdown formatting helpers
+  const insertMarkdown = (prefix: string, suffix: string = '', placeholder: string = '') => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = editContent.substring(start, end);
+    const textToInsert = selectedText || placeholder;
+    
+    const newContent = 
+      editContent.substring(0, start) + 
+      prefix + textToInsert + suffix + 
+      editContent.substring(end);
+    
+    setEditContent(newContent);
+    
+    // Set cursor position after insertion
+    setTimeout(() => {
+      const newCursorPos = start + prefix.length + textToInsert.length + suffix.length;
+      textarea.focus();
+      textarea.setSelectionRange(
+        selectedText ? newCursorPos : start + prefix.length,
+        selectedText ? newCursorPos : start + prefix.length + placeholder.length
+      );
+    }, 0);
+  };
+
+  const formatActions = [
+    { icon: Bold, label: 'Fett', action: () => insertMarkdown('**', '**', 'fett') },
+    { icon: Italic, label: 'Kursiv', action: () => insertMarkdown('*', '*', 'kursiv') },
+    { icon: Heading1, label: 'Überschrift 1', action: () => insertMarkdown('\n# ', '\n', 'Überschrift') },
+    { icon: Heading2, label: 'Überschrift 2', action: () => insertMarkdown('\n## ', '\n', 'Überschrift') },
+    { icon: Heading3, label: 'Überschrift 3', action: () => insertMarkdown('\n### ', '\n', 'Überschrift') },
+    { icon: List, label: 'Liste', action: () => insertMarkdown('\n- ', '\n', 'Listenpunkt') },
+    { icon: ListOrdered, label: 'Nummerierte Liste', action: () => insertMarkdown('\n1. ', '\n', 'Listenpunkt') },
+    { icon: CheckSquare, label: 'Checkbox', action: () => insertMarkdown('\n- [ ] ', '\n', 'Aufgabe') },
+    { icon: Quote, label: 'Zitat', action: () => insertMarkdown('\n> ', '\n', 'Zitat') },
+    { icon: Code, label: 'Code', action: () => insertMarkdown('`', '`', 'code') },
+    { icon: Link, label: 'Link', action: () => insertMarkdown('[', '](url)', 'Linktext') },
+  ];
+
   return (
     <div className="h-[calc(100vh-6rem)] flex flex-col lg:flex-row gap-6">
       {/* Notes List */}
@@ -835,23 +892,104 @@ export default function Notes() {
 
             {/* Editor Content */}
             {isEditing ? (
-              <div className="flex-1 flex flex-col p-6 overflow-hidden">
-                <input
-                  type="text"
-                  value={editTitle}
-                  onChange={(e) => setEditTitle(e.target.value)}
-                  placeholder="Titel..."
-                  className="text-2xl font-bold bg-transparent border-none outline-none text-foreground placeholder:text-muted-foreground mb-4"
-                />
-                <textarea
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
-                  placeholder="Schreibe deine Notiz... (Markdown unterstützt)"
-                  className="flex-1 bg-transparent border-none outline-none text-foreground placeholder:text-muted-foreground resize-none font-mono text-sm leading-relaxed"
-                />
-                <div className="mt-4 pt-4 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
+              <div className="flex-1 flex flex-col overflow-hidden">
+                {/* Formatting Toolbar */}
+                <div className="flex items-center gap-1 px-6 py-3 border-b border-border bg-muted/30 flex-wrap">
+                  {formatActions.map((action, index) => (
+                    <button
+                      key={index}
+                      onClick={action.action}
+                      className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                      title={action.label}
+                    >
+                      <action.icon className="w-4 h-4" />
+                    </button>
+                  ))}
+                  <div className="flex-1" />
+                  <button
+                    onClick={() => setShowPreview(!showPreview)}
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors text-sm",
+                      showPreview ? "bg-primary/20 text-primary" : "hover:bg-muted text-muted-foreground"
+                    )}
+                  >
+                    {showPreview ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    <span className="hidden sm:inline">{showPreview ? 'Editor' : 'Vorschau'}</span>
+                  </button>
+                </div>
+
+                <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+                  {/* Editor Panel */}
+                  <div className={cn(
+                    "flex-1 flex flex-col p-6 overflow-hidden",
+                    showPreview && "hidden lg:flex lg:border-r lg:border-border"
+                  )}>
+                    <input
+                      type="text"
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      placeholder="Titel..."
+                      className="text-2xl font-bold bg-transparent border-none outline-none text-foreground placeholder:text-muted-foreground mb-4"
+                    />
+                    <textarea
+                      ref={textareaRef}
+                      value={editContent}
+                      onChange={(e) => setEditContent(e.target.value)}
+                      placeholder="Schreibe deine Notiz... (Markdown unterstützt)"
+                      className="flex-1 bg-transparent border-none outline-none text-foreground placeholder:text-muted-foreground resize-none font-mono text-sm leading-relaxed"
+                    />
+                  </div>
+
+                  {/* Preview Panel */}
+                  {showPreview && (
+                    <div className="flex-1 overflow-y-auto p-6 bg-background/50">
+                      <h1 className="text-2xl font-bold text-foreground mb-6">{editTitle || 'Vorschau'}</h1>
+                      <div className="prose prose-neutral dark:prose-invert max-w-none">
+                        <ReactMarkdown
+                          components={{
+                            code: ({ className, children }) => (
+                              <code className={cn(className, "bg-muted rounded px-2 py-1 text-primary font-mono text-sm")}>
+                                {children}
+                              </code>
+                            ),
+                            pre: ({ children }) => (
+                              <pre className="bg-muted rounded-xl p-4 overflow-x-auto border border-border">
+                                {children}
+                              </pre>
+                            ),
+                            h1: ({ children }) => <h1 className="text-2xl font-bold text-foreground mt-6 mb-4">{children}</h1>,
+                            h2: ({ children }) => <h2 className="text-xl font-bold text-foreground mt-5 mb-3">{children}</h2>,
+                            h3: ({ children }) => <h3 className="text-lg font-bold text-foreground mt-4 mb-2">{children}</h3>,
+                            p: ({ children }) => <p className="text-foreground mb-4 leading-relaxed">{children}</p>,
+                            ul: ({ children }) => <ul className="list-disc list-inside text-foreground mb-4 space-y-1">{children}</ul>,
+                            ol: ({ children }) => <ol className="list-decimal list-inside text-foreground mb-4 space-y-1">{children}</ol>,
+                            li: ({ children }) => {
+                              const text = String(children);
+                              if (text.startsWith('[ ] ')) {
+                                return <li className="flex items-center gap-2"><span className="w-4 h-4 border border-muted-foreground rounded" />{text.slice(4)}</li>;
+                              }
+                              if (text.startsWith('[x] ')) {
+                                return <li className="flex items-center gap-2"><span className="w-4 h-4 bg-primary rounded flex items-center justify-center text-xs text-primary-foreground">✓</span>{text.slice(4)}</li>;
+                              }
+                              return <li>{children}</li>;
+                            },
+                            a: ({ href, children }) => <a href={href} className="text-primary hover:underline">{children}</a>,
+                            blockquote: ({ children }) => <blockquote className="border-l-4 border-primary pl-4 italic text-muted-foreground my-4">{children}</blockquote>,
+                          }}
+                        >
+                          {editContent || '*Schreibe etwas um die Vorschau zu sehen...*'}
+                        </ReactMarkdown>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="px-6 py-3 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
                   <span>{getWordCount(editContent)} Wörter • {editContent.length} Zeichen</span>
-                  <span>Auto-Save aktiv</span>
+                  <span className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                    Auto-Save aktiv
+                  </span>
                 </div>
               </div>
             ) : (
