@@ -10,20 +10,29 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useTikTokVideos, TikTokVideo } from '@/hooks/useTikTokVideos';
+import { useTikTokFolders } from '@/hooks/useTikTokFolders';
 import {
   Plus,
   Trash2,
   Star,
-  ChevronUp,
-  ChevronDown,
   Loader2,
   ExternalLink,
   Play,
   List,
   Maximize2,
-  X,
   Heart,
+  FolderPlus,
+  Folder,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -31,87 +40,127 @@ import { toast } from 'sonner';
 type ViewMode = 'feed' | 'grid';
 
 export default function TikTok() {
-  const { videos, isLoading, addVideo, deleteVideo, toggleFavorite } = useTikTokVideos();
+  const { videos, isLoading, addVideo, deleteVideo, toggleFavorite, moveToFolder } = useTikTokVideos();
+  const { folders, createFolder } = useTikTokFolders();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isAddFolderDialogOpen, setIsAddFolderDialogOpen] = useState(false);
   const [newUrl, setNewUrl] = useState('');
+  const [newFolderName, setNewFolderName] = useState('');
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [viewMode, setViewMode] = useState<ViewMode>('feed');
   const [filterFavorites, setFilterFavorites] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const touchStartY = useRef<number | null>(null);
+  const [filterFolderId, setFilterFolderId] = useState<string | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const isScrolling = useRef(false);
+  const lastScrollTime = useRef(0);
 
-  const filteredVideos = filterFavorites 
-    ? videos.filter(v => v.is_favorite) 
-    : videos;
+  // Filter videos
+  const filteredVideos = videos.filter(v => {
+    if (filterFavorites && !v.is_favorite) return false;
+    if (filterFolderId && v.folder_id !== filterFolderId) return false;
+    if (filterFolderId === null && v.folder_id !== null && filterFolderId !== 'all') return true;
+    return true;
+  }).filter(v => {
+    if (filterFolderId === 'all') return true;
+    if (filterFolderId === null) return true;
+    return v.folder_id === filterFolderId;
+  });
 
-  // Handle keyboard navigation
+  // Scroll to current video in feed mode
+  const scrollToVideo = useCallback((index: number) => {
+    if (!scrollContainerRef.current || viewMode !== 'feed') return;
+    const container = scrollContainerRef.current;
+    const videoHeight = container.clientHeight;
+    container.scrollTo({
+      top: index * videoHeight,
+      behavior: 'smooth'
+    });
+  }, [viewMode]);
+
+  // Handle scroll snap
+  const handleScroll = useCallback(() => {
+    if (!scrollContainerRef.current || viewMode !== 'feed' || isScrolling.current) return;
+    
+    const now = Date.now();
+    if (now - lastScrollTime.current < 100) return;
+    lastScrollTime.current = now;
+
+    const container = scrollContainerRef.current;
+    const videoHeight = container.clientHeight;
+    const scrollTop = container.scrollTop;
+    const newIndex = Math.round(scrollTop / videoHeight);
+    
+    if (newIndex !== currentIndex && newIndex >= 0 && newIndex < filteredVideos.length) {
+      setCurrentIndex(newIndex);
+    }
+  }, [currentIndex, filteredVideos.length, viewMode]);
+
+  // Snap scroll after scroll ends
+  const handleScrollEnd = useCallback(() => {
+    if (!scrollContainerRef.current || viewMode !== 'feed') return;
+    
+    const container = scrollContainerRef.current;
+    const videoHeight = container.clientHeight;
+    const scrollTop = container.scrollTop;
+    const targetIndex = Math.round(scrollTop / videoHeight);
+    
+    isScrolling.current = true;
+    container.scrollTo({
+      top: targetIndex * videoHeight,
+      behavior: 'smooth'
+    });
+    
+    setTimeout(() => {
+      isScrolling.current = false;
+    }, 300);
+  }, [viewMode]);
+
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container || viewMode !== 'feed') return;
+
+    let scrollTimeout: NodeJS.Timeout;
+    
+    const onScroll = () => {
+      handleScroll();
+      clearTimeout(scrollTimeout);
+      scrollTimeout = setTimeout(handleScrollEnd, 150);
+    };
+
+    container.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      container.removeEventListener('scroll', onScroll);
+      clearTimeout(scrollTimeout);
+    };
+  }, [handleScroll, handleScrollEnd, viewMode]);
+
+  // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (viewMode !== 'feed') return;
       
       if (e.key === 'ArrowDown' || e.key === 'j') {
         e.preventDefault();
-        setCurrentIndex(prev => Math.min(prev + 1, filteredVideos.length - 1));
+        const newIndex = Math.min(currentIndex + 1, filteredVideos.length - 1);
+        setCurrentIndex(newIndex);
+        scrollToVideo(newIndex);
       } else if (e.key === 'ArrowUp' || e.key === 'k') {
         e.preventDefault();
-        setCurrentIndex(prev => Math.max(prev - 1, 0));
+        const newIndex = Math.max(currentIndex - 1, 0);
+        setCurrentIndex(newIndex);
+        scrollToVideo(newIndex);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [filteredVideos.length, viewMode]);
-
-  // Handle touch swipe
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartY.current = e.touches[0].clientY;
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartY.current === null) return;
-    
-    const touchEndY = e.changedTouches[0].clientY;
-    const diff = touchStartY.current - touchEndY;
-    
-    if (Math.abs(diff) > 50) {
-      if (diff > 0) {
-        // Swipe up - next video
-        setCurrentIndex(prev => Math.min(prev + 1, filteredVideos.length - 1));
-      } else {
-        // Swipe down - previous video
-        setCurrentIndex(prev => Math.max(prev - 1, 0));
-      }
-    }
-    
-    touchStartY.current = null;
-  };
-
-  // Handle wheel scroll
-  const handleWheel = useCallback((e: WheelEvent) => {
-    if (viewMode !== 'feed') return;
-    
-    e.preventDefault();
-    
-    if (e.deltaY > 0) {
-      setCurrentIndex(prev => Math.min(prev + 1, filteredVideos.length - 1));
-    } else if (e.deltaY < 0) {
-      setCurrentIndex(prev => Math.max(prev - 1, 0));
-    }
-  }, [filteredVideos.length, viewMode]);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container || viewMode !== 'feed') return;
-
-    container.addEventListener('wheel', handleWheel, { passive: false });
-    return () => container.removeEventListener('wheel', handleWheel);
-  }, [handleWheel, viewMode]);
+  }, [filteredVideos.length, viewMode, currentIndex, scrollToVideo]);
 
   const handleAddVideo = async () => {
     if (!newUrl.trim()) return;
     
-    // Validate TikTok URL
     if (!newUrl.includes('tiktok.com')) {
       toast.error('Bitte gib eine gültige TikTok URL ein');
       return;
@@ -119,12 +168,20 @@ export default function TikTok() {
 
     setIsAdding(true);
     try {
-      await addVideo(newUrl.trim());
+      await addVideo(newUrl.trim(), selectedFolderId);
       setNewUrl('');
+      setSelectedFolderId(null);
       setIsAddDialogOpen(false);
     } finally {
       setIsAdding(false);
     }
+  };
+
+  const handleCreateFolder = async () => {
+    if (!newFolderName.trim()) return;
+    await createFolder(newFolderName.trim());
+    setNewFolderName('');
+    setIsAddFolderDialogOpen(false);
   };
 
   const getEmbedUrl = (video: TikTokVideo) => {
@@ -138,10 +195,9 @@ export default function TikTok() {
     window.open(url, '_blank');
   };
 
-  // Reset current index when filtered videos change
   useEffect(() => {
     setCurrentIndex(0);
-  }, [filterFavorites]);
+  }, [filterFavorites, filterFolderId]);
 
   if (isLoading) {
     return (
@@ -154,14 +210,33 @@ export default function TikTok() {
   return (
     <>
       {/* Header */}
-      <div className="p-4 border-b border-border flex items-center justify-between">
+      <div className="p-4 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-foreground">TikTok Videos</h1>
           <p className="text-sm text-muted-foreground">
             {filteredVideos.length} Video{filteredVideos.length !== 1 ? 's' : ''}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Folder Filter */}
+          <Select 
+            value={filterFolderId || 'all'} 
+            onValueChange={(v) => setFilterFolderId(v === 'all' ? null : v)}
+          >
+            <SelectTrigger className="w-[140px] h-9">
+              <Folder className="h-4 w-4 mr-2" />
+              <SelectValue placeholder="Alle" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Alle Videos</SelectItem>
+              {folders.map(folder => (
+                <SelectItem key={folder.id} value={folder.id}>
+                  {folder.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
           <Button
             variant={filterFavorites ? 'default' : 'outline'}
             size="sm"
@@ -176,9 +251,16 @@ export default function TikTok() {
           >
             {viewMode === 'feed' ? <List className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => setIsAddFolderDialogOpen(true)}
+          >
+            <FolderPlus className="h-4 w-4" />
+          </Button>
           <Button onClick={() => setIsAddDialogOpen(true)} size="sm" className="gap-2">
             <Plus className="h-4 w-4" />
-            Hinzufügen
+            <span className="hidden sm:inline">Hinzufügen</span>
           </Button>
         </div>
       </div>
@@ -194,110 +276,89 @@ export default function TikTok() {
           </Button>
         </div>
       ) : viewMode === 'feed' ? (
-        /* Feed Mode - TikTok-like scrolling */
+        /* Feed Mode - Native scroll snap */
         <div 
-          ref={containerRef}
-          className="h-[calc(100vh-8rem)] overflow-hidden relative bg-black"
-          onTouchStart={handleTouchStart}
-          onTouchEnd={handleTouchEnd}
+          ref={scrollContainerRef}
+          className="h-[calc(100vh-8rem)] overflow-y-auto snap-y snap-mandatory bg-black"
+          style={{ scrollSnapType: 'y mandatory' }}
         >
-          <AnimatePresence mode="wait">
-            {filteredVideos[currentIndex] && (
-              <motion.div
-                key={filteredVideos[currentIndex].id}
-                initial={{ opacity: 0, y: 50 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -50 }}
-                transition={{ duration: 0.3 }}
-                className="absolute inset-0 flex items-center justify-center"
-              >
-                {getEmbedUrl(filteredVideos[currentIndex]) ? (
-                  <iframe
-                    src={getEmbedUrl(filteredVideos[currentIndex])!}
-                    className="w-full h-full max-w-[400px] mx-auto"
-                    style={{ border: 'none' }}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
+          {filteredVideos.map((video, index) => (
+            <div 
+              key={video.id}
+              className="h-[calc(100vh-8rem)] snap-start snap-always relative flex items-center justify-center"
+            >
+              {getEmbedUrl(video) ? (
+                <iframe
+                  src={getEmbedUrl(video)!}
+                  className="w-full h-full max-w-[400px] mx-auto"
+                  style={{ border: 'none' }}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center text-white">
+                  <Play className="h-16 w-16 mb-4 opacity-50" />
+                  <p className="text-sm opacity-70">Video kann nicht geladen werden</p>
+                  <Button 
+                    variant="outline" 
+                    className="mt-4"
+                    onClick={() => openInTikTok(video.url)}
+                  >
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    In TikTok öffnen
+                  </Button>
+                </div>
+              )}
+
+              {/* Side Actions */}
+              <div className="absolute right-4 bottom-20 flex flex-col gap-4">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-12 w-12 rounded-full bg-white/10 backdrop-blur-sm text-white hover:bg-white/20"
+                  onClick={() => toggleFavorite(video.id)}
+                >
+                  <Heart 
+                    className={cn(
+                      "h-6 w-6",
+                      video.is_favorite && "fill-red-500 text-red-500"
+                    )} 
                   />
-                ) : (
-                  <div className="flex flex-col items-center justify-center text-white">
-                    <Play className="h-16 w-16 mb-4 opacity-50" />
-                    <p className="text-sm opacity-70">Video kann nicht geladen werden</p>
-                    <Button 
-                      variant="outline" 
-                      className="mt-4"
-                      onClick={() => openInTikTok(filteredVideos[currentIndex].url)}
-                    >
-                      <ExternalLink className="h-4 w-4 mr-2" />
-                      In TikTok öffnen
-                    </Button>
-                  </div>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-12 w-12 rounded-full bg-white/10 backdrop-blur-sm text-white hover:bg-white/20"
+                  onClick={() => openInTikTok(video.url)}
+                >
+                  <ExternalLink className="h-6 w-6" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-12 w-12 rounded-full bg-white/10 backdrop-blur-sm text-white hover:bg-white/20 hover:text-red-400"
+                  onClick={() => deleteVideo(video.id)}
+                >
+                  <Trash2 className="h-6 w-6" />
+                </Button>
+              </div>
+
+              {/* Video Info */}
+              <div className="absolute left-4 bottom-20 max-w-[200px] text-white">
+                {video.author_name && (
+                  <p className="font-semibold text-sm">@{video.author_name}</p>
                 )}
+                {video.title && (
+                  <p className="text-xs opacity-80 line-clamp-2 mt-1">{video.title}</p>
+                )}
+              </div>
 
-                {/* Side Actions */}
-                <div className="absolute right-4 bottom-20 flex flex-col gap-4">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-12 w-12 rounded-full bg-white/10 backdrop-blur-sm text-white hover:bg-white/20"
-                    onClick={() => toggleFavorite(filteredVideos[currentIndex].id)}
-                  >
-                    <Heart 
-                      className={cn(
-                        "h-6 w-6",
-                        filteredVideos[currentIndex].is_favorite && "fill-red-500 text-red-500"
-                      )} 
-                    />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-12 w-12 rounded-full bg-white/10 backdrop-blur-sm text-white hover:bg-white/20"
-                    onClick={() => openInTikTok(filteredVideos[currentIndex].url)}
-                  >
-                    <ExternalLink className="h-6 w-6" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-12 w-12 rounded-full bg-white/10 backdrop-blur-sm text-white hover:bg-white/20 hover:text-red-400"
-                    onClick={() => deleteVideo(filteredVideos[currentIndex].id)}
-                  >
-                    <Trash2 className="h-6 w-6" />
-                  </Button>
-                </div>
-
-                {/* Navigation Hints */}
-                <div className="absolute left-4 top-1/2 -translate-y-1/2 flex flex-col gap-2 text-white/50">
-                  {currentIndex > 0 && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-10 w-10 rounded-full bg-white/10"
-                      onClick={() => setCurrentIndex(prev => prev - 1)}
-                    >
-                      <ChevronUp className="h-5 w-5" />
-                    </Button>
-                  )}
-                  {currentIndex < filteredVideos.length - 1 && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-10 w-10 rounded-full bg-white/10"
-                      onClick={() => setCurrentIndex(prev => prev + 1)}
-                    >
-                      <ChevronDown className="h-5 w-5" />
-                    </Button>
-                  )}
-                </div>
-
-                {/* Progress Indicator */}
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/70 text-sm">
-                  {currentIndex + 1} / {filteredVideos.length}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+              {/* Progress Indicator */}
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/70 text-sm">
+                {index + 1} / {filteredVideos.length}
+              </div>
+            </div>
+          ))}
         </div>
       ) : (
         /* Grid Mode */
@@ -316,6 +377,12 @@ export default function TikTok() {
                   onClick={() => {
                     setCurrentIndex(index);
                     setViewMode('feed');
+                    setTimeout(() => {
+                      scrollContainerRef.current?.scrollTo({
+                        top: index * (scrollContainerRef.current?.clientHeight || 0),
+                        behavior: 'instant'
+                      });
+                    }, 100);
                   }}
                 >
                   {video.thumbnail_url ? (
@@ -324,14 +391,8 @@ export default function TikTok() {
                       alt={video.title || 'TikTok Video'}
                       className="w-full h-full object-cover"
                     />
-                  ) : getEmbedUrl(video) ? (
-                    <iframe
-                      src={getEmbedUrl(video)!}
-                      className="w-full h-full pointer-events-none"
-                      style={{ border: 'none', transform: 'scale(0.5)', transformOrigin: 'top left', width: '200%', height: '200%' }}
-                    />
                   ) : (
-                    <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="absolute inset-0 flex items-center justify-center bg-muted">
                       <Play className="h-8 w-8 text-muted-foreground opacity-50" />
                     </div>
                   )}
@@ -415,21 +476,71 @@ export default function TikTok() {
                 className="mt-1"
                 autoFocus
               />
-              <p className="text-xs text-muted-foreground mt-1">
-                Kopiere die URL direkt von TikTok
-              </p>
             </div>
+            {folders.length > 0 && (
+              <div>
+                <label className="text-sm font-medium text-foreground">Ordner (optional)</label>
+                <Select 
+                  value={selectedFolderId || 'none'} 
+                  onValueChange={(v) => setSelectedFolderId(v === 'none' ? null : v)}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Kein Ordner" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Kein Ordner</SelectItem>
+                    {folders.map(folder => (
+                      <SelectItem key={folder.id} value={folder.id}>
+                        {folder.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => {
               setIsAddDialogOpen(false);
               setNewUrl('');
+              setSelectedFolderId(null);
             }}>
               Abbrechen
             </Button>
             <Button onClick={handleAddVideo} disabled={!newUrl.trim() || isAdding}>
-              {isAdding ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              {isAdding && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               Hinzufügen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Folder Dialog */}
+      <Dialog open={isAddFolderDialogOpen} onOpenChange={setIsAddFolderDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Neuen Ordner erstellen</DialogTitle>
+          </DialogHeader>
+          <div>
+            <label className="text-sm font-medium text-foreground">Ordnername</label>
+            <Input
+              placeholder="z.B. Lustige Videos"
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              className="mt-1"
+              autoFocus
+              onKeyDown={(e) => e.key === 'Enter' && handleCreateFolder()}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setIsAddFolderDialogOpen(false);
+              setNewFolderName('');
+            }}>
+              Abbrechen
+            </Button>
+            <Button onClick={handleCreateFolder} disabled={!newFolderName.trim()}>
+              Erstellen
             </Button>
           </DialogFooter>
         </DialogContent>

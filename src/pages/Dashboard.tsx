@@ -33,6 +33,7 @@ interface Stats {
   secretTexts: number;
   totalSize: number;
   trashedItems: number;
+  tiktokVideos: number;
 }
 
 interface RecentItem {
@@ -100,7 +101,7 @@ const itemVariants = {
 export default function Dashboard() {
   const [stats, setStats] = useState<Stats>({ 
     notes: 0, photos: 0, files: 0, favorites: 0, 
-    secureNotes: 0, secretTexts: 0, totalSize: 0, trashedItems: 0 
+    secureNotes: 0, secretTexts: 0, totalSize: 0, trashedItems: 0, tiktokVideos: 0
   });
   const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
   const [viewedItems, setViewedItems] = useState<ViewedItem[]>([]);
@@ -177,7 +178,7 @@ export default function Dashboard() {
       if (isDecoyMode) {
         setStats({ 
           notes: 0, photos: 0, files: 0, favorites: 0, 
-          secureNotes: 0, secretTexts: 0, totalSize: 0, trashedItems: 0 
+          secureNotes: 0, secretTexts: 0, totalSize: 0, trashedItems: 0, tiktokVideos: 0
         });
         setRecentItems([]);
         setIsLoading(false);
@@ -196,6 +197,8 @@ export default function Dashboard() {
         trashedNotesRes,
         trashedPhotosRes,
         trashedFilesRes,
+        tiktokRes,
+        trashedTiktokRes,
         recentNotesRes, 
         recentPhotosRes, 
         recentFilesRes,
@@ -211,6 +214,8 @@ export default function Dashboard() {
         supabase.from('notes').select('id', { count: 'exact', head: true }).eq('user_id', userId).not('deleted_at', 'is', null),
         supabase.from('photos').select('id', { count: 'exact', head: true }).eq('user_id', userId).not('deleted_at', 'is', null),
         supabase.from('files').select('id', { count: 'exact', head: true }).eq('user_id', userId).not('deleted_at', 'is', null),
+        supabase.from('tiktok_videos').select('id', { count: 'exact', head: true }).eq('user_id', userId).is('deleted_at', null),
+        supabase.from('tiktok_videos').select('id', { count: 'exact', head: true }).eq('user_id', userId).not('deleted_at', 'is', null),
         supabase.from('notes').select('id, title, updated_at, is_favorite').eq('user_id', userId).is('deleted_at', null).order('updated_at', { ascending: false }).limit(5),
         supabase.from('photos').select('id, filename, uploaded_at, is_favorite').eq('user_id', userId).is('deleted_at', null).order('uploaded_at', { ascending: false }).limit(5),
         supabase.from('files').select('id, filename, uploaded_at, is_favorite').eq('user_id', userId).is('deleted_at', null).order('uploaded_at', { ascending: false }).limit(5),
@@ -218,7 +223,7 @@ export default function Dashboard() {
 
       const totalSize = filesRes.data?.reduce((acc, f) => acc + (f.size || 0), 0) || 0;
       const totalFavorites = (favNotesRes.count || 0) + (favPhotosRes.count || 0) + (favFilesRes.count || 0);
-      const totalTrashed = (trashedNotesRes.count || 0) + (trashedPhotosRes.count || 0) + (trashedFilesRes.count || 0);
+      const totalTrashed = (trashedNotesRes.count || 0) + (trashedPhotosRes.count || 0) + (trashedFilesRes.count || 0) + (trashedTiktokRes.count || 0);
 
       setStats({
         notes: notesRes.count || 0,
@@ -229,6 +234,7 @@ export default function Dashboard() {
         secretTexts: secretTextsRes.count || 0,
         totalSize,
         trashedItems: totalTrashed,
+        tiktokVideos: tiktokRes.count || 0,
       });
 
       const allRecent: RecentItem[] = [

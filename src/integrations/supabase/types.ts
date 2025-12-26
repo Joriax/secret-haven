@@ -471,11 +471,39 @@ export type Database = {
         }
         Relationships: []
       }
+      tiktok_folders: {
+        Row: {
+          color: string | null
+          created_at: string | null
+          icon: string | null
+          id: string
+          name: string
+          user_id: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string | null
+          icon?: string | null
+          id?: string
+          name: string
+          user_id: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string | null
+          icon?: string | null
+          id?: string
+          name?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       tiktok_videos: {
         Row: {
           author_name: string | null
           created_at: string | null
           deleted_at: string | null
+          folder_id: string | null
           id: string
           is_favorite: boolean | null
           thumbnail_url: string | null
@@ -488,6 +516,7 @@ export type Database = {
           author_name?: string | null
           created_at?: string | null
           deleted_at?: string | null
+          folder_id?: string | null
           id?: string
           is_favorite?: boolean | null
           thumbnail_url?: string | null
@@ -500,6 +529,7 @@ export type Database = {
           author_name?: string | null
           created_at?: string | null
           deleted_at?: string | null
+          folder_id?: string | null
           id?: string
           is_favorite?: boolean | null
           thumbnail_url?: string | null
@@ -508,7 +538,15 @@ export type Database = {
           user_id?: string
           video_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "tiktok_videos_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "tiktok_folders"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vault_users: {
         Row: {

@@ -14,6 +14,7 @@ export interface TikTokVideo {
   is_favorite: boolean;
   created_at: string;
   deleted_at: string | null;
+  folder_id: string | null;
 }
 
 // Extract video ID from TikTok URL
@@ -94,7 +95,7 @@ export function useTikTokVideos() {
     }
   };
 
-  const addVideo = async (url: string) => {
+  const addVideo = async (url: string, folderId?: string | null) => {
     if (!userId) return null;
 
     try {
@@ -113,6 +114,7 @@ export function useTikTokVideos() {
           title: metadata?.title || '',
           author_name: metadata?.author_name || null,
           thumbnail_url: metadata?.thumbnail_url || null,
+          folder_id: folderId || null,
         })
         .select()
         .single();
@@ -126,6 +128,25 @@ export function useTikTokVideos() {
       console.error('Error adding TikTok video:', error);
       toast.error('Fehler beim Speichern');
       return null;
+    }
+  };
+
+  const moveToFolder = async (videoId: string, folderId: string | null) => {
+    try {
+      const { error } = await supabase
+        .from('tiktok_videos')
+        .update({ folder_id: folderId })
+        .eq('id', videoId);
+
+      if (error) throw error;
+      
+      setVideos(prev => prev.map(v => 
+        v.id === videoId ? { ...v, folder_id: folderId } : v
+      ));
+      toast.success('Video verschoben');
+    } catch (error) {
+      console.error('Error moving video:', error);
+      toast.error('Fehler beim Verschieben');
     }
   };
 
@@ -173,6 +194,7 @@ export function useTikTokVideos() {
     addVideo,
     deleteVideo,
     toggleFavorite,
+    moveToFolder,
     refetch: fetchVideos,
   };
 }
