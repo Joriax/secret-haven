@@ -24,7 +24,9 @@ import {
   VolumeX,
   Tag,
   CheckSquare,
-  Square
+  Square,
+  Search,
+  GripVertical
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -82,6 +84,9 @@ export default function Photos() {
   const [showAlbumPicker, setShowAlbumPicker] = useState(false);
   const [showTagSelector, setShowTagSelector] = useState<string | null>(null);
   const [selectedTagFilter, setSelectedTagFilter] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [draggedItem, setDraggedItem] = useState<MediaItem | null>(null);
+  const [dragOverAlbum, setDragOverAlbum] = useState<string | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -479,7 +484,7 @@ export default function Photos() {
     }
   };
 
-  // Filter media based on view mode and tags
+  // Filter media based on view mode, tags, and search
   const filteredMedia = useMemo(() => {
     let result = media;
     
@@ -495,9 +500,66 @@ export default function Photos() {
     if (selectedTagFilter) {
       result = result.filter(m => m.tags?.includes(selectedTagFilter));
     }
+
+    // Filter by search
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(m => 
+        m.filename.toLowerCase().includes(query) ||
+        (m.caption && m.caption.toLowerCase().includes(query))
+      );
+    }
     
     return result;
-  }, [media, selectedAlbum, viewMode, selectedTagFilter]);
+  }, [media, selectedAlbum, viewMode, selectedTagFilter, searchQuery]);
+
+  // Drag and drop handlers
+  const handleDragStart = (e: React.DragEvent, item: MediaItem) => {
+    setDraggedItem(item);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragEnd = () => {
+    setDraggedItem(null);
+    setDragOverAlbum(null);
+  };
+
+  const handleAlbumDragOver = (e: React.DragEvent, albumId: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverAlbum(albumId);
+  };
+
+  const handleAlbumDragLeave = () => {
+    setDragOverAlbum(null);
+  };
+
+  const handleAlbumDrop = async (e: React.DragEvent, albumId: string) => {
+    e.preventDefault();
+    setDragOverAlbum(null);
+    
+    if (!draggedItem) return;
+
+    try {
+      const { error } = await supabase
+        .from('photos')
+        .update({ album_id: albumId })
+        .eq('id', draggedItem.id);
+
+      if (error) throw error;
+
+      setMedia(prev => prev.map(m => 
+        m.id === draggedItem.id ? { ...m, album_id: albumId } : m
+      ));
+      fetchData();
+      toast.success('Zu Album hinzugefügt');
+    } catch (error) {
+      console.error('Error moving to album:', error);
+      toast.error('Fehler beim Verschieben');
+    }
+    
+    setDraggedItem(null);
+  };
 
   // Lightbox navigation
   const navigateLightbox = (direction: 'prev' | 'next') => {
@@ -678,6 +740,24 @@ export default function Photos() {
         )}
       </motion.div>
 
+      {/* Search */}
+      {viewMode !== 'albums' && !selectedAlbum && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="relative"
+        >
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Fotos und Videos suchen..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-12 pr-4 py-3 rounded-xl vault-input text-foreground placeholder:text-muted-foreground"
+          />
+        </motion.div>
+      )}
+
       {/* Hidden inputs */}
       <input
         ref={fileInputRef}
@@ -728,7 +808,13 @@ export default function Photos() {
               animate={{ opacity: 1, scale: 1 }}
               whileHover={{ scale: 1.02 }}
               onClick={() => setSelectedAlbum(album)}
-              className="glass-card-hover overflow-hidden cursor-pointer aspect-square relative group"
+              onDragOver={(e) => handleAlbumDragOver(e, album.id)}
+              onDragLeave={handleAlbumDragLeave}
+              onDrop={(e) => handleAlbumDrop(e, album.id)}
+              className={cn(
+                "glass-card-hover overflow-hidden cursor-pointer aspect-square relative group transition-all",
+                dragOverAlbum === album.id && "ring-2 ring-primary scale-105"
+              )}
             >
               {album.cover_url ? (
                 <img
@@ -746,6 +832,11 @@ export default function Photos() {
                 <h3 className="font-semibold text-white truncate">{album.name}</h3>
                 <p className="text-white/70 text-sm">{album.count} Elemente</p>
               </div>
+              {dragOverAlbum === album.id && (
+                <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
+                  <p className="text-white font-medium">Hierher ziehen</p>
+                </div>
+              )}
             </motion.div>
           ))}
 
@@ -801,17 +892,44 @@ export default function Photos() {
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3">
               {filteredMedia.map((item, index) => (
-                <motion.div
+                <div
                   key={item.id}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: index * 0.02 }}
-                  className="relative aspect-square group"
+                  className={cn(
+                    "relative aspect-square group",
+                    isMultiSelectMode && selectedItems.has(item.id) && "ring-2 ring-primary rounded-xl"
+                  )}
+                  draggable={!isMultiSelectMode}
+                  onDragStart={(e) => handleDragStart(e, item)}
+                  onDragEnd={handleDragEnd}
                 >
                   <div
-                    onClick={() => setLightboxIndex(index)}
+                    onClick={() => {
+                      if (isMultiSelectMode) {
+                        toggleItemSelection(item.id);
+                      } else {
+                        setLightboxIndex(index);
+                      }
+                    }}
                     className="glass-card-hover overflow-hidden cursor-pointer w-full h-full"
                   >
+                    {/* Multi-select checkbox */}
+                    {isMultiSelectMode && (
+                      <div className="absolute top-2 left-2 z-10">
+                        <div className={cn(
+                          "w-6 h-6 rounded-md flex items-center justify-center transition-colors",
+                          selectedItems.has(item.id) 
+                            ? "bg-primary text-primary-foreground" 
+                            : "bg-black/50 text-white"
+                        )}>
+                          {selectedItems.has(item.id) ? (
+                            <CheckSquare className="w-4 h-4" />
+                          ) : (
+                            <Square className="w-4 h-4" />
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     {item.type === 'video' ? (
                       <div className="relative w-full h-full">
                         <video
@@ -838,16 +956,90 @@ export default function Photos() {
                         <Heart className="w-5 h-5 text-red-500 fill-red-500" />
                       </div>
                     )}
+
+                    {/* Tags indicator */}
+                    {item.tags && item.tags.length > 0 && !isMultiSelectMode && (
+                      <div className="absolute top-2 left-2 flex gap-1">
+                        {item.tags.slice(0, 2).map(tagId => {
+                          const tag = tags.find(t => t.id === tagId);
+                          return tag ? (
+                            <span key={tagId} className="w-3 h-3 rounded-full" style={{ backgroundColor: tag.color }} />
+                          ) : null;
+                        })}
+                      </div>
+                    )}
                     
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                      <div className="absolute bottom-2 left-2 right-2">
-                        <p className="text-white text-xs truncate">
+                    {/* Hover overlay with actions */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="absolute bottom-0 left-0 right-0 p-2">
+                        <p className="text-white text-xs truncate mb-2">
                           {item.caption || item.filename.replace(/^\d+-/, '')}
                         </p>
+                        {!isMultiSelectMode && (
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); toggleFavorite(item); }}
+                              className="p-1.5 hover:bg-white/20 rounded-lg transition-colors"
+                            >
+                              <Heart className={cn("w-4 h-4", item.is_favorite ? "text-red-500 fill-red-500" : "text-white")} />
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setShowTagSelector(item.id); }}
+                              className="p-1.5 hover:bg-white/20 rounded-lg transition-colors"
+                            >
+                              <Tag className="w-4 h-4 text-white" />
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); downloadMedia(item); }}
+                              className="p-1.5 hover:bg-white/20 rounded-lg transition-colors"
+                            >
+                              <Download className="w-4 h-4 text-white" />
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ isOpen: true, item }); }}
+                              className="p-1.5 hover:bg-red-500/30 rounded-lg transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4 text-red-400" />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
-                </motion.div>
+
+                  {/* Tag Selector Dropdown */}
+                  {showTagSelector === item.id && (
+                    <div 
+                      className="absolute top-full left-0 mt-2 w-48 glass-card p-2 z-20"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {tags.map(tag => (
+                        <button
+                          key={tag.id}
+                          onClick={() => {
+                            const newTags = item.tags?.includes(tag.id)
+                              ? item.tags.filter(t => t !== tag.id)
+                              : [...(item.tags || []), tag.id];
+                            updateMediaTags(item.id, newTags);
+                          }}
+                          className={cn(
+                            "w-full px-3 py-2 rounded-lg text-left flex items-center gap-2 transition-all text-sm",
+                            item.tags?.includes(tag.id) ? "bg-white/10" : "hover:bg-white/5"
+                          )}
+                        >
+                          <span className="w-3 h-3 rounded-full" style={{ backgroundColor: tag.color }} />
+                          <span className="text-foreground">{tag.name}</span>
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => setShowTagSelector(null)}
+                        className="w-full mt-2 px-3 py-2 rounded-lg text-center text-sm text-muted-foreground hover:bg-muted"
+                      >
+                        Schließen
+                      </button>
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           )}
