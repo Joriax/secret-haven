@@ -22,6 +22,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useViewHistory } from '@/hooks/useViewHistory';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
+import { CreateNewDialog } from '@/components/CreateNewDialog';
 
 interface Stats {
   notes: number;
@@ -104,6 +105,7 @@ export default function Dashboard() {
   const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
   const [viewedItems, setViewedItems] = useState<ViewedItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const { userId, isDecoyMode } = useAuth();
   const { history } = useViewHistory();
   const navigate = useNavigate();
@@ -387,7 +389,7 @@ export default function Dashboard() {
         {!isDecoyMode && (
           <div className="flex gap-2">
             <motion.button
-              onClick={() => navigate('/notes', { state: { action: 'create-note' } })}
+              onClick={() => setCreateDialogOpen(true)}
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               className="btn-gradient px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-medium text-primary-foreground"
@@ -399,6 +401,9 @@ export default function Dashboard() {
           </div>
         )}
       </motion.div>
+
+      {/* Create New Dialog */}
+      <CreateNewDialog isOpen={createDialogOpen} onClose={() => setCreateDialogOpen(false)} />
 
       {/* Stats Overview */}
       <motion.div variants={itemVariants} className="glass-card p-4 sm:p-6 lg:p-8">

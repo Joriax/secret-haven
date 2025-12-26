@@ -7,11 +7,16 @@ import {
   Image, 
   FolderOpen,
   Clock,
-  AlertTriangle
+  AlertTriangle,
+  Video,
+  CheckCircle2
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
+import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
+import { MultiSelectBar } from '@/components/MultiSelect';
+import { toast } from 'sonner';
 
 interface TrashItem {
   id: string;
@@ -19,6 +24,7 @@ interface TrashItem {
   name: string;
   deleted_at: string;
   daysLeft: number;
+  isVideo?: boolean;
 }
 
 const TRASH_RETENTION_DAYS = 30;
@@ -26,7 +32,10 @@ const TRASH_RETENTION_DAYS = 30;
 export default function Trash() {
   const [items, setItems] = useState<TrashItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<TrashItem | null>(null);
+  const [emptyTrashDialogOpen, setEmptyTrashDialogOpen] = useState(false);
   const { userId, isDecoyMode } = useAuth();
 
   const fetchTrashItems = useCallback(async () => {
@@ -71,13 +80,15 @@ export default function Trash() {
       photos?.forEach(photo => {
         const deletedAt = new Date(photo.deleted_at!);
         const daysLeft = TRASH_RETENTION_DAYS - Math.floor((now.getTime() - deletedAt.getTime()) / (1000 * 60 * 60 * 24));
+        const isVideo = /\.(mp4|webm|mov|avi|mkv)$/i.test(photo.filename);
         if (daysLeft > 0) {
           trashItems.push({
             id: photo.id,
             type: 'photo',
-            name: photo.filename,
+            name: photo.filename?.replace(/^\d+-/, '') || 'Foto/Video',
             deleted_at: photo.deleted_at!,
-            daysLeft
+            daysLeft,
+            isVideo
           });
         }
       });
@@ -96,7 +107,7 @@ export default function Trash() {
           trashItems.push({
             id: file.id,
             type: 'file',
-            name: file.filename,
+            name: file.filename?.replace(/^\d+-/, '') || 'Datei',
             deleted_at: file.deleted_at!,
             daysLeft
           });
@@ -128,8 +139,10 @@ export default function Trash() {
 
       if (error) throw error;
       setItems(prev => prev.filter(i => i.id !== item.id));
+      toast.success(`${item.name} wiederhergestellt`);
     } catch (err) {
       console.error('Error restoring item:', err);
+      toast.error('Fehler beim Wiederherstellen');
     }
   };
 
@@ -150,32 +163,78 @@ export default function Trash() {
 
       if (error) throw error;
       setItems(prev => prev.filter(i => i.id !== item.id));
+      toast.success(`${item.name} endgültig gelöscht`);
     } catch (err) {
       console.error('Error deleting item permanently:', err);
+      toast.error('Fehler beim Löschen');
+    }
+  };
+
+  const handleDeleteClick = (item: TrashItem) => {
+    setItemToDelete(item);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (itemToDelete) {
+      deleteItemPermanently(itemToDelete);
+      setItemToDelete(null);
     }
   };
 
   const emptyTrash = async () => {
-    if (!confirm('Papierkorb endgültig leeren? Diese Aktion kann nicht rückgängig gemacht werden.')) return;
-
     for (const item of items) {
       await deleteItemPermanently(item);
     }
+    setEmptyTrashDialogOpen(false);
+    toast.success('Papierkorb geleert');
   };
 
   const restoreAll = async () => {
     for (const item of items) {
       await restoreItem(item);
     }
+    toast.success('Alle Elemente wiederhergestellt');
   };
 
-  const getTypeIcon = (type: string) => {
-    switch (type) {
-      case 'note': return FileText;
-      case 'photo': return Image;
-      case 'file': return FolderOpen;
-      default: return FileText;
+  const toggleSelection = (id: string) => {
+    setSelectedItems(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
+
+  const handleRestoreSelected = async () => {
+    const selectedItemsList = items.filter(i => selectedItems.has(i.id));
+    for (const item of selectedItemsList) {
+      await restoreItem(item);
     }
+    setSelectedItems(new Set());
+  };
+
+  const handleDeleteSelected = async () => {
+    const selectedItemsList = items.filter(i => selectedItems.has(i.id));
+    for (const item of selectedItemsList) {
+      await deleteItemPermanently(item);
+    }
+    setSelectedItems(new Set());
+  };
+
+  const getTypeIcon = (item: TrashItem) => {
+    if (item.type === 'note') return FileText;
+    if (item.type === 'photo') return item.isVideo ? Video : Image;
+    return FolderOpen;
+  };
+
+  const getTypeLabel = (item: TrashItem) => {
+    if (item.type === 'note') return 'Notiz';
+    if (item.type === 'photo') return item.isVideo ? 'Video' : 'Foto';
+    return 'Datei';
   };
 
   const formatDate = (dateString: string) => {
@@ -195,9 +254,9 @@ export default function Trash() {
         animate={{ opacity: 1, y: 0 }}
         className="flex flex-col items-center justify-center h-[60vh] text-center"
       >
-        <Trash2 className="w-16 h-16 text-white/20 mb-4" />
-        <h2 className="text-xl font-bold text-white mb-2">Papierkorb</h2>
-        <p className="text-white/50">Der Papierkorb ist leer</p>
+        <Trash2 className="w-16 h-16 text-muted-foreground/20 mb-4" />
+        <h2 className="text-xl font-bold text-foreground mb-2">Papierkorb</h2>
+        <p className="text-muted-foreground">Der Papierkorb ist leer</p>
       </motion.div>
     );
   }
@@ -209,14 +268,14 @@ export default function Trash() {
       className="space-y-6"
     >
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-red-500/20 flex items-center justify-center">
-            <Trash2 className="w-6 h-6 text-red-400" />
+          <div className="w-12 h-12 rounded-xl bg-destructive/20 flex items-center justify-center">
+            <Trash2 className="w-6 h-6 text-destructive" />
           </div>
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-white">Papierkorb</h1>
-            <p className="text-white/60 text-sm">
+            <h1 className="text-2xl md:text-3xl font-bold text-foreground">Papierkorb</h1>
+            <p className="text-muted-foreground text-sm">
               {items.length} Elemente · Automatische Löschung nach {TRASH_RETENTION_DAYS} Tagen
             </p>
           </div>
@@ -226,14 +285,14 @@ export default function Trash() {
           <div className="flex items-center gap-2">
             <button
               onClick={restoreAll}
-              className="px-4 py-2 rounded-xl bg-green-500/10 hover:bg-green-500/20 text-green-400 transition-colors flex items-center gap-2"
+              className="px-4 py-2 rounded-xl bg-green-500/10 hover:bg-green-500/20 text-green-500 transition-colors flex items-center gap-2 text-sm"
             >
               <RotateCcw className="w-4 h-4" />
               <span className="hidden md:inline">Alles wiederherstellen</span>
             </button>
             <button
-              onClick={emptyTrash}
-              className="px-4 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors flex items-center gap-2"
+              onClick={() => setEmptyTrashDialogOpen(true)}
+              className="px-4 py-2 rounded-xl bg-destructive/10 hover:bg-destructive/20 text-destructive transition-colors flex items-center gap-2 text-sm"
             >
               <Trash2 className="w-4 h-4" />
               <span className="hidden md:inline">Leeren</span>
@@ -245,8 +304,8 @@ export default function Trash() {
       {/* Warning */}
       <div className="glass-card p-4 border-yellow-500/30 bg-yellow-500/5">
         <div className="flex items-center gap-3">
-          <AlertTriangle className="w-5 h-5 text-yellow-400" />
-          <p className="text-white/80 text-sm">
+          <AlertTriangle className="w-5 h-5 text-yellow-500 shrink-0" />
+          <p className="text-foreground/80 text-sm">
             Elemente werden nach {TRASH_RETENTION_DAYS} Tagen automatisch endgültig gelöscht.
           </p>
         </div>
@@ -255,16 +314,17 @@ export default function Trash() {
       {/* Items */}
       <div className="glass-card overflow-hidden">
         {loading ? (
-          <div className="p-8 text-center text-white/50">Lädt...</div>
+          <div className="p-8 text-center text-muted-foreground">Lädt...</div>
         ) : items.length === 0 ? (
           <div className="p-8 text-center">
-            <Trash2 className="w-12 h-12 text-white/20 mx-auto mb-4" />
-            <p className="text-white/50">Der Papierkorb ist leer</p>
+            <Trash2 className="w-12 h-12 text-muted-foreground/20 mx-auto mb-4" />
+            <p className="text-muted-foreground">Der Papierkorb ist leer</p>
           </div>
         ) : (
-          <div className="divide-y divide-white/5">
+          <div className="divide-y divide-border/10">
             {items.map((item, index) => {
-              const Icon = getTypeIcon(item.type);
+              const Icon = getTypeIcon(item);
+              const isSelected = selectedItems.has(item.id);
               
               return (
                 <motion.div
@@ -272,19 +332,31 @@ export default function Trash() {
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: index * 0.03 }}
-                  className="p-4 hover:bg-white/5 transition-colors flex items-center gap-4"
+                  className={cn(
+                    "p-4 hover:bg-muted/30 transition-colors flex items-center gap-4 cursor-pointer",
+                    isSelected && "bg-primary/10"
+                  )}
+                  onClick={() => toggleSelection(item.id)}
                 >
-                  <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0">
-                    <Icon className="w-5 h-5 text-white/60" />
+                  <div className={cn(
+                    "w-10 h-10 rounded-lg flex items-center justify-center shrink-0 transition-colors",
+                    isSelected ? "bg-primary/20" : "bg-muted/50"
+                  )}>
+                    {isSelected ? (
+                      <CheckCircle2 className="w-5 h-5 text-primary" />
+                    ) : (
+                      <Icon className="w-5 h-5 text-muted-foreground" />
+                    )}
                   </div>
                   
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-medium text-white truncate">{item.name}</h3>
-                    <div className="flex items-center gap-3 text-sm text-white/40">
+                    <h3 className="font-medium text-foreground truncate">{item.name}</h3>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                      <span className="text-xs bg-muted/50 px-2 py-0.5 rounded">{getTypeLabel(item)}</span>
                       <span>Gelöscht: {formatDate(item.deleted_at)}</span>
                       <span className={cn(
                         "flex items-center gap-1",
-                        item.daysLeft <= 7 && "text-red-400"
+                        item.daysLeft <= 7 && "text-destructive"
                       )}>
                         <Clock className="w-3 h-3" />
                         {item.daysLeft} Tage übrig
@@ -292,17 +364,17 @@ export default function Trash() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                     <button
                       onClick={() => restoreItem(item)}
-                      className="p-2 rounded-lg bg-green-500/10 hover:bg-green-500/20 text-green-400 transition-colors"
+                      className="p-2 rounded-lg bg-green-500/10 hover:bg-green-500/20 text-green-500 transition-colors"
                       title="Wiederherstellen"
                     >
                       <RotateCcw className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => deleteItemPermanently(item)}
-                      className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors"
+                      onClick={() => handleDeleteClick(item)}
+                      className="p-2 rounded-lg bg-destructive/10 hover:bg-destructive/20 text-destructive transition-colors"
                       title="Endgültig löschen"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -314,6 +386,39 @@ export default function Trash() {
           </div>
         )}
       </div>
+
+      {/* Multi-select bar */}
+      <MultiSelectBar
+        selectedCount={selectedItems.size}
+        onClear={() => setSelectedItems(new Set())}
+        onDelete={handleDeleteSelected}
+        onRestore={handleRestoreSelected}
+        isTrash={true}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <DeleteConfirmDialog
+        isOpen={deleteDialogOpen}
+        onClose={() => {
+          setDeleteDialogOpen(false);
+          setItemToDelete(null);
+        }}
+        onConfirm={handleConfirmDelete}
+        itemName={itemToDelete?.name || ''}
+        isPermanent={true}
+        title="Endgültig löschen?"
+      />
+
+      {/* Empty Trash Confirmation Dialog */}
+      <DeleteConfirmDialog
+        isOpen={emptyTrashDialogOpen}
+        onClose={() => setEmptyTrashDialogOpen(false)}
+        onConfirm={emptyTrash}
+        itemName={`${items.length} Elemente`}
+        isPermanent={true}
+        title="Papierkorb leeren?"
+        description="Möchtest du wirklich den gesamten Papierkorb leeren? Diese Aktion kann nicht rückgängig gemacht werden."
+      />
     </motion.div>
   );
 }
