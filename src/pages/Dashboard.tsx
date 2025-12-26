@@ -386,17 +386,16 @@ export default function Dashboard() {
         </div>
         {!isDecoyMode && (
           <div className="flex gap-2">
-            <Link to="/notes">
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                className="btn-gradient px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-medium text-primary-foreground"
-              >
-                <Plus className="w-4 h-4" />
-                <span className="hidden sm:inline">Neu erstellen</span>
-                <span className="sm:hidden">Neu</span>
-              </motion.button>
-            </Link>
+            <motion.button
+              onClick={() => navigate('/notes', { state: { action: 'create-note' } })}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="btn-gradient px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-medium text-primary-foreground"
+            >
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">Neu erstellen</span>
+              <span className="sm:hidden">Neu</span>
+            </motion.button>
           </div>
         )}
       </motion.div>
