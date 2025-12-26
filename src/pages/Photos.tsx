@@ -79,6 +79,7 @@ export default function Photos() {
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const [showBulkTagManager, setShowBulkTagManager] = useState(false);
+  const [showAlbumPicker, setShowAlbumPicker] = useState(false);
   const [showTagSelector, setShowTagSelector] = useState<string | null>(null);
   const [selectedTagFilter, setSelectedTagFilter] = useState<string | null>(null);
   
@@ -372,6 +373,30 @@ export default function Photos() {
     }
   };
 
+  const handleBulkMoveToAlbum = async (albumId: string | null) => {
+    if (selectedItems.size === 0) return;
+
+    try {
+      const { error } = await supabase
+        .from('photos')
+        .update({ album_id: albumId })
+        .in('id', Array.from(selectedItems));
+
+      if (error) throw error;
+
+      setMedia(prev => prev.map(m => 
+        selectedItems.has(m.id) ? { ...m, album_id: albumId } : m
+      ));
+      setSelectedItems(new Set());
+      setIsMultiSelectMode(false);
+      setShowAlbumPicker(false);
+      fetchData();
+      toast.success(albumId ? 'Zu Album hinzugefügt' : 'Aus Album entfernt');
+    } catch (error) {
+      console.error('Error moving to album:', error);
+    }
+  };
+
   const handleRename = async (newName: string) => {
     if (!renameDialog.item) return;
 
@@ -454,7 +479,7 @@ export default function Photos() {
     }
   };
 
-  // Filter media based on view mode
+  // Filter media based on view mode and tags
   const filteredMedia = useMemo(() => {
     let result = media;
     
@@ -465,9 +490,14 @@ export default function Photos() {
     } else if (viewMode === 'videos') {
       result = result.filter(m => m.type === 'video');
     }
+
+    // Filter by tag
+    if (selectedTagFilter) {
+      result = result.filter(m => m.tags?.includes(selectedTagFilter));
+    }
     
     return result;
-  }, [media, selectedAlbum, viewMode]);
+  }, [media, selectedAlbum, viewMode, selectedTagFilter]);
 
   // Lightbox navigation
   const navigateLightbox = (direction: 'prev' | 'next') => {
@@ -620,6 +650,28 @@ export default function Photos() {
               >
                 <tab.icon className="w-4 h-4" />
                 {tab.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Tag Filter */}
+        {tags.length > 0 && viewMode !== 'albums' && !selectedAlbum && (
+          <div className="flex gap-2 flex-wrap">
+            {tags.map(tag => (
+              <button
+                key={tag.id}
+                onClick={() => setSelectedTagFilter(selectedTagFilter === tag.id ? null : tag.id)}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 transition-all",
+                  selectedTagFilter === tag.id 
+                    ? "ring-2 ring-primary" 
+                    : "hover:opacity-80"
+                )}
+                style={{ backgroundColor: `${tag.color}30`, color: tag.color }}
+              >
+                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: tag.color }} />
+                {tag.name}
               </button>
             ))}
           </div>
@@ -1000,6 +1052,7 @@ export default function Photos() {
         onDelete={() => setDeleteConfirm({ isOpen: true, item: null, isMulti: true })}
         onTag={() => setShowBulkTagManager(true)}
         onFavorite={handleBulkFavorite}
+        onMove={() => setShowAlbumPicker(true)}
       />
 
       {/* Bulk Tag Manager Modal */}
@@ -1028,6 +1081,69 @@ export default function Photos() {
               />
               <button
                 onClick={() => setShowBulkTagManager(false)}
+                className="w-full mt-4 px-4 py-3 rounded-xl border border-border text-foreground hover:bg-muted transition-all"
+              >
+                Abbrechen
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Album Picker Modal */}
+      <AnimatePresence>
+        {showAlbumPicker && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+            onClick={() => setShowAlbumPicker(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="glass-card p-6 w-full max-w-md"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 className="text-xl font-bold text-foreground mb-4">
+                {selectedItems.size} Elemente zu Album hinzufügen
+              </h2>
+              <div className="space-y-2 max-h-80 overflow-y-auto">
+                <button
+                  onClick={() => handleBulkMoveToAlbum(null)}
+                  className="w-full px-4 py-3 rounded-xl text-left hover:bg-muted transition-colors flex items-center gap-3"
+                >
+                  <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
+                    <X className="w-5 h-5 text-muted-foreground" />
+                  </div>
+                  <span className="text-foreground">Kein Album</span>
+                </button>
+                {albums.map(album => (
+                  <button
+                    key={album.id}
+                    onClick={() => handleBulkMoveToAlbum(album.id)}
+                    className="w-full px-4 py-3 rounded-xl text-left hover:bg-muted transition-colors flex items-center gap-3"
+                  >
+                    <div className="w-10 h-10 rounded-lg bg-muted overflow-hidden">
+                      {album.cover_url ? (
+                        <img src={album.cover_url} alt={album.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <FolderPlus className="w-5 h-5 text-muted-foreground" />
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-foreground font-medium">{album.name}</p>
+                      <p className="text-muted-foreground text-sm">{album.count} Elemente</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => setShowAlbumPicker(false)}
                 className="w-full mt-4 px-4 py-3 rounded-xl border border-border text-foreground hover:bg-muted transition-all"
               >
                 Abbrechen
