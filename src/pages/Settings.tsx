@@ -14,7 +14,9 @@ import {
   Copy,
   Download,
   Upload,
-  RefreshCw
+  RefreshCw,
+  Clock,
+  Timer
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -22,14 +24,28 @@ import { supabase } from '@/integrations/supabase/client';
 import { generateRecoveryKey, encryptText, decryptText } from '@/lib/encryption';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { useAutoLock } from '@/hooks/useAutoLock';
+import { Switch } from '@/components/ui/switch';
+import { Slider } from '@/components/ui/slider';
 
 const PIN_LENGTH = 6;
+
+const AUTO_LOCK_OPTIONS = [
+  { value: 1, label: '1 Minute' },
+  { value: 2, label: '2 Minuten' },
+  { value: 5, label: '5 Minuten' },
+  { value: 10, label: '10 Minuten' },
+  { value: 15, label: '15 Minuten' },
+  { value: 30, label: '30 Minuten' },
+  { value: 60, label: '1 Stunde' },
+];
 
 export default function Settings() {
   const [showPinChange, setShowPinChange] = useState(false);
   const [showDecoyPin, setShowDecoyPin] = useState(false);
   const [showRecoveryKey, setShowRecoveryKey] = useState(false);
   const [showBackup, setShowBackup] = useState(false);
+  const [showAutoLock, setShowAutoLock] = useState(false);
   const [currentPin, setCurrentPin] = useState('');
   const [newPin, setNewPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
@@ -41,6 +57,16 @@ export default function Settings() {
   const [backupPassword, setBackupPassword] = useState('');
   const { userId, logout } = useAuth();
   const navigate = useNavigate();
+  const { getTimeoutDuration, setTimeoutDuration, isEnabled, setEnabled } = useAutoLock();
+  
+  const [autoLockEnabled, setAutoLockEnabled] = useState(true);
+  const [autoLockMinutes, setAutoLockMinutes] = useState(5);
+
+  // Initialize auto-lock settings
+  useEffect(() => {
+    setAutoLockEnabled(isEnabled());
+    setAutoLockMinutes(getTimeoutDuration() / 60000);
+  }, [isEnabled, getTimeoutDuration]);
 
   // Fetch existing recovery key
   useEffect(() => {
@@ -244,6 +270,74 @@ export default function Settings() {
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-white">Einstellungen</h1>
           <p className="text-white/60 text-sm">Verwalte deinen Vault</p>
+        </div>
+      </div>
+
+      {/* Auto-Lock Section */}
+      <div className="glass-card p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <Timer className="w-5 h-5 text-cyan-400" />
+          <h2 className="text-lg font-semibold text-white">Auto-Lock</h2>
+        </div>
+
+        <div className="space-y-4">
+          {/* Auto-Lock Toggle */}
+          <div className="flex items-center justify-between p-4 rounded-xl bg-white/5">
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                <Clock className="w-5 h-5 text-cyan-400" />
+              </div>
+              <div>
+                <h3 className="font-medium text-white">Automatische Sperre</h3>
+                <p className="text-sm text-white/50">Bei Inaktivität automatisch sperren</p>
+              </div>
+            </div>
+            <Switch
+              checked={autoLockEnabled}
+              onCheckedChange={(checked) => {
+                setAutoLockEnabled(checked);
+                setEnabled(checked);
+                toast.success(checked ? 'Auto-Lock aktiviert' : 'Auto-Lock deaktiviert');
+              }}
+            />
+          </div>
+
+          {/* Auto-Lock Timer */}
+          {autoLockEnabled && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="p-4 rounded-xl bg-white/5 space-y-4"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-white/60 text-sm">Sperren nach:</span>
+                <span className="text-cyan-400 font-medium">
+                  {autoLockMinutes < 60 
+                    ? `${autoLockMinutes} Minute${autoLockMinutes !== 1 ? 'n' : ''}` 
+                    : `${autoLockMinutes / 60} Stunde${autoLockMinutes / 60 !== 1 ? 'n' : ''}`
+                  }
+                </span>
+              </div>
+              <Slider
+                value={[autoLockMinutes]}
+                onValueChange={(value) => {
+                  const minutes = value[0];
+                  setAutoLockMinutes(minutes);
+                  setTimeoutDuration(minutes);
+                }}
+                min={1}
+                max={60}
+                step={1}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-white/40">
+                <span>1 Min</span>
+                <span>30 Min</span>
+                <span>60 Min</span>
+              </div>
+            </motion.div>
+          )}
         </div>
       </div>
 
