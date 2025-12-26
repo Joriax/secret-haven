@@ -14,7 +14,8 @@ import {
   Lock,
   Trash2,
   Search,
-  Tag
+  Tag,
+  Link2
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
@@ -30,6 +31,7 @@ const navItems = [
   { icon: FileText, label: 'Notizen', path: '/notes' },
   { icon: Image, label: 'Fotos', path: '/photos' },
   { icon: FolderOpen, label: 'Dateien', path: '/files' },
+  { icon: Link2, label: 'Links', path: '/links' },
   { icon: Tag, label: 'Tags', path: '/tags' },
   { icon: Lock, label: 'Geheimer Safe', path: '/secret-texts' },
   { icon: Shield, label: 'Sicherheit', path: '/security-logs' },
