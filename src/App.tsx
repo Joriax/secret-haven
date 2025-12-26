@@ -18,6 +18,7 @@ import Trash from "./pages/Trash";
 import Favorites from "./pages/Favorites";
 import RecentlyViewed from "./pages/RecentlyViewed";
 import RecentlyAdded from "./pages/RecentlyAdded";
+import TagsManagement from "./pages/TagsManagement";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -43,6 +44,7 @@ const App = () => (
               <Route path="/favorites" element={<Favorites />} />
               <Route path="/recently-viewed" element={<RecentlyViewed />} />
               <Route path="/recently-added" element={<RecentlyAdded />} />
+              <Route path="/tags" element={<TagsManagement />} />
               <Route path="/settings" element={<Settings />} />
             </Route>
             <Route path="*" element={<NotFound />} />
