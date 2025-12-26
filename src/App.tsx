@@ -22,6 +22,7 @@ import RecentlyViewed from "./pages/RecentlyViewed";
 import RecentlyAdded from "./pages/RecentlyAdded";
 import TagsManagement from "./pages/TagsManagement";
 import Links from "./pages/Links";
+import TikTok from "./pages/TikTok";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -51,6 +52,7 @@ const App = () => (
                 <Route path="/recently-added" element={<RecentlyAdded />} />
                 <Route path="/tags" element={<TagsManagement />} />
                 <Route path="/links" element={<Links />} />
+                <Route path="/tiktok" element={<TikTok />} />
                 <Route path="/settings" element={<Settings />} />
               </Route>
               <Route path="*" element={<NotFound />} />
