@@ -29,7 +29,10 @@ import {
   GripVertical,
   SlidersHorizontal,
   ArrowUpDown,
-  PlayCircle
+  PlayCircle,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -98,6 +101,10 @@ export default function Photos() {
   const [isSlideshow, setIsSlideshow] = useState(false);
   const [slideshowInterval, setSlideshowInterval] = useState(3000);
   const slideshowTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [imagePosition, setImagePosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartRef = useRef({ x: 0, y: 0, posX: 0, posY: 0 });
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -599,9 +606,82 @@ export default function Photos() {
     if (direction === 'prev' && lightboxIndex > 0) {
       setLightboxIndex(lightboxIndex - 1);
       setIsVideoPlaying(false);
+      resetZoom();
     } else if (direction === 'next' && lightboxIndex < filteredMedia.length - 1) {
       setLightboxIndex(lightboxIndex + 1);
       setIsVideoPlaying(false);
+      resetZoom();
+    }
+  };
+
+  // Zoom functions
+  const zoomIn = () => {
+    setZoomLevel(prev => Math.min(prev + 0.5, 4));
+  };
+
+  const zoomOut = () => {
+    setZoomLevel(prev => {
+      const newZoom = Math.max(prev - 0.5, 1);
+      if (newZoom === 1) {
+        setImagePosition({ x: 0, y: 0 });
+      }
+      return newZoom;
+    });
+  };
+
+  const resetZoom = () => {
+    setZoomLevel(1);
+    setImagePosition({ x: 0, y: 0 });
+  };
+
+  // Mouse wheel zoom
+  const handleWheel = (e: React.WheelEvent) => {
+    if (currentLightboxItem?.type === 'video') return;
+    e.preventDefault();
+    
+    if (e.deltaY < 0) {
+      zoomIn();
+    } else {
+      zoomOut();
+    }
+  };
+
+  // Image drag handlers for panning when zoomed
+  const handleImageMouseDown = (e: React.MouseEvent) => {
+    if (zoomLevel <= 1) return;
+    e.preventDefault();
+    setIsDragging(true);
+    dragStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      posX: imagePosition.x,
+      posY: imagePosition.y
+    };
+  };
+
+  const handleImageMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging || zoomLevel <= 1) return;
+    
+    const deltaX = e.clientX - dragStartRef.current.x;
+    const deltaY = e.clientY - dragStartRef.current.y;
+    
+    setImagePosition({
+      x: dragStartRef.current.posX + deltaX,
+      y: dragStartRef.current.posY + deltaY
+    });
+  };
+
+  const handleImageMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  // Double click to toggle zoom
+  const handleImageDoubleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (zoomLevel > 1) {
+      resetZoom();
+    } else {
+      setZoomLevel(2);
     }
   };
 
@@ -1275,6 +1355,47 @@ export default function Photos() {
               </div>
               
               <div className="flex items-center gap-1">
+                {/* Zoom controls - only for photos */}
+                {currentLightboxItem.type === 'photo' && (
+                  <>
+                    <button
+                      onClick={zoomOut}
+                      disabled={zoomLevel <= 1}
+                      className={cn(
+                        "p-2 rounded-full transition-colors",
+                        zoomLevel <= 1 ? "opacity-50 cursor-not-allowed" : "hover:bg-white/10"
+                      )}
+                      title="Verkleinern"
+                    >
+                      <ZoomOut className="w-5 h-5 text-white" />
+                    </button>
+                    <span className="text-white text-xs min-w-[3rem] text-center">
+                      {Math.round(zoomLevel * 100)}%
+                    </span>
+                    <button
+                      onClick={zoomIn}
+                      disabled={zoomLevel >= 4}
+                      className={cn(
+                        "p-2 rounded-full transition-colors",
+                        zoomLevel >= 4 ? "opacity-50 cursor-not-allowed" : "hover:bg-white/10"
+                      )}
+                      title="Vergrößern"
+                    >
+                      <ZoomIn className="w-5 h-5 text-white" />
+                    </button>
+                    {zoomLevel > 1 && (
+                      <button
+                        onClick={resetZoom}
+                        className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                        title="Zoom zurücksetzen"
+                      >
+                        <RotateCcw className="w-5 h-5 text-white" />
+                      </button>
+                    )}
+                    <div className="w-px h-6 bg-white/20 mx-1" />
+                  </>
+                )}
+                
                 <button
                   onClick={() => toggleFavorite(currentLightboxItem)}
                   className="p-2 hover:bg-white/10 rounded-full transition-colors"
@@ -1324,7 +1445,13 @@ export default function Photos() {
             )}
 
             {/* Media Content */}
-            <div className="flex-1 flex items-center justify-center p-4">
+            <div 
+              className="flex-1 flex items-center justify-center p-4 overflow-hidden"
+              onWheel={handleWheel}
+              onMouseMove={handleImageMouseMove}
+              onMouseUp={handleImageMouseUp}
+              onMouseLeave={handleImageMouseUp}
+            >
               <AnimatePresence mode="wait">
                 <motion.div
                   key={currentLightboxItem.id}
@@ -1349,8 +1476,18 @@ export default function Photos() {
                     <img
                       src={currentLightboxItem.url}
                       alt={currentLightboxItem.caption || currentLightboxItem.filename}
-                      className="max-w-full max-h-[80vh] object-contain rounded-lg"
+                      className={cn(
+                        "max-w-full max-h-[80vh] object-contain rounded-lg transition-transform duration-200",
+                        zoomLevel > 1 && "cursor-grab",
+                        isDragging && "cursor-grabbing"
+                      )}
+                      style={{
+                        transform: `scale(${zoomLevel}) translate(${imagePosition.x / zoomLevel}px, ${imagePosition.y / zoomLevel}px)`,
+                      }}
                       onClick={(e) => e.stopPropagation()}
+                      onDoubleClick={handleImageDoubleClick}
+                      onMouseDown={handleImageMouseDown}
+                      draggable={false}
                     />
                   )}
                 </motion.div>
