@@ -471,6 +471,45 @@ export type Database = {
         }
         Relationships: []
       }
+      tiktok_videos: {
+        Row: {
+          author_name: string | null
+          created_at: string | null
+          deleted_at: string | null
+          id: string
+          is_favorite: boolean | null
+          thumbnail_url: string | null
+          title: string | null
+          url: string
+          user_id: string
+          video_id: string | null
+        }
+        Insert: {
+          author_name?: string | null
+          created_at?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_favorite?: boolean | null
+          thumbnail_url?: string | null
+          title?: string | null
+          url: string
+          user_id: string
+          video_id?: string | null
+        }
+        Update: {
+          author_name?: string | null
+          created_at?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_favorite?: boolean | null
+          thumbnail_url?: string | null
+          title?: string | null
+          url?: string
+          user_id?: string
+          video_id?: string | null
+        }
+        Relationships: []
+      }
       vault_users: {
         Row: {
           created_at: string | null
