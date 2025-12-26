@@ -18,6 +18,7 @@ import { encryptText, decryptText } from '@/lib/encryption';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useSecurityLogs } from '@/hooks/useSecurityLogs';
+import { useViewHistory } from '@/hooks/useViewHistory';
 
 interface SecretText {
   id: string;
@@ -42,6 +43,7 @@ export default function SecretTexts() {
   const [editContent, setEditContent] = useState('');
   const { userId, isDecoyMode } = useAuth();
   const { logEvent } = useSecurityLogs();
+  const { recordView } = useViewHistory();
 
   const fetchTexts = useCallback(async () => {
     if (!userId || isDecoyMode) {
@@ -304,6 +306,7 @@ export default function SecretTexts() {
                     setIsUnlocked(false);
                     setDecryptedContent('');
                     setError('');
+                    recordView('secret_text', text.id);
                   }}
                   className={cn(
                     "w-full p-3 rounded-xl text-left transition-all",

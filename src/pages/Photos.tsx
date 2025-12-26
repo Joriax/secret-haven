@@ -37,6 +37,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTags } from '@/hooks/useTags';
+import { useViewHistory } from '@/hooks/useViewHistory';
 import { cn } from '@/lib/utils';
 import { useLocation } from 'react-router-dom';
 import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
@@ -117,6 +118,7 @@ export default function Photos() {
   const location = useLocation();
   const { tags } = useTags();
   const { logEvent } = useSecurityLogs();
+  const { recordView } = useViewHistory();
 
   const fetchData = useCallback(async () => {
     if (!userId) return;
@@ -1213,6 +1215,7 @@ export default function Photos() {
                         toggleItemSelection(item.id);
                       } else {
                         setLightboxIndex(index);
+                        recordView('photo', item.id);
                       }
                     }}
                     className="glass-card-hover overflow-hidden cursor-pointer w-full h-full"

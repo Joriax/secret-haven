@@ -28,6 +28,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTags } from '@/hooks/useTags';
+import { useViewHistory } from '@/hooks/useViewHistory';
 import { cn } from '@/lib/utils';
 import { useLocation } from 'react-router-dom';
 import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
@@ -90,6 +91,7 @@ export default function Files() {
   const { userId } = useAuth();
   const location = useLocation();
   const { tags } = useTags();
+  const { recordView } = useViewHistory();
 
   const fetchFiles = useCallback(async () => {
     if (!userId) return;
@@ -754,6 +756,7 @@ export default function Files() {
                     toggleItemSelection(file.id);
                   } else if (isPreviewable && previewIdx !== -1) {
                     setPreviewIndex(previewIdx);
+                    recordView('file', file.id);
                   }
                 }}
               >
