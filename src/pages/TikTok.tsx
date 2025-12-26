@@ -309,58 +309,89 @@ export default function TikTok() {
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: index * 0.05 }}
-                className="relative aspect-[9/16] bg-muted rounded-xl overflow-hidden group cursor-pointer"
-                onClick={() => {
-                  setCurrentIndex(index);
-                  setViewMode('feed');
-                }}
+                className="flex flex-col"
               >
-                {getEmbedUrl(video) ? (
-                  <iframe
-                    src={getEmbedUrl(video)!}
-                    className="w-full h-full pointer-events-none"
-                    style={{ border: 'none', transform: 'scale(0.5)', transformOrigin: 'top left', width: '200%', height: '200%' }}
-                  />
-                ) : (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <Play className="h-8 w-8 text-muted-foreground opacity-50" />
+                <div
+                  className="relative aspect-[9/16] bg-muted rounded-xl overflow-hidden group cursor-pointer"
+                  onClick={() => {
+                    setCurrentIndex(index);
+                    setViewMode('feed');
+                  }}
+                >
+                  {video.thumbnail_url ? (
+                    <img
+                      src={video.thumbnail_url}
+                      alt={video.title || 'TikTok Video'}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : getEmbedUrl(video) ? (
+                    <iframe
+                      src={getEmbedUrl(video)!}
+                      className="w-full h-full pointer-events-none"
+                      style={{ border: 'none', transform: 'scale(0.5)', transformOrigin: 'top left', width: '200%', height: '200%' }}
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <Play className="h-8 w-8 text-muted-foreground opacity-50" />
+                    </div>
+                  )}
+
+                  {/* Overlay */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+
+                  {/* Favorite Badge */}
+                  {video.is_favorite && (
+                    <div className="absolute top-2 right-2">
+                      <Heart className="h-4 w-4 fill-red-500 text-red-500" />
+                    </div>
+                  )}
+
+                  {/* Play Icon Overlay */}
+                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="h-12 w-12 rounded-full bg-black/50 flex items-center justify-center">
+                      <Play className="h-6 w-6 text-white fill-white" />
+                    </div>
                   </div>
-                )}
 
-                {/* Overlay */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-
-                {/* Favorite Badge */}
-                {video.is_favorite && (
-                  <div className="absolute top-2 right-2">
-                    <Heart className="h-4 w-4 fill-red-500 text-red-500" />
+                  {/* Actions on Hover */}
+                  <div className="absolute bottom-2 left-2 right-2 flex justify-between opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 bg-black/50 text-white hover:bg-black/70"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleFavorite(video.id);
+                      }}
+                    >
+                      <Heart className={cn("h-4 w-4", video.is_favorite && "fill-red-500 text-red-500")} />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 bg-black/50 text-white hover:bg-red-500/70"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteVideo(video.id);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
-                )}
-
-                {/* Actions on Hover */}
-                <div className="absolute bottom-2 left-2 right-2 flex justify-between opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 bg-black/50 text-white hover:bg-black/70"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleFavorite(video.id);
-                    }}
-                  >
-                    <Heart className={cn("h-4 w-4", video.is_favorite && "fill-red-500 text-red-500")} />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 bg-black/50 text-white hover:bg-red-500/70"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteVideo(video.id);
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                </div>
+                
+                {/* Video Info */}
+                <div className="mt-2 px-1">
+                  {video.title && (
+                    <p className="text-sm font-medium text-foreground line-clamp-2 leading-tight">
+                      {video.title}
+                    </p>
+                  )}
+                  {video.author_name && (
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      @{video.author_name}
+                    </p>
+                  )}
                 </div>
               </motion.div>
             ))}
