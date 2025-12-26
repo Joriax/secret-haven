@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence, PanInfo } from 'framer-motion';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { TikTokVideo } from '@/hooks/useTikTokVideos';
 import {
@@ -32,6 +32,8 @@ export function TikTokFullscreenViewer({
 }: TikTokFullscreenViewerProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [direction, setDirection] = useState(0);
+  const touchStartY = useRef<number | null>(null);
+  const touchStartTime = useRef<number>(0);
 
   // Reset to initial index when opening
   useEffect(() => {
@@ -66,18 +68,37 @@ export function TikTokFullscreenViewer({
     }
   }, [currentIndex, videos.length]);
 
-  // Handle drag/swipe
-  const handleDragEnd = useCallback((event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
-    const threshold = 50;
-    const velocity = info.velocity.y;
-    const offset = info.offset.y;
+  // Touch handlers for swipe detection
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStartY.current = e.touches[0].clientY;
+    touchStartTime.current = Date.now();
+  }, []);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (touchStartY.current === null) return;
     
-    // Swipe up = next video, swipe down = previous video
-    if (offset < -threshold || velocity < -300) {
-      goToNext();
-    } else if (offset > threshold || velocity > 300) {
-      goToPrevious();
+    const touchEndY = e.changedTouches[0].clientY;
+    const deltaY = touchStartY.current - touchEndY;
+    const deltaTime = Date.now() - touchStartTime.current;
+    
+    // Calculate velocity
+    const velocity = Math.abs(deltaY) / deltaTime;
+    
+    // Threshold for swipe detection
+    const minDistance = 50;
+    const minVelocity = 0.3;
+    
+    if (Math.abs(deltaY) > minDistance || velocity > minVelocity) {
+      if (deltaY > 0) {
+        // Swiped up - go to next
+        goToNext();
+      } else {
+        // Swiped down - go to previous
+        goToPrevious();
+      }
     }
+    
+    touchStartY.current = null;
   }, [goToNext, goToPrevious]);
 
   // Keyboard navigation
@@ -131,7 +152,11 @@ export function TikTokFullscreenViewer({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black">
+    <div 
+      className="fixed inset-0 z-50 bg-black"
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
       {/* Close Button */}
       <Button
         variant="ghost"
@@ -142,29 +167,39 @@ export function TikTokFullscreenViewer({
         <X className="h-5 w-5" />
       </Button>
 
-      {/* Navigation Arrows - Desktop */}
-      <div className="hidden md:flex absolute left-4 top-1/2 -translate-y-1/2 z-50 flex-col gap-2">
+      {/* Navigation Buttons - Always visible */}
+      <div className="absolute left-4 top-1/2 -translate-y-1/2 z-50 flex flex-col gap-2">
         <Button
           variant="ghost"
           size="icon"
-          className="h-10 w-10 rounded-full bg-white/10 backdrop-blur-sm text-white hover:bg-white/20 disabled:opacity-30"
+          className="h-12 w-12 rounded-full bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 disabled:opacity-30"
           onClick={goToPrevious}
           disabled={currentIndex === 0}
         >
-          <ChevronUp className="h-5 w-5" />
+          <ChevronUp className="h-6 w-6" />
         </Button>
         <Button
           variant="ghost"
           size="icon"
-          className="h-10 w-10 rounded-full bg-white/10 backdrop-blur-sm text-white hover:bg-white/20 disabled:opacity-30"
+          className="h-12 w-12 rounded-full bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 disabled:opacity-30"
           onClick={goToNext}
           disabled={currentIndex === videos.length - 1}
         >
-          <ChevronDown className="h-5 w-5" />
+          <ChevronDown className="h-6 w-6" />
         </Button>
       </div>
 
-      {/* Video Container with Swipe */}
+      {/* Invisible touch zones for swiping - top and bottom edges */}
+      <div 
+        className="absolute top-0 left-0 right-0 h-20 z-40 md:hidden"
+        onClick={goToPrevious}
+      />
+      <div 
+        className="absolute bottom-0 left-0 right-0 h-20 z-40 md:hidden"
+        onClick={goToNext}
+      />
+
+      {/* Video Container with Animation */}
       <AnimatePresence initial={false} custom={direction} mode="wait">
         <motion.div
           key={currentIndex}
@@ -177,20 +212,18 @@ export function TikTokFullscreenViewer({
             y: { type: 'spring', stiffness: 300, damping: 30 },
             opacity: { duration: 0.2 },
           }}
-          drag="y"
-          dragConstraints={{ top: 0, bottom: 0 }}
-          dragElastic={0.2}
-          onDragEnd={handleDragEnd}
-          className="h-full w-full absolute inset-0 flex items-center justify-center touch-pan-x"
+          className="h-full w-full absolute inset-0 flex items-center justify-center"
         >
           {getEmbedUrl(currentVideo) ? (
-            <iframe
-              src={getEmbedUrl(currentVideo)!}
-              className="w-full h-full max-w-[400px] mx-auto pointer-events-auto"
-              style={{ border: 'none' }}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
+            <div className="relative w-full h-full max-w-[400px] mx-auto">
+              <iframe
+                src={getEmbedUrl(currentVideo)!}
+                className="w-full h-full"
+                style={{ border: 'none' }}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            </div>
           ) : (
             <div className="flex flex-col items-center justify-center text-white">
               <Play className="h-16 w-16 mb-4 opacity-50" />
@@ -207,7 +240,7 @@ export function TikTokFullscreenViewer({
           )}
 
           {/* Side Actions */}
-          <div className="absolute right-4 bottom-20 flex flex-col gap-4 z-10">
+          <div className="absolute right-4 bottom-24 flex flex-col gap-4 z-10">
             <Button
               variant="ghost"
               size="icon"
@@ -240,7 +273,7 @@ export function TikTokFullscreenViewer({
           </div>
 
           {/* Video Info */}
-          <div className="absolute left-4 bottom-20 max-w-[200px] text-white z-10">
+          <div className="absolute left-16 bottom-24 max-w-[180px] text-white z-10">
             {currentVideo.author_name && (
               <p className="font-semibold text-sm">@{currentVideo.author_name}</p>
             )}
@@ -250,27 +283,14 @@ export function TikTokFullscreenViewer({
           </div>
 
           {/* Progress Indicator */}
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/70 text-sm z-10">
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-white/70 text-sm z-10">
             {currentIndex + 1} / {videos.length}
-          </div>
-
-          {/* Swipe Hint - shown briefly */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none md:hidden">
-            <motion.div
-              initial={{ opacity: 0.6 }}
-              animate={{ opacity: 0 }}
-              transition={{ delay: 1.5, duration: 0.5 }}
-              className="flex flex-col items-center text-white/50 text-xs"
-            >
-              <ChevronUp className="h-6 w-6 animate-bounce" />
-              <span>Wischen zum Wechseln</span>
-            </motion.div>
           </div>
         </motion.div>
       </AnimatePresence>
 
-      {/* Progress Dots - Mobile */}
-      <div className="md:hidden absolute right-2 top-1/2 -translate-y-1/2 flex flex-col gap-1 z-50">
+      {/* Progress Dots - Right side */}
+      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col gap-1 z-50">
         {videos.slice(
           Math.max(0, currentIndex - 2),
           Math.min(videos.length, currentIndex + 3)
@@ -279,11 +299,15 @@ export function TikTokFullscreenViewer({
           return (
             <div
               key={actualIndex}
+              onClick={() => {
+                setDirection(actualIndex > currentIndex ? 1 : -1);
+                setCurrentIndex(actualIndex);
+              }}
               className={cn(
-                "w-1.5 rounded-full transition-all",
+                "w-2 rounded-full transition-all cursor-pointer hover:bg-white/80",
                 actualIndex === currentIndex 
-                  ? "h-4 bg-white" 
-                  : "h-1.5 bg-white/40"
+                  ? "h-6 bg-white" 
+                  : "h-2 bg-white/40"
               )}
             />
           );
