@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 interface AuthContextType {
@@ -7,6 +7,8 @@ interface AuthContextType {
   isDecoyMode: boolean;
   login: (userId: string, isDecoy?: boolean) => void;
   logout: () => void;
+  extendSession: () => void;
+  sessionExpiresAt: Date | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -40,6 +42,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [isDecoyMode, setIsDecoyMode] = useState(false);
+  const [sessionExpiresAt, setSessionExpiresAt] = useState<Date | null>(null);
 
   useEffect(() => {
     // Check for existing session
@@ -53,6 +56,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setIsAuthenticated(true);
         setUserId(storedUserId);
         setIsDecoyMode(storedDecoyMode === 'true');
+        setSessionExpiresAt(expiry);
       } else {
         sessionStorage.removeItem('vault_user_id');
         sessionStorage.removeItem('vault_session_expiry');
@@ -61,7 +65,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }, []);
 
-  const login = (newUserId: string, isDecoy: boolean = false) => {
+  const login = useCallback((newUserId: string, isDecoy: boolean = false) => {
     const expiry = new Date();
     expiry.setHours(expiry.getHours() + 24);
     
@@ -72,12 +76,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setIsAuthenticated(true);
     setUserId(newUserId);
     setIsDecoyMode(isDecoy);
+    setSessionExpiresAt(expiry);
     
     // Log security event
     logSecurityEvent(newUserId, isDecoy ? 'login_decoy' : 'login_success', {});
-  };
+  }, []);
 
-  const logout = () => {
+  const extendSession = useCallback(() => {
+    if (!userId) return;
+    
+    const expiry = new Date();
+    expiry.setHours(expiry.getHours() + 24);
+    
+    sessionStorage.setItem('vault_session_expiry', expiry.toISOString());
+    setSessionExpiresAt(expiry);
+  }, [userId]);
+
+  const logout = useCallback(() => {
     if (userId) {
       logSecurityEvent(userId, 'logout', {});
     }
@@ -88,10 +103,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setIsAuthenticated(false);
     setUserId(null);
     setIsDecoyMode(false);
-  };
+    setSessionExpiresAt(null);
+  }, [userId]);
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, userId, isDecoyMode, login, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, userId, isDecoyMode, login, logout, extendSession, sessionExpiresAt }}>
       {children}
     </AuthContext.Provider>
   );
