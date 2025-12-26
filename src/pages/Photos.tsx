@@ -77,20 +77,11 @@ export default function Photos() {
   const { userId } = useAuth();
   const location = useLocation();
 
-  useEffect(() => {
-    fetchData();
-  }, [userId]);
-
-  useEffect(() => {
-    if (location.state?.action === 'upload-photo') {
-      fileInputRef.current?.click();
-    }
-  }, [location.state]);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!userId) return;
 
     try {
+      setIsLoading(true);
       const [photosRes, albumsRes] = await Promise.all([
         supabase.from('photos').select('*').eq('user_id', userId).is('deleted_at', null).order('uploaded_at', { ascending: false }),
         supabase.from('albums').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
@@ -135,7 +126,17 @@ export default function Photos() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [userId]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  useEffect(() => {
+    if (location.state?.action === 'upload-photo') {
+      fileInputRef.current?.click();
+    }
+  }, [location.state]);
 
   const handleFileUpload = async (files: FileList | null) => {
     if (!files || !userId) return;

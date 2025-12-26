@@ -147,21 +147,36 @@ export default function Trash() {
   };
 
   const deleteItemPermanently = async (item: TrashItem) => {
-    const table = item.type === 'note' ? 'notes' : item.type === 'photo' ? 'photos' : 'files';
-    
     try {
-      // For photos and files, also delete from storage
-      if (item.type === 'photo' || item.type === 'file') {
-        const bucket = item.type === 'photo' ? 'photos' : 'files';
-        await supabase.storage.from(bucket).remove([`${userId}/${item.name}`]);
+      // For photos and files, get original filename from DB and delete from storage
+      if (item.type === 'photo') {
+        const { data: dbItem } = await supabase
+          .from('photos')
+          .select('filename')
+          .eq('id', item.id)
+          .single();
+        
+        if (dbItem?.filename) {
+          await supabase.storage.from('photos').remove([`${userId}/${dbItem.filename}`]);
+        }
+        
+        await supabase.from('photos').delete().eq('id', item.id);
+      } else if (item.type === 'file') {
+        const { data: dbItem } = await supabase
+          .from('files')
+          .select('filename')
+          .eq('id', item.id)
+          .single();
+        
+        if (dbItem?.filename) {
+          await supabase.storage.from('files').remove([`${userId}/${dbItem.filename}`]);
+        }
+        
+        await supabase.from('files').delete().eq('id', item.id);
+      } else {
+        await supabase.from('notes').delete().eq('id', item.id);
       }
 
-      const { error } = await supabase
-        .from(table)
-        .delete()
-        .eq('id', item.id);
-
-      if (error) throw error;
       setItems(prev => prev.filter(i => i.id !== item.id));
       toast.success(`${item.name} endgültig gelöscht`);
     } catch (err) {
