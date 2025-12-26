@@ -39,6 +39,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTags, Tag as TagType } from '@/hooks/useTags';
 import { useNoteFolders } from '@/hooks/useNoteFolders';
+import { useViewHistory } from '@/hooks/useViewHistory';
 import { encryptText, decryptText } from '@/lib/encryption';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -110,6 +111,7 @@ export default function Notes() {
   const { userId, isDecoyMode } = useAuth();
   const { tags, createTag } = useTags();
   const { folders, createFolder, updateFolder, deleteFolder } = useNoteFolders();
+  const { recordView } = useViewHistory();
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [showFolderSidebar, setShowFolderSidebar] = useState(true);
 
@@ -713,6 +715,7 @@ export default function Notes() {
                     setEditTitle(note.title);
                     setEditContent(note.content || '');
                     setIsEditing(false);
+                    recordView('note', note.id);
                     if (note.is_secure && note.secure_content) {
                       setPendingSecureAction('unlock');
                       setShowSecureModal(true);
