@@ -15,6 +15,9 @@ import Settings from "./pages/Settings";
 import SecretTexts from "./pages/SecretTexts";
 import SecurityLogs from "./pages/SecurityLogs";
 import Trash from "./pages/Trash";
+import Favorites from "./pages/Favorites";
+import RecentlyViewed from "./pages/RecentlyViewed";
+import RecentlyAdded from "./pages/RecentlyAdded";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -37,6 +40,9 @@ const App = () => (
               <Route path="/secret-texts" element={<SecretTexts />} />
               <Route path="/security-logs" element={<SecurityLogs />} />
               <Route path="/trash" element={<Trash />} />
+              <Route path="/favorites" element={<Favorites />} />
+              <Route path="/recently-viewed" element={<RecentlyViewed />} />
+              <Route path="/recently-added" element={<RecentlyAdded />} />
               <Route path="/settings" element={<Settings />} />
             </Route>
             <Route path="*" element={<NotFound />} />

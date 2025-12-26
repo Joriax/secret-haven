@@ -75,17 +75,7 @@ export default function Files() {
   const { userId } = useAuth();
   const location = useLocation();
 
-  useEffect(() => {
-    fetchFiles();
-  }, [userId]);
-
-  useEffect(() => {
-    if (location.state?.action === 'upload-file') {
-      fileInputRef.current?.click();
-    }
-  }, [location.state]);
-
-  const fetchFiles = async () => {
+  const fetchFiles = useCallback(async () => {
     if (!userId) return;
 
     try {
@@ -103,7 +93,31 @@ export default function Files() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [userId]);
+
+  useEffect(() => {
+    fetchFiles();
+  }, [fetchFiles]);
+
+  // Real-time updates
+  useEffect(() => {
+    if (!userId) return;
+
+    const channel = supabase
+      .channel('files-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'files' }, fetchFiles)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userId, fetchFiles]);
+
+  useEffect(() => {
+    if (location.state?.action === 'upload-file') {
+      fileInputRef.current?.click();
+    }
+  }, [location.state]);
 
   const handleUpload = async (fileList: FileList | null) => {
     if (!fileList || !userId) return;

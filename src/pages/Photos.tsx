@@ -132,6 +132,25 @@ export default function Photos() {
     fetchData();
   }, [fetchData]);
 
+  // Real-time updates for photos and albums
+  useEffect(() => {
+    if (!userId) return;
+
+    const channel = supabase
+      .channel('photos-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'photos' }, () => {
+        fetchData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'albums' }, () => {
+        fetchData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userId, fetchData]);
+
   useEffect(() => {
     if (location.state?.action === 'upload-photo') {
       fileInputRef.current?.click();

@@ -170,103 +170,120 @@ export default function Dashboard() {
     fetchViewedItemDetails();
   }, [fetchViewedItemDetails]);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      if (!userId) return;
+  const fetchDashboardData = useCallback(async () => {
+    if (!userId) return;
 
-      try {
-        if (isDecoyMode) {
-          setStats({ 
-            notes: 0, photos: 0, files: 0, favorites: 0, 
-            secureNotes: 0, secretTexts: 0, totalSize: 0, trashedItems: 0 
-          });
-          setRecentItems([]);
-          setIsLoading(false);
-          return;
-        }
-
-        const [
-          notesRes, 
-          photosRes, 
-          filesRes, 
-          favNotesRes,
-          favPhotosRes,
-          favFilesRes,
-          secureNotesRes,
-          secretTextsRes,
-          trashedNotesRes,
-          trashedPhotosRes,
-          trashedFilesRes,
-          recentNotesRes, 
-          recentPhotosRes, 
-          recentFilesRes,
-        ] = await Promise.all([
-          supabase.from('notes').select('id', { count: 'exact', head: true }).eq('user_id', userId).is('deleted_at', null),
-          supabase.from('photos').select('id', { count: 'exact', head: true }).eq('user_id', userId).is('deleted_at', null),
-          supabase.from('files').select('id, size', { count: 'exact' }).eq('user_id', userId).is('deleted_at', null),
-          supabase.from('notes').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('is_favorite', true).is('deleted_at', null),
-          supabase.from('photos').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('is_favorite', true).is('deleted_at', null),
-          supabase.from('files').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('is_favorite', true).is('deleted_at', null),
-          supabase.from('notes').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('is_secure', true).is('deleted_at', null),
-          supabase.from('secret_texts').select('id', { count: 'exact', head: true }).eq('user_id', userId),
-          supabase.from('notes').select('id', { count: 'exact', head: true }).eq('user_id', userId).not('deleted_at', 'is', null),
-          supabase.from('photos').select('id', { count: 'exact', head: true }).eq('user_id', userId).not('deleted_at', 'is', null),
-          supabase.from('files').select('id', { count: 'exact', head: true }).eq('user_id', userId).not('deleted_at', 'is', null),
-          supabase.from('notes').select('id, title, updated_at, is_favorite').eq('user_id', userId).is('deleted_at', null).order('updated_at', { ascending: false }).limit(5),
-          supabase.from('photos').select('id, filename, uploaded_at, is_favorite').eq('user_id', userId).is('deleted_at', null).order('uploaded_at', { ascending: false }).limit(5),
-          supabase.from('files').select('id, filename, uploaded_at, is_favorite').eq('user_id', userId).is('deleted_at', null).order('uploaded_at', { ascending: false }).limit(5),
-        ]);
-
-        const totalSize = filesRes.data?.reduce((acc, f) => acc + (f.size || 0), 0) || 0;
-        const totalFavorites = (favNotesRes.count || 0) + (favPhotosRes.count || 0) + (favFilesRes.count || 0);
-        const totalTrashed = (trashedNotesRes.count || 0) + (trashedPhotosRes.count || 0) + (trashedFilesRes.count || 0);
-
-        setStats({
-          notes: notesRes.count || 0,
-          photos: photosRes.count || 0,
-          files: filesRes.count || 0,
-          favorites: totalFavorites,
-          secureNotes: secureNotesRes.count || 0,
-          secretTexts: secretTextsRes.count || 0,
-          totalSize,
-          trashedItems: totalTrashed,
+    try {
+      if (isDecoyMode) {
+        setStats({ 
+          notes: 0, photos: 0, files: 0, favorites: 0, 
+          secureNotes: 0, secretTexts: 0, totalSize: 0, trashedItems: 0 
         });
-
-        const allRecent: RecentItem[] = [
-          ...(recentNotesRes.data || []).map(n => ({
-            id: n.id,
-            type: 'note' as const,
-            title: n.title || 'Unbenannt',
-            date: n.updated_at || new Date().toISOString(),
-            isFavorite: n.is_favorite,
-          })),
-          ...(recentPhotosRes.data || []).map(p => ({
-            id: p.id,
-            type: 'photo' as const,
-            title: p.filename?.replace(/^\d+-/, '') || 'Foto',
-            date: p.uploaded_at || new Date().toISOString(),
-            isFavorite: p.is_favorite,
-          })),
-          ...(recentFilesRes.data || []).map(f => ({
-            id: f.id,
-            type: 'file' as const,
-            title: f.filename?.replace(/^\d+-/, '') || 'Datei',
-            date: f.uploaded_at || new Date().toISOString(),
-            isFavorite: f.is_favorite,
-          })),
-        ];
-
-        allRecent.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        setRecentItems(allRecent.slice(0, 6));
-      } catch (error) {
-        console.error('Error fetching stats:', error);
-      } finally {
+        setRecentItems([]);
         setIsLoading(false);
+        return;
       }
-    };
 
-    fetchData();
+      const [
+        notesRes, 
+        photosRes, 
+        filesRes, 
+        favNotesRes,
+        favPhotosRes,
+        favFilesRes,
+        secureNotesRes,
+        secretTextsRes,
+        trashedNotesRes,
+        trashedPhotosRes,
+        trashedFilesRes,
+        recentNotesRes, 
+        recentPhotosRes, 
+        recentFilesRes,
+      ] = await Promise.all([
+        supabase.from('notes').select('id', { count: 'exact', head: true }).eq('user_id', userId).is('deleted_at', null),
+        supabase.from('photos').select('id', { count: 'exact', head: true }).eq('user_id', userId).is('deleted_at', null),
+        supabase.from('files').select('id, size', { count: 'exact' }).eq('user_id', userId).is('deleted_at', null),
+        supabase.from('notes').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('is_favorite', true).is('deleted_at', null),
+        supabase.from('photos').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('is_favorite', true).is('deleted_at', null),
+        supabase.from('files').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('is_favorite', true).is('deleted_at', null),
+        supabase.from('notes').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('is_secure', true).is('deleted_at', null),
+        supabase.from('secret_texts').select('id', { count: 'exact', head: true }).eq('user_id', userId),
+        supabase.from('notes').select('id', { count: 'exact', head: true }).eq('user_id', userId).not('deleted_at', 'is', null),
+        supabase.from('photos').select('id', { count: 'exact', head: true }).eq('user_id', userId).not('deleted_at', 'is', null),
+        supabase.from('files').select('id', { count: 'exact', head: true }).eq('user_id', userId).not('deleted_at', 'is', null),
+        supabase.from('notes').select('id, title, updated_at, is_favorite').eq('user_id', userId).is('deleted_at', null).order('updated_at', { ascending: false }).limit(5),
+        supabase.from('photos').select('id, filename, uploaded_at, is_favorite').eq('user_id', userId).is('deleted_at', null).order('uploaded_at', { ascending: false }).limit(5),
+        supabase.from('files').select('id, filename, uploaded_at, is_favorite').eq('user_id', userId).is('deleted_at', null).order('uploaded_at', { ascending: false }).limit(5),
+      ]);
+
+      const totalSize = filesRes.data?.reduce((acc, f) => acc + (f.size || 0), 0) || 0;
+      const totalFavorites = (favNotesRes.count || 0) + (favPhotosRes.count || 0) + (favFilesRes.count || 0);
+      const totalTrashed = (trashedNotesRes.count || 0) + (trashedPhotosRes.count || 0) + (trashedFilesRes.count || 0);
+
+      setStats({
+        notes: notesRes.count || 0,
+        photos: photosRes.count || 0,
+        files: filesRes.count || 0,
+        favorites: totalFavorites,
+        secureNotes: secureNotesRes.count || 0,
+        secretTexts: secretTextsRes.count || 0,
+        totalSize,
+        trashedItems: totalTrashed,
+      });
+
+      const allRecent: RecentItem[] = [
+        ...(recentNotesRes.data || []).map(n => ({
+          id: n.id,
+          type: 'note' as const,
+          title: n.title || 'Unbenannt',
+          date: n.updated_at || new Date().toISOString(),
+          isFavorite: n.is_favorite,
+        })),
+        ...(recentPhotosRes.data || []).map(p => ({
+          id: p.id,
+          type: 'photo' as const,
+          title: p.filename?.replace(/^\d+-/, '') || 'Foto',
+          date: p.uploaded_at || new Date().toISOString(),
+          isFavorite: p.is_favorite,
+        })),
+        ...(recentFilesRes.data || []).map(f => ({
+          id: f.id,
+          type: 'file' as const,
+          title: f.filename?.replace(/^\d+-/, '') || 'Datei',
+          date: f.uploaded_at || new Date().toISOString(),
+          isFavorite: f.is_favorite,
+        })),
+      ];
+
+      allRecent.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      setRecentItems(allRecent.slice(0, 6));
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    } finally {
+      setIsLoading(false);
+    }
   }, [userId, isDecoyMode]);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, [fetchDashboardData]);
+
+  // Real-time updates
+  useEffect(() => {
+    if (!userId) return;
+
+    const channel = supabase
+      .channel('dashboard-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, fetchDashboardData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'photos' }, fetchDashboardData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'files' }, fetchDashboardData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'secret_texts' }, fetchDashboardData)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userId, fetchDashboardData]);
 
   const totalItems = stats.notes + stats.photos + stats.files;
 
@@ -328,23 +345,23 @@ export default function Dashboard() {
     { 
       title: 'Zuletzt hinzugefügt', 
       icon: Calendar, 
-      path: '/notes',
+      path: '/recently-added',
       count: recentItems.length,
-      onClick: () => navigate('/notes')
+      onClick: () => navigate('/recently-added')
     },
     { 
       title: 'Zuletzt angesehen', 
       icon: Eye, 
-      path: '/notes',
+      path: '/recently-viewed',
       count: viewedItems.length,
-      onClick: () => navigate('/notes')
+      onClick: () => navigate('/recently-viewed')
     },
     { 
       title: 'Favoriten', 
       icon: Star, 
-      path: '/notes?filter=favorites',
+      path: '/favorites',
       count: stats.favorites,
-      onClick: () => navigate('/notes?filter=favorites')
+      onClick: () => navigate('/favorites')
     },
     { 
       title: 'Sichere Notizen', 
