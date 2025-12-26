@@ -982,35 +982,58 @@ export default function Notes() {
               initial={{ scale: 0.9 }}
               animate={{ scale: 1 }}
               exit={{ scale: 0.9 }}
-              className="glass-card p-6 w-full max-w-md max-h-[80vh] overflow-hidden flex flex-col"
+              className="glass-card p-6 w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col"
               onClick={e => e.stopPropagation()}
             >
               <div className="flex items-center gap-3 mb-4">
                 <History className="w-6 h-6 text-primary" />
                 <h3 className="text-xl font-bold text-foreground">Versionshistorie</h3>
+                <span className="text-muted-foreground text-sm ml-auto">{versions.length} Versionen</span>
               </div>
-              <div className="flex-1 overflow-y-auto space-y-2">
+              
+              <div className="flex-1 overflow-y-auto space-y-3">
                 {versions.length === 0 ? (
-                  <p className="text-muted-foreground text-center py-8">Keine früheren Versionen</p>
+                  <div className="text-center py-12">
+                    <History className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
+                    <p className="text-muted-foreground">Keine früheren Versionen</p>
+                    <p className="text-muted-foreground/60 text-sm mt-1">Versionen werden beim Speichern erstellt</p>
+                  </div>
                 ) : (
-                  versions.map(version => (
-                    <div key={version.id} className="p-4 rounded-xl bg-muted/50 flex items-center justify-between group hover:bg-muted transition-colors">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-foreground font-medium">Version {version.version_number}</p>
-                        <p className="text-muted-foreground text-sm">{formatDate(version.created_at)}</p>
-                        <p className="text-muted-foreground/70 text-xs truncate mt-1">{version.title}</p>
+                  versions.map((version, index) => (
+                    <motion.div 
+                      key={version.id} 
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.05 }}
+                      className="p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors group"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-primary font-semibold text-sm">v{version.version_number}</span>
+                            <span className="text-muted-foreground text-xs">•</span>
+                            <span className="text-muted-foreground text-sm">{formatDate(version.created_at)}</span>
+                          </div>
+                          <p className="text-foreground font-medium truncate">{version.title}</p>
+                          {version.content && (
+                            <p className="text-muted-foreground text-sm line-clamp-2 mt-2">
+                              {version.content.slice(0, 150)}{version.content.length > 150 ? '...' : ''}
+                            </p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => restoreVersion(version)}
+                          className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-all shrink-0"
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                          <span className="text-sm hidden sm:inline">Wiederherstellen</span>
+                        </button>
                       </div>
-                      <button
-                        onClick={() => restoreVersion(version)}
-                        className="p-2 rounded-lg hover:bg-primary/20 text-primary transition-all opacity-0 group-hover:opacity-100"
-                        title="Wiederherstellen"
-                      >
-                        <RotateCcw className="w-4 h-4" />
-                      </button>
-                    </div>
+                    </motion.div>
                   ))
                 )}
               </div>
+              
               <button
                 onClick={() => setShowVersions(false)}
                 className="mt-4 w-full py-3 rounded-xl border border-border text-foreground hover:bg-muted"

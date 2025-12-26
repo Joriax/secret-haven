@@ -1,10 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Shield, Lock, AlertCircle, Loader2, Key, ArrowLeft } from 'lucide-react';
+import { Shield, Lock, AlertCircle, Loader2, Key, ArrowLeft, Fingerprint } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
+import { useBiometric } from '@/hooks/useBiometric';
+import { toast } from 'sonner';
 
 const PIN_LENGTH = 6;
 const MAX_ATTEMPTS = 5;
@@ -19,9 +21,11 @@ export default function Login() {
   const [lockoutUntil, setLockoutUntil] = useState<Date | null>(null);
   const [showRecovery, setShowRecovery] = useState(false);
   const [recoveryKey, setRecoveryKey] = useState('');
+  const [isBiometricLoading, setIsBiometricLoading] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const navigate = useNavigate();
   const { login, isAuthenticated } = useAuth();
+  const { isAvailable: biometricAvailable, isEnabled: biometricEnabled, authenticate: authenticateBiometric } = useBiometric();
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -60,6 +64,58 @@ export default function Login() {
       return () => clearInterval(interval);
     }
   }, [lockoutUntil]);
+
+  // Try biometric on load if enabled
+  useEffect(() => {
+    const tryBiometric = async () => {
+      if (biometricEnabled && !isAuthenticated && !lockoutUntil) {
+        setIsBiometricLoading(true);
+        try {
+          const userId = await authenticateBiometric();
+          if (userId) {
+            localStorage.removeItem('vault_attempts');
+            localStorage.removeItem('vault_lockout');
+            login(userId, false);
+            toast.success('Biometrische Anmeldung erfolgreich');
+            navigate('/dashboard', { replace: true });
+          }
+        } catch (error) {
+          console.error('Auto biometric failed:', error);
+        } finally {
+          setIsBiometricLoading(false);
+        }
+      }
+    };
+    
+    // Slight delay to allow the component to mount
+    const timeout = setTimeout(tryBiometric, 500);
+    return () => clearTimeout(timeout);
+  }, [biometricEnabled, isAuthenticated, lockoutUntil]);
+
+  const handleBiometricLogin = async () => {
+    if (!biometricEnabled || lockoutUntil) return;
+    
+    setIsBiometricLoading(true);
+    setError('');
+    
+    try {
+      const userId = await authenticateBiometric();
+      if (userId) {
+        localStorage.removeItem('vault_attempts');
+        localStorage.removeItem('vault_lockout');
+        login(userId, false);
+        toast.success('Biometrische Anmeldung erfolgreich');
+        navigate('/dashboard', { replace: true });
+      } else {
+        setError('Biometrische Authentifizierung fehlgeschlagen');
+      }
+    } catch (error) {
+      console.error('Biometric login error:', error);
+      setError('Biometrische Authentifizierung fehlgeschlagen');
+    } finally {
+      setIsBiometricLoading(false);
+    }
+  };
 
   const focusInput = (index: number) => {
     if (index >= 0 && index < PIN_LENGTH) {
@@ -299,6 +355,27 @@ export default function Login() {
                 >
                   <Loader2 className="w-8 h-8 text-purple-400 animate-spin" />
                 </motion.div>
+               )}
+
+              {/* Biometric Login Button */}
+              {biometricEnabled && !lockoutUntil && (
+                <motion.button
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3 }}
+                  onClick={handleBiometricLogin}
+                  disabled={isBiometricLoading || isLoading}
+                  className="w-full py-4 mb-4 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white font-medium hover:shadow-glow transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                >
+                  {isBiometricLoading ? (
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                  ) : (
+                    <>
+                      <Fingerprint className="w-6 h-6" />
+                      <span>Mit Biometrie anmelden</span>
+                    </>
+                  )}
+                </motion.button>
               )}
 
               {/* Recovery key link */}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Fingerprint } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Settings as SettingsIcon, 
@@ -25,6 +26,7 @@ import { generateRecoveryKey, encryptText, decryptText } from '@/lib/encryption'
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useAutoLock } from '@/hooks/useAutoLock';
+import { useBiometric } from '@/hooks/useBiometric';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 
@@ -55,9 +57,11 @@ export default function Settings() {
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [backupPassword, setBackupPassword] = useState('');
+  const [isBiometricRegistering, setIsBiometricRegistering] = useState(false);
   const { userId, logout } = useAuth();
   const navigate = useNavigate();
   const { getTimeoutDuration, setTimeoutDuration, isEnabled, setEnabled } = useAutoLock();
+  const { isAvailable: biometricAvailable, isEnabled: biometricEnabled, register: registerBiometric, disable: disableBiometric } = useBiometric();
   
   const [autoLockEnabled, setAutoLockEnabled] = useState(true);
   const [autoLockMinutes, setAutoLockMinutes] = useState(5);
@@ -67,6 +71,27 @@ export default function Settings() {
     setAutoLockEnabled(isEnabled());
     setAutoLockMinutes(getTimeoutDuration() / 60000);
   }, [isEnabled, getTimeoutDuration]);
+
+  const handleBiometricToggle = async (enabled: boolean) => {
+    if (enabled && userId) {
+      setIsBiometricRegistering(true);
+      try {
+        const success = await registerBiometric(userId);
+        if (success) {
+          toast.success('Biometrische Authentifizierung aktiviert');
+        } else {
+          toast.error('Biometrie-Registrierung fehlgeschlagen');
+        }
+      } catch (error) {
+        toast.error('Biometrie-Registrierung fehlgeschlagen');
+      } finally {
+        setIsBiometricRegistering(false);
+      }
+    } else {
+      disableBiometric();
+      toast.success('Biometrische Authentifizierung deaktiviert');
+    }
+  };
 
   // Fetch existing recovery key
   useEffect(() => {
@@ -340,6 +365,39 @@ export default function Settings() {
           )}
         </div>
       </div>
+
+      {/* Biometric Authentication Section */}
+      {biometricAvailable && (
+        <div className="glass-card p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <Fingerprint className="w-5 h-5 text-green-400" />
+            <h2 className="text-lg font-semibold text-white">Biometrie</h2>
+          </div>
+
+          <div className="flex items-center justify-between p-4 rounded-xl bg-white/5">
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
+                <Fingerprint className="w-5 h-5 text-green-400" />
+              </div>
+              <div>
+                <h3 className="font-medium text-white">Touch/Face ID</h3>
+                <p className="text-sm text-white/50">Biometrische Authentifizierung für schnellen Zugang</p>
+              </div>
+            </div>
+            <Switch
+              checked={biometricEnabled}
+              onCheckedChange={handleBiometricToggle}
+              disabled={isBiometricRegistering}
+            />
+          </div>
+          
+          {biometricEnabled && (
+            <p className="text-green-400/70 text-xs mt-3 px-4">
+              ✓ Biometrie aktiviert - Du kannst dich jetzt mit Touch/Face ID anmelden
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Security Section */}
       <div className="glass-card p-6">
