@@ -105,6 +105,9 @@ export default function Photos() {
   const [imagePosition, setImagePosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const dragStartRef = useRef({ x: 0, y: 0, posX: 0, posY: 0 });
+  const initialPinchDistanceRef = useRef<number | null>(null);
+  const initialPinchZoomRef = useRef<number>(1);
+  const lastTouchRef = useRef<{ x: number; y: number } | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -685,26 +688,81 @@ export default function Photos() {
     }
   };
 
-  // Touch handlers for swipe navigation
+  // Touch handlers for swipe navigation and pinch zoom
   const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
+    if (e.touches.length === 2) {
+      // Pinch start
+      const distance = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      initialPinchDistanceRef.current = distance;
+      initialPinchZoomRef.current = zoomLevel;
+    } else if (e.touches.length === 1) {
+      // Single touch - for swipe or pan
+      touchStartX.current = e.touches[0].clientX;
+      if (zoomLevel > 1) {
+        lastTouchRef.current = {
+          x: e.touches[0].clientX,
+          y: e.touches[0].clientY
+        };
+      }
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 2 && initialPinchDistanceRef.current !== null) {
+      // Pinch zoom
+      const distance = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      const scale = distance / initialPinchDistanceRef.current;
+      const newZoom = Math.min(Math.max(initialPinchZoomRef.current * scale, 1), 4);
+      setZoomLevel(newZoom);
+      
+      if (newZoom === 1) {
+        setImagePosition({ x: 0, y: 0 });
+      }
+    } else if (e.touches.length === 1 && zoomLevel > 1 && lastTouchRef.current) {
+      // Pan when zoomed
+      const deltaX = e.touches[0].clientX - lastTouchRef.current.x;
+      const deltaY = e.touches[0].clientY - lastTouchRef.current.y;
+      
+      setImagePosition(prev => ({
+        x: prev.x + deltaX,
+        y: prev.y + deltaY
+      }));
+      
+      lastTouchRef.current = {
+        x: e.touches[0].clientX,
+        y: e.touches[0].clientY
+      };
+    }
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartX.current === null) return;
+    // Reset pinch tracking
+    if (e.touches.length < 2) {
+      initialPinchDistanceRef.current = null;
+    }
     
-    const touchEndX = e.changedTouches[0].clientX;
-    const diff = touchStartX.current - touchEndX;
-    
-    if (Math.abs(diff) > 50) {
-      if (diff > 0) {
-        navigateLightbox('next');
-      } else {
-        navigateLightbox('prev');
+    // Handle swipe navigation only if not zoomed
+    if (zoomLevel <= 1 && touchStartX.current !== null && e.changedTouches.length === 1) {
+      const touchEndX = e.changedTouches[0].clientX;
+      const diff = touchStartX.current - touchEndX;
+      
+      if (Math.abs(diff) > 50) {
+        if (diff > 0) {
+          navigateLightbox('next');
+        } else {
+          navigateLightbox('prev');
+        }
       }
     }
     
     touchStartX.current = null;
+    lastTouchRef.current = null;
   };
 
   // Keyboard navigation
@@ -1302,8 +1360,9 @@ export default function Photos() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black flex flex-col"
+            className="fixed inset-0 z-50 bg-black flex flex-col touch-none"
             onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
           >
             {/* Lightbox Header */}
