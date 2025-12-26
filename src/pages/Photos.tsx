@@ -26,7 +26,10 @@ import {
   CheckSquare,
   Square,
   Search,
-  GripVertical
+  GripVertical,
+  SlidersHorizontal,
+  ArrowUpDown,
+  PlayCircle
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -63,6 +66,7 @@ interface Album {
 }
 
 type ViewMode = 'all' | 'photos' | 'videos' | 'albums';
+type SortMode = 'date-desc' | 'date-asc' | 'name-asc' | 'name-desc' | 'favorites';
 
 export default function Photos() {
   const [media, setMedia] = useState<MediaItem[]>([]);
@@ -89,6 +93,11 @@ export default function Photos() {
   const [draggedItem, setDraggedItem] = useState<MediaItem | null>(null);
   const [dragOverAlbum, setDragOverAlbum] = useState<string | null>(null);
   const [isAlbumSidebarOpen, setIsAlbumSidebarOpen] = useState(true);
+  const [sortMode, setSortMode] = useState<SortMode>('date-desc');
+  const [showSortMenu, setShowSortMenu] = useState(false);
+  const [isSlideshow, setIsSlideshow] = useState(false);
+  const [slideshowInterval, setSlideshowInterval] = useState(3000);
+  const slideshowTimerRef = useRef<NodeJS.Timeout | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -486,7 +495,7 @@ export default function Photos() {
     }
   };
 
-  // Filter media based on view mode, tags, and search
+  // Filter and sort media based on view mode, tags, search, and sort
   const filteredMedia = useMemo(() => {
     let result = media;
     
@@ -511,9 +520,29 @@ export default function Photos() {
         (m.caption && m.caption.toLowerCase().includes(query))
       );
     }
+
+    // Sort
+    result = [...result].sort((a, b) => {
+      switch (sortMode) {
+        case 'date-desc':
+          return new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime();
+        case 'date-asc':
+          return new Date(a.uploaded_at).getTime() - new Date(b.uploaded_at).getTime();
+        case 'name-asc':
+          return (a.caption || a.filename).localeCompare(b.caption || b.filename);
+        case 'name-desc':
+          return (b.caption || b.filename).localeCompare(a.caption || a.filename);
+        case 'favorites':
+          if (a.is_favorite && !b.is_favorite) return -1;
+          if (!a.is_favorite && b.is_favorite) return 1;
+          return new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime();
+        default:
+          return 0;
+      }
+    });
     
     return result;
-  }, [media, selectedAlbum, viewMode, selectedTagFilter, searchQuery]);
+  }, [media, selectedAlbum, viewMode, selectedTagFilter, searchQuery, sortMode]);
 
   // Drag and drop handlers
   const handleDragStart = (e: React.DragEvent, item: MediaItem) => {
@@ -605,14 +634,94 @@ export default function Photos() {
       
       if (e.key === 'ArrowLeft') navigateLightbox('prev');
       if (e.key === 'ArrowRight') navigateLightbox('next');
-      if (e.key === 'Escape') setLightboxIndex(null);
+      if (e.key === 'Escape') {
+        setLightboxIndex(null);
+        stopSlideshow();
+      }
+      if (e.key === ' ') {
+        e.preventDefault();
+        if (isSlideshow) stopSlideshow();
+        else startSlideshow();
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [lightboxIndex, filteredMedia.length]);
+  }, [lightboxIndex, filteredMedia.length, isSlideshow]);
+
+  // Slideshow functions
+  const startSlideshow = () => {
+    if (filteredMedia.length === 0) return;
+    
+    // Only photos for slideshow
+    const photosOnly = filteredMedia.filter(m => m.type === 'photo');
+    if (photosOnly.length === 0) {
+      toast.error('Keine Fotos für Slideshow verfügbar');
+      return;
+    }
+    
+    if (lightboxIndex === null) {
+      const firstPhotoIndex = filteredMedia.findIndex(m => m.type === 'photo');
+      setLightboxIndex(firstPhotoIndex >= 0 ? firstPhotoIndex : 0);
+    }
+    setIsSlideshow(true);
+    toast.success('Slideshow gestartet');
+  };
+
+  const stopSlideshow = () => {
+    setIsSlideshow(false);
+    if (slideshowTimerRef.current) {
+      clearInterval(slideshowTimerRef.current);
+      slideshowTimerRef.current = null;
+    }
+  };
+
+  // Slideshow timer
+  useEffect(() => {
+    if (isSlideshow && lightboxIndex !== null) {
+      slideshowTimerRef.current = setInterval(() => {
+        setLightboxIndex(prev => {
+          if (prev === null) return null;
+          // Find next photo (skip videos)
+          let nextIndex = prev + 1;
+          while (nextIndex < filteredMedia.length && filteredMedia[nextIndex]?.type === 'video') {
+            nextIndex++;
+          }
+          if (nextIndex >= filteredMedia.length) {
+            // Loop back to first photo
+            nextIndex = filteredMedia.findIndex(m => m.type === 'photo');
+            if (nextIndex === -1) nextIndex = 0;
+          }
+          return nextIndex;
+        });
+      }, slideshowInterval);
+
+      return () => {
+        if (slideshowTimerRef.current) {
+          clearInterval(slideshowTimerRef.current);
+        }
+      };
+    }
+  }, [isSlideshow, slideshowInterval, filteredMedia.length]);
+
+  // Cleanup slideshow on unmount
+  useEffect(() => {
+    return () => {
+      if (slideshowTimerRef.current) {
+        clearInterval(slideshowTimerRef.current);
+      }
+    };
+  }, []);
 
   const currentLightboxItem = lightboxIndex !== null ? filteredMedia[lightboxIndex] : null;
+
+  const sortOptions = [
+    { id: 'date-desc', label: 'Neueste zuerst' },
+    { id: 'date-asc', label: 'Älteste zuerst' },
+    { id: 'name-asc', label: 'Name (A-Z)' },
+    { id: 'name-desc', label: 'Name (Z-A)' },
+    { id: 'favorites', label: 'Favoriten zuerst' },
+  ] as const;
 
   return (
     <div className="space-y-6 relative">
@@ -663,6 +772,51 @@ export default function Photos() {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            {/* Slideshow button */}
+            {viewMode !== 'albums' && filteredMedia.filter(m => m.type === 'photo').length > 0 && (
+              <button
+                onClick={startSlideshow}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border hover:bg-muted transition-all text-sm"
+              >
+                <PlayCircle className="w-4 h-4" />
+                <span className="hidden sm:inline">Slideshow</span>
+              </button>
+            )}
+
+            {/* Sort dropdown */}
+            {viewMode !== 'albums' && (
+              <div className="relative">
+                <button
+                  onClick={() => setShowSortMenu(!showSortMenu)}
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border hover:bg-muted transition-all text-sm"
+                >
+                  <ArrowUpDown className="w-4 h-4" />
+                  <span className="hidden sm:inline">Sortieren</span>
+                </button>
+                {showSortMenu && (
+                  <div className="absolute top-full right-0 mt-2 w-48 glass-card p-2 z-20">
+                    {sortOptions.map(option => (
+                      <button
+                        key={option.id}
+                        onClick={() => {
+                          setSortMode(option.id);
+                          setShowSortMenu(false);
+                        }}
+                        className={cn(
+                          "w-full px-3 py-2 rounded-lg text-left text-sm transition-all",
+                          sortMode === option.id 
+                            ? "bg-primary/20 text-primary" 
+                            : "hover:bg-muted text-foreground"
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Multi-select toggle */}
             <button
               onClick={() => {
@@ -1075,13 +1229,46 @@ export default function Photos() {
             {/* Lightbox Header */}
             <div className="flex items-center justify-between p-4 bg-gradient-to-b from-black/80 to-transparent absolute top-0 left-0 right-0 z-10">
               <button
-                onClick={() => setLightboxIndex(null)}
+                onClick={() => {
+                  setLightboxIndex(null);
+                  stopSlideshow();
+                }}
                 className="p-2 hover:bg-white/10 rounded-full transition-colors"
               >
                 <X className="w-6 h-6 text-white" />
               </button>
               
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
+                {/* Slideshow controls */}
+                <button
+                  onClick={() => isSlideshow ? stopSlideshow() : startSlideshow()}
+                  className={cn(
+                    "p-2 rounded-full transition-colors",
+                    isSlideshow ? "bg-primary text-primary-foreground" : "hover:bg-white/10"
+                  )}
+                  title={isSlideshow ? "Slideshow stoppen" : "Slideshow starten"}
+                >
+                  {isSlideshow ? (
+                    <Pause className="w-5 h-5" />
+                  ) : (
+                    <Play className="w-5 h-5 text-white" />
+                  )}
+                </button>
+                
+                {isSlideshow && (
+                  <select
+                    value={slideshowInterval}
+                    onChange={(e) => setSlideshowInterval(Number(e.target.value))}
+                    className="bg-white/10 text-white text-xs rounded-lg px-2 py-1 border-none"
+                  >
+                    <option value={2000}>2s</option>
+                    <option value={3000}>3s</option>
+                    <option value={5000}>5s</option>
+                    <option value={8000}>8s</option>
+                    <option value={10000}>10s</option>
+                  </select>
+                )}
+                
                 <span className="text-white/70 text-sm">
                   {lightboxIndex! + 1} / {filteredMedia.length}
                 </span>
