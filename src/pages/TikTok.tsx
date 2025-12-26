@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/select';
 import { useTikTokVideos, TikTokVideo } from '@/hooks/useTikTokVideos';
 import { useTikTokFolders } from '@/hooks/useTikTokFolders';
+import { TikTokFullscreenViewer } from '@/components/TikTokFullscreenViewer';
 import {
   Plus,
   Trash2,
@@ -33,6 +34,7 @@ import {
   Folder,
   ChevronLeft,
   ChevronRight,
+  MonitorPlay,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -49,9 +51,11 @@ export default function TikTok() {
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [viewMode, setViewMode] = useState<ViewMode>('feed');
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [filterFavorites, setFilterFavorites] = useState(false);
   const [filterFolderId, setFilterFolderId] = useState<string | null>(null);
+  const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
+  const [fullscreenStartIndex, setFullscreenStartIndex] = useState(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const isScrolling = useRef(false);
   const lastScrollTime = useRef(0);
@@ -244,6 +248,20 @@ export default function TikTok() {
           >
             <Star className={cn("h-4 w-4", filterFavorites && "fill-current")} />
           </Button>
+          {filteredVideos.length > 0 && (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => {
+                setFullscreenStartIndex(0);
+                setIsFullscreenOpen(true);
+              }}
+              className="gap-2"
+            >
+              <MonitorPlay className="h-4 w-4" />
+              <span className="hidden sm:inline">Abspielen</span>
+            </Button>
+          )}
           <Button
             variant={viewMode === 'grid' ? 'default' : 'outline'}
             size="sm"
@@ -375,14 +393,8 @@ export default function TikTok() {
                 <div
                   className="relative aspect-[9/16] bg-muted rounded-xl overflow-hidden group cursor-pointer"
                   onClick={() => {
-                    setCurrentIndex(index);
-                    setViewMode('feed');
-                    setTimeout(() => {
-                      scrollContainerRef.current?.scrollTo({
-                        top: index * (scrollContainerRef.current?.clientHeight || 0),
-                        behavior: 'instant'
-                      });
-                    }, 100);
+                    setFullscreenStartIndex(index);
+                    setIsFullscreenOpen(true);
                   }}
                 >
                   {video.thumbnail_url ? (
@@ -459,6 +471,21 @@ export default function TikTok() {
           </div>
         </ScrollArea>
       )}
+
+      {/* Fullscreen Viewer */}
+      <TikTokFullscreenViewer
+        videos={filteredVideos}
+        initialIndex={fullscreenStartIndex}
+        isOpen={isFullscreenOpen}
+        onClose={() => setIsFullscreenOpen(false)}
+        onToggleFavorite={toggleFavorite}
+        onDelete={(id) => {
+          deleteVideo(id);
+          if (filteredVideos.length <= 1) {
+            setIsFullscreenOpen(false);
+          }
+        }}
+      />
 
       {/* Add Video Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
