@@ -11,6 +11,7 @@ export interface Link {
   title: string;
   description: string | null;
   favicon_url: string | null;
+  image_url: string | null;
   is_favorite: boolean;
   tags: string[];
   deleted_at: string | null;
@@ -51,7 +52,7 @@ export function useLinks() {
     fetchLinks();
   }, [fetchLinks]);
 
-  const createLink = async (url: string, title: string, folderId?: string) => {
+  const createLink = async (url: string, title: string, folderId?: string, description?: string, imageUrl?: string) => {
     if (!userId) return null;
 
     try {
@@ -70,6 +71,8 @@ export function useLinks() {
           title: title || url,
           folder_id: folderId || null,
           favicon_url: faviconUrl,
+          description: description || null,
+          image_url: imageUrl || null,
         })
         .select()
         .single();
@@ -86,7 +89,7 @@ export function useLinks() {
     }
   };
 
-  const updateLink = async (id: string, updates: Partial<Pick<Link, 'url' | 'title' | 'description' | 'folder_id' | 'is_favorite' | 'tags'>>) => {
+  const updateLink = async (id: string, updates: Partial<Pick<Link, 'url' | 'title' | 'description' | 'folder_id' | 'is_favorite' | 'tags' | 'image_url'>>) => {
     try {
       const { error } = await supabase
         .from('links')

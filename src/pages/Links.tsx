@@ -82,6 +82,7 @@ export default function Links() {
   const [newDescription, setNewDescription] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isFetchingMeta, setIsFetchingMeta] = useState(false);
+  const [newImageUrl, setNewImageUrl] = useState<string | null>(null);
   const [showFolderSidebar, setShowFolderSidebar] = useState(true);
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; link: Link | null }>({ isOpen: false, link: null });
 
@@ -136,6 +137,9 @@ export default function Links() {
       if (data?.description) {
         setNewDescription(data.description);
       }
+      if (data?.image) {
+        setNewImageUrl(data.image);
+      }
     } catch (error) {
       console.error('Error fetching metadata:', error);
     } finally {
@@ -156,15 +160,17 @@ export default function Links() {
 
   const handleCreateLink = async () => {
     if (!newUrl.trim()) return;
-    await createLink(newUrl.trim(), newTitle.trim() || newUrl.trim(), selectedFolderId || undefined);
-    // Also save description if provided
-    if (newDescription.trim()) {
-      // Get the newly created link and update it with description
-      refetch();
-    }
+    await createLink(
+      newUrl.trim(), 
+      newTitle.trim() || newUrl.trim(), 
+      selectedFolderId || undefined,
+      newDescription.trim() || undefined,
+      newImageUrl || undefined
+    );
     setNewUrl('');
     setNewTitle('');
     setNewDescription('');
+    setNewImageUrl(null);
     setIsCreateDialogOpen(false);
   };
 
@@ -541,10 +547,28 @@ export default function Links() {
                     layout
                     className="group relative bg-card border border-border rounded-xl overflow-hidden hover:border-primary/50 hover:shadow-lg transition-all duration-200"
                   >
+                    {/* Preview Image */}
+                    {link.image_url && (
+                      <div 
+                        className="relative h-32 bg-muted overflow-hidden cursor-pointer"
+                        onClick={() => openLink(link)}
+                      >
+                        <img
+                          src={link.image_url}
+                          alt=""
+                          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).parentElement!.style.display = 'none';
+                          }}
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-card/80 to-transparent" />
+                      </div>
+                    )}
+
                     {/* Favorite indicator */}
                     {link.is_favorite && (
-                      <div className="absolute top-3 right-3 z-10">
-                        <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
+                      <div className={cn("absolute z-10", link.image_url ? "top-3 right-3" : "top-3 right-3")}>
+                        <Star className="h-4 w-4 text-yellow-500 fill-yellow-500 drop-shadow-md" />
                       </div>
                     )}
 
@@ -553,20 +577,20 @@ export default function Links() {
                       className="cursor-pointer p-4"
                       onClick={() => openLink(link)}
                     >
-                      <div className="flex items-start gap-3 mb-3">
-                        <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                      <div className="flex items-start gap-3 mb-2">
+                        <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
                           {getFaviconUrl(link) ? (
                             <img
                               src={getFaviconUrl(link)!}
                               alt=""
-                              className="w-8 h-8 rounded"
+                              className="w-6 h-6 rounded"
                               onError={(e) => {
                                 (e.target as HTMLImageElement).style.display = 'none';
                                 (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
                               }}
                             />
                           ) : null}
-                          <Globe className={cn("h-6 w-6 text-muted-foreground", getFaviconUrl(link) && "hidden")} />
+                          <Globe className={cn("h-5 w-5 text-muted-foreground", getFaviconUrl(link) && "hidden")} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <h3 className="font-medium text-foreground truncate group-hover:text-primary transition-colors">
@@ -578,8 +602,8 @@ export default function Links() {
                         </div>
                       </div>
 
-                      {link.description && (
-                        <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
+                      {link.description && !link.image_url && (
+                        <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
                           {link.description}
                         </p>
                       )}
