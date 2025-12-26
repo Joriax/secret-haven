@@ -9,7 +9,8 @@ import {
   Clock,
   AlertTriangle,
   Video,
-  CheckCircle2
+  CheckCircle2,
+  Play
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -20,7 +21,7 @@ import { toast } from 'sonner';
 
 interface TrashItem {
   id: string;
-  type: 'note' | 'photo' | 'file';
+  type: 'note' | 'photo' | 'file' | 'tiktok';
   name: string;
   deleted_at: string;
   daysLeft: number;
@@ -188,6 +189,27 @@ export default function Trash() {
         }
       });
 
+      // Fetch deleted TikTok videos
+      const { data: tiktokVideos } = await supabase
+        .from('tiktok_videos')
+        .select('id, title, author_name, deleted_at')
+        .eq('user_id', userId)
+        .not('deleted_at', 'is', null);
+
+      tiktokVideos?.forEach(video => {
+        const deletedAt = new Date(video.deleted_at!);
+        const daysLeft = TRASH_RETENTION_DAYS - Math.floor((now.getTime() - deletedAt.getTime()) / (1000 * 60 * 60 * 24));
+        if (daysLeft > 0) {
+          trashItems.push({
+            id: video.id,
+            type: 'tiktok',
+            name: video.title || (video.author_name ? `@${video.author_name}` : 'TikTok Video'),
+            deleted_at: video.deleted_at!,
+            daysLeft
+          });
+        }
+      });
+
       // Sort by deleted_at descending
       trashItems.sort((a, b) => new Date(b.deleted_at).getTime() - new Date(a.deleted_at).getTime());
       setItems(trashItems);
@@ -197,6 +219,7 @@ export default function Trash() {
       setLoading(false);
     }
   }, [userId, isDecoyMode, cleanupExpiredItems]);
+
 
   useEffect(() => {
     fetchTrashItems();
@@ -219,7 +242,7 @@ export default function Trash() {
   }, [userId, fetchTrashItems]);
 
   const restoreItem = async (item: TrashItem) => {
-    const table = item.type === 'note' ? 'notes' : item.type === 'photo' ? 'photos' : 'files';
+    const table = item.type === 'note' ? 'notes' : item.type === 'photo' ? 'photos' : item.type === 'tiktok' ? 'tiktok_videos' : 'files';
     
     try {
       const { error } = await supabase
@@ -238,7 +261,6 @@ export default function Trash() {
 
   const deleteItemPermanently = async (item: TrashItem) => {
     try {
-      // For photos and files, get original filename from DB and delete from storage
       if (item.type === 'photo') {
         const { data: dbItem } = await supabase
           .from('photos')
@@ -249,7 +271,6 @@ export default function Trash() {
         if (dbItem?.filename) {
           await supabase.storage.from('photos').remove([`${userId}/${dbItem.filename}`]);
         }
-        
         await supabase.from('photos').delete().eq('id', item.id);
       } else if (item.type === 'file') {
         const { data: dbItem } = await supabase
@@ -261,8 +282,9 @@ export default function Trash() {
         if (dbItem?.filename) {
           await supabase.storage.from('files').remove([`${userId}/${dbItem.filename}`]);
         }
-        
         await supabase.from('files').delete().eq('id', item.id);
+      } else if (item.type === 'tiktok') {
+        await supabase.from('tiktok_videos').delete().eq('id', item.id);
       } else {
         await supabase.from('notes').delete().eq('id', item.id);
       }
@@ -333,12 +355,14 @@ export default function Trash() {
   const getTypeIcon = (item: TrashItem) => {
     if (item.type === 'note') return FileText;
     if (item.type === 'photo') return item.isVideo ? Video : Image;
+    if (item.type === 'tiktok') return Play;
     return FolderOpen;
   };
 
   const getTypeLabel = (item: TrashItem) => {
     if (item.type === 'note') return 'Notiz';
     if (item.type === 'photo') return item.isVideo ? 'Video' : 'Foto';
+    if (item.type === 'tiktok') return 'TikTok';
     return 'Datei';
   };
 
