@@ -15,7 +15,7 @@ export default {
     extend: {
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
-        mono: ['JetBrains Mono', 'monospace'],
+        display: ['Space Grotesk', 'sans-serif'],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -61,24 +61,19 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
-        vault: {
-          purple: "hsl(270 70% 60%)",
-          pink: "hsl(330 70% 55%)",
-          dark: "hsl(222 47% 6%)",
-        },
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
-        "2xl": "1rem",
+        xl: "1rem",
+        "2xl": "1.25rem",
         "3xl": "1.5rem",
       },
       boxShadow: {
-        glow: "0 0 40px hsla(270, 70%, 60%, 0.3)",
-        "glow-sm": "0 0 20px hsla(270, 70%, 60%, 0.2)",
-        "glow-lg": "0 0 60px hsla(270, 70%, 60%, 0.4)",
-        glass: "0 25px 50px -12px hsla(0, 0%, 0%, 0.5)",
+        glow: "0 0 40px -10px hsl(var(--primary) / 0.4)",
+        "glow-sm": "0 0 20px -5px hsl(var(--primary) / 0.3)",
+        soft: "0 2px 20px -5px hsl(0 0% 0% / 0.3)",
       },
       keyframes: {
         "accordion-down": {
@@ -90,63 +85,34 @@ export default {
           to: { height: "0" },
         },
         "fade-in": {
-          "0%": { opacity: "0", transform: "translateY(10px)" },
+          "0%": { opacity: "0", transform: "translateY(8px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
-        "fade-out": {
-          "0%": { opacity: "1", transform: "translateY(0)" },
-          "100%": { opacity: "0", transform: "translateY(10px)" },
-        },
         "scale-in": {
-          "0%": { transform: "scale(0.95)", opacity: "0" },
+          "0%": { transform: "scale(0.96)", opacity: "0" },
           "100%": { transform: "scale(1)", opacity: "1" },
         },
-        "slide-in-left": {
+        "slide-in": {
           "0%": { transform: "translateX(-100%)" },
           "100%": { transform: "translateX(0)" },
         },
-        "slide-in-right": {
-          "0%": { transform: "translateX(100%)" },
-          "100%": { transform: "translateX(0)" },
-        },
-        "slide-in-up": {
-          "0%": { transform: "translateY(100%)", opacity: "0" },
-          "100%": { transform: "translateY(0)", opacity: "1" },
+        float: {
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-5px)" },
         },
         shimmer: {
           "0%": { backgroundPosition: "-200% 0" },
           "100%": { backgroundPosition: "200% 0" },
         },
-        float: {
-          "0%, 100%": { transform: "translateY(0)" },
-          "50%": { transform: "translateY(-10px)" },
-        },
-        pulse: {
-          "0%, 100%": { opacity: "1" },
-          "50%": { opacity: "0.5" },
-        },
-        shake: {
-          "0%, 100%": { transform: "translateX(0)" },
-          "10%, 30%, 50%, 70%, 90%": { transform: "translateX(-5px)" },
-          "20%, 40%, 60%, 80%": { transform: "translateX(5px)" },
-        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
-        "fade-in": "fade-in 0.3s ease-out forwards",
-        "fade-out": "fade-out 0.3s ease-out forwards",
-        "scale-in": "scale-in 0.2s ease-out forwards",
-        "slide-in-left": "slide-in-left 0.3s ease-out forwards",
-        "slide-in-right": "slide-in-right 0.3s ease-out forwards",
-        "slide-in-up": "slide-in-up 0.4s ease-out forwards",
-        shimmer: "shimmer 2s linear infinite",
+        "fade-in": "fade-in 0.4s ease-out forwards",
+        "scale-in": "scale-in 0.3s ease-out forwards",
+        "slide-in": "slide-in 0.3s ease-out forwards",
         float: "float 3s ease-in-out infinite",
-        pulse: "pulse 2s ease-in-out infinite",
-        shake: "shake 0.5s ease-in-out",
-      },
-      backdropBlur: {
-        xs: "2px",
+        shimmer: "shimmer 2s linear infinite",
       },
     },
   },

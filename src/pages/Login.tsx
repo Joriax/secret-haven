@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 
 const PIN_LENGTH = 6;
 const MAX_ATTEMPTS = 5;
-const LOCKOUT_DURATION = 10 * 60 * 1000; // 10 minutes
+const LOCKOUT_DURATION = 10 * 60 * 1000;
 
 export default function Login() {
   const [pin, setPin] = useState<string[]>(Array(PIN_LENGTH).fill(''));
@@ -34,7 +34,6 @@ export default function Login() {
   }, [isAuthenticated, navigate]);
 
   useEffect(() => {
-    // Check for existing lockout
     const storedLockout = localStorage.getItem('vault_lockout');
     if (storedLockout) {
       const lockoutDate = new Date(storedLockout);
@@ -65,7 +64,6 @@ export default function Login() {
     }
   }, [lockoutUntil]);
 
-  // Try biometric on load if enabled
   useEffect(() => {
     const tryBiometric = async () => {
       if (biometricEnabled && !isAuthenticated && !lockoutUntil) {
@@ -87,7 +85,6 @@ export default function Login() {
       }
     };
     
-    // Slight delay to allow the component to mount
     const timeout = setTimeout(tryBiometric, 500);
     return () => clearTimeout(timeout);
   }, [biometricEnabled, isAuthenticated, lockoutUntil]);
@@ -135,7 +132,6 @@ export default function Login() {
       focusInput(index + 1);
     }
 
-    // Auto-submit when all digits entered
     if (newPin.every(d => d !== '') && newPin.join('').length === PIN_LENGTH) {
       handleSubmit(newPin.join(''));
     }
@@ -156,7 +152,6 @@ export default function Login() {
     setError('');
 
     try {
-      // Call edge function for secure PIN verification
       const { data, error: invokeError } = await supabase.functions.invoke('verify-pin', {
         body: { action: 'verify', pin: pinValue }
       });
@@ -247,31 +242,30 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-vault">
-      {/* Background effects */}
+    <div className="min-h-screen flex items-center justify-center p-4 bg-background">
+      {/* Subtle background glow */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-600/20 rounded-full blur-3xl animate-float" />
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-pink-600/20 rounded-full blur-3xl animate-float" style={{ animationDelay: '1s' }} />
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-primary/5 rounded-full blur-[120px]" />
       </div>
 
       <motion.div
-        initial={{ opacity: 0, y: 20, scale: 0.95 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.5, ease: 'easeOut' }}
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
         className={cn(
-          "glass-card p-8 md:p-12 w-full max-w-md",
-          shake && "animate-shake"
+          "w-full max-w-sm p-8 rounded-2xl bg-card border border-border",
+          shake && "animate-[shake_0.5s_ease-in-out]"
         )}
       >
         {/* Logo */}
         <motion.div
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ delay: 0.2, type: 'spring', damping: 15 }}
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ delay: 0.1 }}
           className="flex justify-center mb-8"
         >
-          <div className="w-20 h-20 rounded-2xl bg-gradient-primary flex items-center justify-center pulse-glow">
-            <Shield className="w-10 h-10 text-white" />
+          <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
+            <Shield className="w-8 h-8 text-primary" />
           </div>
         </motion.div>
 
@@ -279,25 +273,22 @@ export default function Login() {
           {!showRecovery ? (
             <motion.div
               key="pin-entry"
-              initial={{ opacity: 0, x: -20 }}
+              initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
+              exit={{ opacity: 0, x: 10 }}
             >
               {/* Title */}
               <div className="text-center mb-8">
-                <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">
+                <h1 className="text-xl font-display font-semibold text-foreground mb-1">
                   Private Vault
                 </h1>
-                <p className="text-white/60">
+                <p className="text-sm text-muted-foreground">
                   Gib deinen 6-stelligen PIN ein
-                </p>
-                <p className="text-white/40 text-xs mt-2">
-                  Standard-PIN: 123456
                 </p>
               </div>
 
               {/* PIN Input */}
-              <div className="flex justify-center gap-3 mb-6">
+              <div className="flex justify-center gap-2.5 mb-6">
                 {pin.map((digit, index) => (
                   <input
                     key={index}
@@ -310,22 +301,24 @@ export default function Login() {
                     onKeyDown={(e) => handleKeyDown(index, e)}
                     disabled={isLoading || !!lockoutUntil}
                     className={cn(
-                      "w-12 h-14 text-center text-2xl font-bold bg-white/5 border border-white/20 rounded-xl text-white focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/30 transition-all",
-                      digit && "border-purple-500/50"
+                      "w-11 h-13 text-center text-xl font-semibold rounded-xl transition-all",
+                      "bg-muted border border-border text-foreground",
+                      "focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none",
+                      digit && "border-primary/50"
                     )}
                     autoFocus={index === 0}
                   />
                 ))}
               </div>
 
-              {/* Error message */}
+              {/* Error */}
               <AnimatePresence>
                 {error && (
                   <motion.div
-                    initial={{ opacity: 0, y: -10 }}
+                    initial={{ opacity: 0, y: -5 }}
                     animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    className="flex items-center justify-center gap-2 mb-6 text-red-400"
+                    exit={{ opacity: 0, y: -5 }}
+                    className="flex items-center justify-center gap-2 mb-4 text-destructive"
                   >
                     <AlertCircle className="w-4 h-4" />
                     <span className="text-sm">{error}</span>
@@ -333,102 +326,94 @@ export default function Login() {
                 )}
               </AnimatePresence>
 
-              {/* Lockout timer */}
+              {/* Lockout */}
               {lockoutUntil && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="text-center mb-6"
-                >
-                  <div className="text-white/60 text-sm">
-                    Entsperrt in: <span className="text-purple-400 font-mono">{getRemainingLockoutTime()}</span>
-                  </div>
-                </motion.div>
+                <div className="text-center mb-4">
+                  <span className="text-sm text-muted-foreground">
+                    Entsperrt in: <span className="text-primary font-mono">{getRemainingLockoutTime()}</span>
+                  </span>
+                </div>
               )}
 
-              {/* Loading indicator */}
+              {/* Loading */}
               {isLoading && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="flex justify-center mb-6"
-                >
-                  <Loader2 className="w-8 h-8 text-purple-400 animate-spin" />
-                </motion.div>
-               )}
+                <div className="flex justify-center mb-4">
+                  <Loader2 className="w-6 h-6 text-primary animate-spin" />
+                </div>
+              )}
 
-              {/* Biometric Login Button */}
+              {/* Biometric */}
               {biometricEnabled && !lockoutUntil && (
-                <motion.button
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.3 }}
+                <button
                   onClick={handleBiometricLogin}
                   disabled={isBiometricLoading || isLoading}
-                  className="w-full py-4 mb-4 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white font-medium hover:shadow-glow transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                  className="w-full py-3 mb-4 rounded-xl bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {isBiometricLoading ? (
-                    <Loader2 className="w-6 h-6 animate-spin" />
+                    <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
                     <>
-                      <Fingerprint className="w-6 h-6" />
-                      <span>Mit Biometrie anmelden</span>
+                      <Fingerprint className="w-5 h-5" />
+                      <span>Mit Biometrie</span>
                     </>
                   )}
-                </motion.button>
+                </button>
               )}
 
-              {/* Recovery key link */}
+              {/* Recovery Link */}
               <button
                 onClick={() => {
                   setShowRecovery(true);
                   setError('');
                 }}
-                className="w-full text-center text-white/50 hover:text-white/70 text-sm transition-colors flex items-center justify-center gap-2"
+                className="w-full text-center text-muted-foreground hover:text-foreground text-sm transition-colors flex items-center justify-center gap-2"
               >
                 <Key className="w-4 h-4" />
-                PIN vergessen? Mit Recovery-Key anmelden
+                Mit Recovery-Key anmelden
               </button>
+
+              {/* Hint */}
+              <p className="text-center text-xs text-muted-foreground mt-6">
+                Standard-PIN: 123456
+              </p>
             </motion.div>
           ) : (
             <motion.div
               key="recovery-entry"
-              initial={{ opacity: 0, x: 20 }}
+              initial={{ opacity: 0, x: 10 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
+              exit={{ opacity: 0, x: -10 }}
             >
               {/* Title */}
               <div className="text-center mb-8">
-                <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">
+                <h1 className="text-xl font-display font-semibold text-foreground mb-1">
                   Recovery-Key
                 </h1>
-                <p className="text-white/60">
+                <p className="text-sm text-muted-foreground">
                   Gib deinen Recovery-Key ein
                 </p>
               </div>
 
-              {/* Recovery Key Input */}
-              <div className="mb-6">
-                <textarea
-                  value={recoveryKey}
-                  onChange={(e) => {
-                    setRecoveryKey(e.target.value);
-                    setError('');
-                  }}
-                  placeholder="XXXX-XXXX-XXXX-XXXX-XXXX"
-                  disabled={isLoading}
-                  className="w-full h-24 p-4 bg-white/5 border border-white/20 rounded-xl text-white placeholder:text-white/30 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/30 transition-all resize-none font-mono text-center"
-                />
-              </div>
+              {/* Input */}
+              <textarea
+                value={recoveryKey}
+                onChange={(e) => {
+                  setRecoveryKey(e.target.value);
+                  setError('');
+                }}
+                placeholder="XXXX-XXXX-XXXX-XXXX-XXXX"
+                disabled={isLoading}
+                className="w-full h-20 p-3 mb-4 rounded-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none resize-none font-mono text-center text-sm"
+              />
 
-              {/* Error message */}
+              {/* Error */}
               <AnimatePresence>
                 {error && (
                   <motion.div
-                    initial={{ opacity: 0, y: -10 }}
+                    initial={{ opacity: 0, y: -5 }}
                     animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    className="flex items-center justify-center gap-2 mb-6 text-red-400"
+                    exit={{ opacity: 0, y: -5 }}
+                    className="flex items-center justify-center gap-2 mb-4 text-destructive"
                   >
                     <AlertCircle className="w-4 h-4" />
                     <span className="text-sm">{error}</span>
@@ -436,11 +421,11 @@ export default function Login() {
                 )}
               </AnimatePresence>
 
-              {/* Submit Button */}
+              {/* Submit */}
               <button
                 onClick={handleRecoverySubmit}
                 disabled={isLoading || !recoveryKey.trim()}
-                className="w-full py-3 rounded-xl bg-gradient-primary text-white font-medium hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2 mb-4"
+                className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 mb-4"
               >
                 {isLoading ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
@@ -452,14 +437,14 @@ export default function Login() {
                 )}
               </button>
 
-              {/* Back to PIN */}
+              {/* Back */}
               <button
                 onClick={() => {
                   setShowRecovery(false);
                   setError('');
                   setRecoveryKey('');
                 }}
-                className="w-full text-center text-white/50 hover:text-white/70 text-sm transition-colors flex items-center justify-center gap-2"
+                className="w-full text-center text-muted-foreground hover:text-foreground text-sm transition-colors flex items-center justify-center gap-2"
               >
                 <ArrowLeft className="w-4 h-4" />
                 Zurück zur PIN-Eingabe
@@ -468,16 +453,11 @@ export default function Login() {
           )}
         </AnimatePresence>
 
-        {/* Security badge */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.6 }}
-          className="flex items-center justify-center gap-2 text-white/40 text-xs mt-8"
-        >
+        {/* Security Badge */}
+        <div className="flex items-center justify-center gap-1.5 text-muted-foreground text-xs mt-8">
           <Lock className="w-3 h-3" />
           <span>Ende-zu-Ende verschlüsselt</span>
-        </motion.div>
+        </div>
       </motion.div>
     </div>
   );

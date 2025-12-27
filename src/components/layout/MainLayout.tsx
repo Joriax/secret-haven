@@ -27,15 +27,15 @@ export const MainLayout: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex bg-gradient-vault">
+    <div className="min-h-screen flex w-full bg-background">
       <Sidebar 
         isOpen={sidebarOpen} 
         onToggle={() => setSidebarOpen(!sidebarOpen)} 
         onSearchOpen={() => setSearchOpen(true)}
       />
       
-      <main className="flex-1 min-h-screen lg:ml-0 overflow-x-hidden">
-        <div className="p-4 lg:p-8 pt-20 lg:pt-8">
+      <main className="flex-1 min-h-screen lg:ml-0 overflow-x-hidden bg-gradient-subtle">
+        <div className="p-4 lg:p-6 pt-16 lg:pt-6">
           <Outlet />
         </div>
       </main>

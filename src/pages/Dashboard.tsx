@@ -12,11 +12,10 @@ import {
   Eye,
   Trash2,
   Shield,
-  ChevronRight,
-  Sparkles,
   Video,
   Link2,
-  ArrowUpRight
+  ArrowRight,
+  Sparkles
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -53,6 +52,19 @@ interface ViewedItem {
   title: string;
   viewedAt: string;
 }
+
+const container = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: { staggerChildren: 0.05 }
+  }
+};
+
+const item = {
+  hidden: { opacity: 0, y: 10 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.3 } }
+};
 
 export default function Dashboard() {
   const [stats, setStats] = useState<Stats>({ 
@@ -221,7 +233,7 @@ export default function Dashboard() {
       ];
 
       allRecent.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      setRecentItems(allRecent.slice(0, 4));
+      setRecentItems(allRecent.slice(0, 5));
     } catch (error) {
       console.error('Error fetching stats:', error);
     } finally {
@@ -270,7 +282,7 @@ export default function Dashboard() {
   };
 
   const formatDate = (dateString: string) => {
-    if (!dateString) return 'Unbekannt';
+    if (!dateString) return '';
     const date = new Date(dateString);
     const now = new Date();
     const diff = now.getTime() - date.getTime();
@@ -295,224 +307,109 @@ export default function Dashboard() {
 
   const totalItems = stats.notes + stats.photos + stats.files + stats.tiktokVideos + stats.links;
 
+  const quickStats = [
+    { label: 'Notizen', value: stats.notes, icon: FileText, path: '/notes', color: 'text-primary' },
+    { label: 'Fotos', value: stats.photos, icon: Image, path: '/photos', color: 'text-pink-400' },
+    { label: 'Dateien', value: stats.files, icon: FolderOpen, path: '/files', color: 'text-blue-400' },
+    { label: 'TikToks', value: stats.tiktokVideos, icon: Video, path: '/tiktok', color: 'text-cyan-400' },
+    { label: 'Links', value: stats.links, icon: Link2, path: '/links', color: 'text-orange-400' },
+  ];
+
   return (
-    <div className="min-h-screen p-4 md:p-6 lg:p-8">
+    <div className="max-w-6xl mx-auto space-y-8">
       <CreateNewDialog isOpen={createDialogOpen} onClose={() => setCreateDialogOpen(false)} />
       
       {/* Header */}
       <motion.div 
-        initial={{ opacity: 0, y: -20 }}
+        initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="mb-8"
+        className="flex items-start justify-between"
       >
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">
-              {isDecoyMode ? 'Vault' : 'Dein Vault'}
-            </h1>
-            <p className="text-muted-foreground mt-1">
-              {isLoading ? 'Laden...' : `${totalItems} Elemente gespeichert`}
-            </p>
-          </div>
-          {!isDecoyMode && (
-            <Button
-              onClick={() => setCreateDialogOpen(true)}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-full px-6"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Neu
-            </Button>
-          )}
+        <div>
+          <h1 className="text-2xl md:text-3xl font-display font-bold text-foreground">
+            {isDecoyMode ? 'Vault' : 'Willkommen zurück'}
+          </h1>
+          <p className="text-muted-foreground mt-1 text-sm">
+            {isLoading ? 'Laden...' : `${totalItems} Elemente in deinem Vault`}
+          </p>
         </div>
+        {!isDecoyMode && (
+          <Button
+            onClick={() => setCreateDialogOpen(true)}
+            size="sm"
+            className="bg-primary hover:bg-primary/90"
+          >
+            <Plus className="w-4 h-4 mr-1.5" />
+            Neu
+          </Button>
+        )}
       </motion.div>
 
-      {/* Bento Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 auto-rows-[120px] md:auto-rows-[140px]">
+      {/* Quick Stats */}
+      <motion.div 
+        variants={container}
+        initial="hidden"
+        animate="show"
+        className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3"
+      >
+        {quickStats.map((stat) => (
+          <motion.div key={stat.label} variants={item}>
+            <Link to={stat.path}>
+              <div className="bento-card group">
+                <div className="flex items-center justify-between mb-3">
+                  <stat.icon className={cn("w-5 h-5", stat.color)} />
+                  <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+                <div className="stat-value">
+                  {isLoading ? <Skeleton className="h-9 w-12" /> : stat.value}
+                </div>
+                <div className="text-sm text-muted-foreground mt-1">{stat.label}</div>
+              </div>
+            </Link>
+          </motion.div>
+        ))}
+      </motion.div>
+
+      {/* Main Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         
-        {/* Notes - Large Card */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.1 }}
-          className="col-span-2 row-span-2"
-        >
-          <Link to="/notes" className="block h-full">
-            <div className="h-full rounded-3xl bg-gradient-to-br from-violet-500/20 to-purple-600/20 border border-violet-500/20 p-6 hover:border-violet-500/40 transition-all group relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-violet-500/10 rounded-full blur-3xl" />
-              <div className="relative z-10 h-full flex flex-col">
-                <div className="w-12 h-12 rounded-2xl bg-violet-500/20 flex items-center justify-center mb-4">
-                  <FileText className="w-6 h-6 text-violet-400" />
-                </div>
-                <div className="mt-auto">
-                  <div className="text-4xl md:text-5xl font-bold text-foreground mb-1">
-                    {isLoading ? <Skeleton className="h-12 w-16" /> : stats.notes}
-                  </div>
-                  <div className="text-muted-foreground">Notizen</div>
-                </div>
-                <ArrowUpRight className="absolute top-6 right-6 w-5 h-5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-              </div>
-            </div>
-          </Link>
-        </motion.div>
-
-        {/* Photos */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.15 }}
-          className="col-span-1 row-span-1"
-        >
-          <Link to="/photos" className="block h-full">
-            <div className="h-full rounded-3xl bg-gradient-to-br from-pink-500/20 to-rose-600/20 border border-pink-500/20 p-4 hover:border-pink-500/40 transition-all group relative overflow-hidden">
-              <Image className="w-5 h-5 text-pink-400 mb-2" />
-              <div className="text-2xl font-bold text-foreground">
-                {isLoading ? <Skeleton className="h-7 w-10" /> : stats.photos}
-              </div>
-              <div className="text-xs text-muted-foreground">Fotos</div>
-            </div>
-          </Link>
-        </motion.div>
-
-        {/* Files */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
+        {/* Recent Activity */}
+        <motion.div 
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="col-span-1 row-span-1"
+          className="lg:col-span-2"
         >
-          <Link to="/files" className="block h-full">
-            <div className="h-full rounded-3xl bg-gradient-to-br from-blue-500/20 to-indigo-600/20 border border-blue-500/20 p-4 hover:border-blue-500/40 transition-all group relative overflow-hidden">
-              <FolderOpen className="w-5 h-5 text-blue-400 mb-2" />
-              <div className="text-2xl font-bold text-foreground">
-                {isLoading ? <Skeleton className="h-7 w-10" /> : stats.files}
+          <div className="bento-card h-full">
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-primary" />
+                <h2 className="font-display font-semibold text-foreground">Kürzlich bearbeitet</h2>
               </div>
-              <div className="text-xs text-muted-foreground">Dateien</div>
+              <Link to="/recently-added" className="text-xs text-muted-foreground hover:text-primary transition-colors">
+                Alle anzeigen
+              </Link>
             </div>
-          </Link>
-        </motion.div>
-
-        {/* TikTok Videos */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.25 }}
-          className="col-span-1 row-span-1"
-        >
-          <Link to="/tiktok" className="block h-full">
-            <div className="h-full rounded-3xl bg-gradient-to-br from-cyan-500/20 to-teal-600/20 border border-cyan-500/20 p-4 hover:border-cyan-500/40 transition-all group relative overflow-hidden">
-              <Video className="w-5 h-5 text-cyan-400 mb-2" />
-              <div className="text-2xl font-bold text-foreground">
-                {isLoading ? <Skeleton className="h-7 w-10" /> : stats.tiktokVideos}
-              </div>
-              <div className="text-xs text-muted-foreground">TikToks</div>
-            </div>
-          </Link>
-        </motion.div>
-
-        {/* Links */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.3 }}
-          className="col-span-1 row-span-1"
-        >
-          <Link to="/links" className="block h-full">
-            <div className="h-full rounded-3xl bg-gradient-to-br from-orange-500/20 to-amber-600/20 border border-orange-500/20 p-4 hover:border-orange-500/40 transition-all group relative overflow-hidden">
-              <Link2 className="w-5 h-5 text-orange-400 mb-2" />
-              <div className="text-2xl font-bold text-foreground">
-                {isLoading ? <Skeleton className="h-7 w-10" /> : stats.links}
-              </div>
-              <div className="text-xs text-muted-foreground">Links</div>
-            </div>
-          </Link>
-        </motion.div>
-
-        {/* Favorites - Tall Card */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.35 }}
-          className="col-span-1 row-span-2"
-        >
-          <Link to="/favorites" className="block h-full">
-            <div className="h-full rounded-3xl bg-gradient-to-b from-yellow-500/20 to-amber-600/10 border border-yellow-500/20 p-4 hover:border-yellow-500/40 transition-all relative overflow-hidden">
-              <Star className="w-5 h-5 text-yellow-400 fill-yellow-400/50 mb-3" />
-              <div className="text-3xl font-bold text-foreground mb-1">
-                {isLoading ? <Skeleton className="h-9 w-12" /> : stats.favorites}
-              </div>
-              <div className="text-sm text-muted-foreground">Favoriten</div>
-              <div className="absolute bottom-4 left-4 right-4">
-                <div className="flex gap-1">
-                  {[...Array(Math.min(stats.favorites, 5))].map((_, i) => (
-                    <Star key={i} className="w-3 h-3 text-yellow-400/60 fill-yellow-400/40" />
-                  ))}
-                </div>
-              </div>
-            </div>
-          </Link>
-        </motion.div>
-
-        {/* Secret Safe */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.4 }}
-          className="col-span-1 row-span-1"
-        >
-          <Link to="/secret-texts" className="block h-full">
-            <div className="h-full rounded-3xl bg-gradient-to-br from-emerald-500/20 to-green-600/20 border border-emerald-500/20 p-4 hover:border-emerald-500/40 transition-all relative overflow-hidden">
-              <Shield className="w-5 h-5 text-emerald-400 mb-2" />
-              <div className="text-2xl font-bold text-foreground">
-                {isLoading ? <Skeleton className="h-7 w-10" /> : stats.secretTexts}
-              </div>
-              <div className="text-xs text-muted-foreground">Geheim</div>
-            </div>
-          </Link>
-        </motion.div>
-
-        {/* Secure Notes */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.45 }}
-          className="col-span-1 row-span-1"
-        >
-          <Link to="/notes?filter=secure" className="block h-full">
-            <div className="h-full rounded-3xl bg-gradient-to-br from-red-500/20 to-rose-600/20 border border-red-500/20 p-4 hover:border-red-500/40 transition-all relative overflow-hidden">
-              <Lock className="w-5 h-5 text-red-400 mb-2" />
-              <div className="text-2xl font-bold text-foreground">
-                {isLoading ? <Skeleton className="h-7 w-10" /> : stats.secureNotes}
-              </div>
-              <div className="text-xs text-muted-foreground">Sicher</div>
-            </div>
-          </Link>
-        </motion.div>
-
-        {/* Recent Activity - Wide Card */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.5 }}
-          className="col-span-2 row-span-2"
-        >
-          <div className="h-full rounded-3xl bg-card/50 border border-border p-5 relative overflow-hidden">
-            <div className="flex items-center gap-2 mb-4">
-              <Clock className="w-4 h-4 text-primary" />
-              <span className="text-sm font-medium text-foreground">Kürzlich</span>
-            </div>
+            
             {isLoading ? (
               <div className="space-y-3">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="flex items-center gap-3">
-                    <Skeleton className="w-8 h-8 rounded-lg" />
-                    <Skeleton className="h-4 flex-1" />
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-muted/30">
+                    <Skeleton className="w-9 h-9 rounded-lg" />
+                    <div className="flex-1">
+                      <Skeleton className="h-4 w-32" />
+                    </div>
+                    <Skeleton className="h-3 w-8" />
                   </div>
                 ))}
               </div>
             ) : recentItems.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-[calc(100%-40px)] text-muted-foreground">
-                <Sparkles className="w-8 h-8 mb-2 opacity-50" />
-                <p className="text-sm">Noch keine Aktivität</p>
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
+                  <Sparkles className="w-6 h-6 text-muted-foreground" />
+                </div>
+                <p className="text-muted-foreground text-sm">Noch keine Aktivität</p>
+                <p className="text-muted-foreground text-xs mt-1">Erstelle deinen ersten Eintrag</p>
               </div>
             ) : (
               <div className="space-y-2">
@@ -520,12 +417,17 @@ export default function Dashboard() {
                   const Icon = getIconForType(item.type);
                   return (
                     <Link key={`${item.type}-${item.id}`} to={getPathForType(item.type)}>
-                      <div className="flex items-center gap-3 p-2 rounded-xl hover:bg-muted/30 transition-colors">
-                        <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
+                      <div className="flex items-center gap-3 p-3 rounded-xl hover:bg-muted/50 transition-colors group">
+                        <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center">
                           <Icon className="w-4 h-4 text-muted-foreground" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm text-foreground truncate">{item.title}</p>
+                          <div className="flex items-center gap-2">
+                            {item.isFavorite && <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />}
+                            <p className="text-sm text-foreground truncate group-hover:text-primary transition-colors">
+                              {item.title}
+                            </p>
+                          </div>
                         </div>
                         <span className="text-xs text-muted-foreground">{formatDate(item.date)}</span>
                       </div>
@@ -537,64 +439,87 @@ export default function Dashboard() {
           </div>
         </motion.div>
 
-        {/* Storage */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.55 }}
-          className="col-span-2 row-span-1"
+        {/* Side Panel */}
+        <motion.div 
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="space-y-4"
         >
-          <div className="h-full rounded-3xl bg-gradient-to-r from-slate-500/10 to-slate-600/10 border border-slate-500/20 p-4 relative overflow-hidden">
-            <div className="flex items-center justify-between h-full">
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">Speicher</div>
-                <div className="text-2xl font-bold text-foreground">
-                  {isLoading ? <Skeleton className="h-7 w-20" /> : formatSize(stats.totalSize)}
+          {/* Quick Actions */}
+          <div className="bento-card">
+            <h3 className="font-display font-semibold text-foreground mb-4">Schnellzugriff</h3>
+            <div className="grid grid-cols-2 gap-2">
+              <Link to="/favorites">
+                <div className="p-3 rounded-xl bg-muted/50 hover:bg-muted transition-colors text-center">
+                  <Star className="w-5 h-5 text-yellow-500 mx-auto mb-1" />
+                  <span className="text-xs text-muted-foreground">Favoriten</span>
+                  <p className="text-lg font-semibold text-foreground">{stats.favorites}</p>
                 </div>
+              </Link>
+              <Link to="/secret-texts">
+                <div className="p-3 rounded-xl bg-muted/50 hover:bg-muted transition-colors text-center">
+                  <Shield className="w-5 h-5 text-emerald-500 mx-auto mb-1" />
+                  <span className="text-xs text-muted-foreground">Geheim</span>
+                  <p className="text-lg font-semibold text-foreground">{stats.secretTexts}</p>
+                </div>
+              </Link>
+              <Link to="/notes?filter=secure">
+                <div className="p-3 rounded-xl bg-muted/50 hover:bg-muted transition-colors text-center">
+                  <Lock className="w-5 h-5 text-primary mx-auto mb-1" />
+                  <span className="text-xs text-muted-foreground">Sicher</span>
+                  <p className="text-lg font-semibold text-foreground">{stats.secureNotes}</p>
+                </div>
+              </Link>
+              <Link to="/trash">
+                <div className="p-3 rounded-xl bg-muted/50 hover:bg-muted transition-colors text-center">
+                  <Trash2 className="w-5 h-5 text-muted-foreground mx-auto mb-1" />
+                  <span className="text-xs text-muted-foreground">Papierkorb</span>
+                  <p className="text-lg font-semibold text-foreground">{stats.trashedItems}</p>
+                </div>
+              </Link>
+            </div>
+          </div>
+
+          {/* Storage */}
+          <div className="bento-card">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Speichernutzung</p>
+                <p className="text-2xl font-display font-bold text-foreground">
+                  {isLoading ? <Skeleton className="h-8 w-20" /> : formatSize(stats.totalSize)}
+                </p>
               </div>
-              <div className="w-16 h-16 rounded-full border-4 border-primary/30 flex items-center justify-center">
-                <div className="w-10 h-10 rounded-full bg-primary/20" />
+              <div className="w-14 h-14 rounded-full border-4 border-muted flex items-center justify-center relative">
+                <div className="absolute inset-1 rounded-full border-4 border-primary border-t-transparent animate-spin" style={{ animationDuration: '3s' }} />
               </div>
             </div>
           </div>
-        </motion.div>
 
-        {/* Recently Viewed */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.6 }}
-          className="col-span-1 row-span-1"
-        >
-          <Link to="/recently-viewed" className="block h-full">
-            <div className="h-full rounded-3xl bg-muted/30 border border-border p-4 hover:border-primary/30 transition-all relative overflow-hidden">
-              <Eye className="w-5 h-5 text-muted-foreground mb-2" />
-              <div className="text-2xl font-bold text-foreground">
-                {isLoading ? <Skeleton className="h-7 w-10" /> : viewedItems.length}
+          {/* Recently Viewed */}
+          {viewedItems.length > 0 && (
+            <div className="bento-card">
+              <div className="flex items-center gap-2 mb-3">
+                <Eye className="w-4 h-4 text-muted-foreground" />
+                <h3 className="text-sm font-medium text-foreground">Zuletzt angesehen</h3>
               </div>
-              <div className="text-xs text-muted-foreground">Angesehen</div>
-            </div>
-          </Link>
-        </motion.div>
-
-        {/* Trash */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.65 }}
-          className="col-span-1 row-span-1"
-        >
-          <Link to="/trash" className="block h-full">
-            <div className="h-full rounded-3xl bg-muted/30 border border-border p-4 hover:border-destructive/30 transition-all relative overflow-hidden">
-              <Trash2 className="w-5 h-5 text-muted-foreground mb-2" />
-              <div className="text-2xl font-bold text-foreground">
-                {isLoading ? <Skeleton className="h-7 w-10" /> : stats.trashedItems}
+              <div className="space-y-1">
+                {viewedItems.slice(0, 3).map((item) => {
+                  const Icon = getIconForType(item.type);
+                  return (
+                    <Link key={`viewed-${item.id}`} to={getPathForType(item.type)}>
+                      <div className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted/50 transition-colors">
+                        <Icon className="w-3.5 h-3.5 text-muted-foreground" />
+                        <span className="text-xs text-foreground truncate flex-1">{item.title}</span>
+                        <span className="text-[10px] text-muted-foreground">{formatDate(item.viewedAt)}</span>
+                      </div>
+                    </Link>
+                  );
+                })}
               </div>
-              <div className="text-xs text-muted-foreground">Papierkorb</div>
             </div>
-          </Link>
+          )}
         </motion.div>
-
       </div>
     </div>
   );
