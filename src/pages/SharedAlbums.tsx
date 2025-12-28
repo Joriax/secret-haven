@@ -428,7 +428,8 @@ export default function SharedAlbums() {
               <motion.div
                 key={album.id}
                 variants={itemVariants}
-                className="bg-card border border-border rounded-xl p-5"
+                className="group bg-card border border-border rounded-xl p-5 hover:border-primary/30 hover:shadow-lg transition-all cursor-pointer"
+                onClick={() => window.location.href = `/shared-album/${album.id}`}
               >
                 <div className="flex items-start gap-4">
                   <div
@@ -439,10 +440,30 @@ export default function SharedAlbums() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="font-semibold text-foreground truncate">{album.name}</h3>
-                    <p className="text-xs text-muted-foreground">
+                    {album.description && (
+                      <p className="text-sm text-muted-foreground line-clamp-1">{album.description}</p>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-1">
                       Von Benutzer {album.owner_id.slice(0, 8)}...
                     </p>
                   </div>
+                </div>
+                <div className="mt-4 pt-4 border-t border-border flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">
+                    Geteilt {format(new Date(album.created_at), 'dd. MMM yyyy', { locale: de })}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      window.location.href = `/shared-album/${album.id}`;
+                    }}
+                  >
+                    <ExternalLink className="w-3 h-3 mr-1" />
+                    Album öffnen
+                  </Button>
                 </div>
               </motion.div>
             ))}
