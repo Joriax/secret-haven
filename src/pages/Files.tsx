@@ -23,18 +23,21 @@ import {
   List,
   Tag,
   CheckSquare,
-  Square
+  Square,
+  Folder
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTags } from '@/hooks/useTags';
 import { useViewHistory } from '@/hooks/useViewHistory';
+import { useFileAlbums, FileAlbum } from '@/hooks/useFileAlbums';
 import { cn } from '@/lib/utils';
 import { useLocation } from 'react-router-dom';
 import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
 import { RenameDialog } from '@/components/RenameDialog';
 import { MultiSelectBar } from '@/components/MultiSelect';
 import { TagManager } from '@/components/TagManager';
+import { FileAlbumSidebar } from '@/components/FileAlbumSidebar';
 import { toast } from 'sonner';
 
 interface FileItem {
@@ -46,6 +49,7 @@ interface FileItem {
   is_favorite?: boolean;
   tags?: string[];
   url?: string;
+  album_id?: string | null;
 }
 
 type ViewMode = 'grid' | 'list';
@@ -86,12 +90,20 @@ export default function Files() {
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const [showBulkTagManager, setShowBulkTagManager] = useState(false);
+  const [selectedAlbum, setSelectedAlbum] = useState<FileAlbum | null>(null);
+  const [isAlbumSidebarOpen, setIsAlbumSidebarOpen] = useState(true);
+  const [dragOverAlbum, setDragOverAlbum] = useState<string | null>(null);
+  const [draggedFile, setDraggedFile] = useState<FileItem | null>(null);
+  const [showNewAlbumModal, setShowNewAlbumModal] = useState(false);
+  const [newAlbumName, setNewAlbumName] = useState('');
+  const [showAlbumPicker, setShowAlbumPicker] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const touchStartX = useRef<number | null>(null);
   const { userId, isDecoyMode } = useAuth();
   const location = useLocation();
   const { tags } = useTags();
   const { recordView } = useViewHistory();
+  const { albums, createAlbum, deleteAlbum, togglePin, fetchAlbums } = useFileAlbums();
 
   const fetchFiles = useCallback(async () => {
     if (!userId) return;
@@ -443,6 +455,11 @@ export default function Files() {
   const filteredFiles = useMemo(() => {
     let result = files;
 
+    // Filter by album
+    if (selectedAlbum) {
+      result = result.filter(f => f.album_id === selectedAlbum.id);
+    }
+
     // Filter by type
     if (filterMode === 'images') {
       result = result.filter(f => f.mime_type.startsWith('image/'));
@@ -467,7 +484,87 @@ export default function Files() {
     }
 
     return result;
-  }, [files, filterMode, selectedTagFilter, searchQuery]);
+  }, [files, filterMode, selectedTagFilter, searchQuery, selectedAlbum]);
+
+  // Calculate file counts per album
+  const fileCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    files.forEach(f => {
+      if (f.album_id) {
+        counts[f.album_id] = (counts[f.album_id] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [files]);
+
+  // Handle drag to album
+  const handleFileDragStart = (file: FileItem) => {
+    setDraggedFile(file);
+  };
+
+  const handleAlbumDragOver = (e: React.DragEvent, albumId: string) => {
+    e.preventDefault();
+    setDragOverAlbum(albumId);
+  };
+
+  const handleAlbumDragLeave = () => {
+    setDragOverAlbum(null);
+  };
+
+  const handleAlbumDrop = async (e: React.DragEvent, albumId: string) => {
+    e.preventDefault();
+    setDragOverAlbum(null);
+    
+    if (draggedFile) {
+      try {
+        const { error } = await supabase
+          .from('files')
+          .update({ album_id: albumId })
+          .eq('id', draggedFile.id);
+
+        if (error) throw error;
+
+        setFiles(prev => prev.map(f => 
+          f.id === draggedFile.id ? { ...f, album_id: albumId } : f
+        ));
+        toast.success('Datei zum Album hinzugefügt');
+      } catch (error) {
+        console.error('Error moving file to album:', error);
+        toast.error('Fehler beim Verschieben');
+      }
+      setDraggedFile(null);
+    }
+  };
+
+  const handleCreateAlbum = async () => {
+    if (!newAlbumName.trim()) return;
+    await createAlbum(newAlbumName);
+    setNewAlbumName('');
+    setShowNewAlbumModal(false);
+  };
+
+  const handleBulkMoveToAlbum = async (albumId: string | null) => {
+    if (selectedItems.size === 0) return;
+
+    try {
+      const { error } = await supabase
+        .from('files')
+        .update({ album_id: albumId })
+        .in('id', Array.from(selectedItems));
+
+      if (error) throw error;
+
+      setFiles(prev => prev.map(f => 
+        selectedItems.has(f.id) ? { ...f, album_id: albumId } : f
+      ));
+      setSelectedItems(new Set());
+      setIsMultiSelectMode(false);
+      setShowAlbumPicker(false);
+      toast.success(albumId ? 'Zu Album hinzugefügt' : 'Aus Album entfernt');
+    } catch (error) {
+      console.error('Error moving to album:', error);
+    }
+  };
 
   // Previewable files for lightbox
   const previewableFiles = useMemo(() => 
@@ -530,7 +627,117 @@ export default function Files() {
   const currentPreviewFile = previewIndex !== null ? previewableFiles[previewIndex] : null;
 
   return (
-    <div className="space-y-6">
+    <div className={cn("space-y-6", isAlbumSidebarOpen && "mr-64")}>
+      {/* Album Sidebar */}
+      <FileAlbumSidebar
+        albums={albums}
+        isOpen={isAlbumSidebarOpen}
+        onToggle={() => setIsAlbumSidebarOpen(!isAlbumSidebarOpen)}
+        dragOverAlbum={dragOverAlbum}
+        onDragOver={handleAlbumDragOver}
+        onDragLeave={handleAlbumDragLeave}
+        onDrop={handleAlbumDrop}
+        onCreateAlbum={() => setShowNewAlbumModal(true)}
+        onDeleteAlbum={deleteAlbum}
+        onTogglePin={togglePin}
+        selectedAlbum={selectedAlbum}
+        onSelectAlbum={setSelectedAlbum}
+        fileCounts={fileCounts}
+      />
+
+      {/* New Album Modal */}
+      <AnimatePresence>
+        {showNewAlbumModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowNewAlbumModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-card border border-border rounded-2xl p-6 w-full max-w-sm"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-semibold text-foreground mb-4">Neues Album</h3>
+              <input
+                type="text"
+                value={newAlbumName}
+                onChange={(e) => setNewAlbumName(e.target.value)}
+                placeholder="Album-Name"
+                className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary mb-4"
+                autoFocus
+                onKeyDown={(e) => e.key === 'Enter' && handleCreateAlbum()}
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowNewAlbumModal(false)}
+                  className="flex-1 px-4 py-2 rounded-xl border border-border hover:bg-muted transition-colors"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  onClick={handleCreateAlbum}
+                  className="flex-1 px-4 py-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                >
+                  Erstellen
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Album Picker for bulk move */}
+      <AnimatePresence>
+        {showAlbumPicker && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowAlbumPicker(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-card border border-border rounded-2xl p-6 w-full max-w-sm max-h-[60vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-semibold text-foreground mb-4">Album auswählen</h3>
+              <div className="space-y-2">
+                <button
+                  onClick={() => handleBulkMoveToAlbum(null)}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-muted transition-colors"
+                >
+                  <Folder className="w-5 h-5 text-muted-foreground" />
+                  <span className="text-foreground">Kein Album</span>
+                </button>
+                {albums.map((album) => (
+                  <button
+                    key={album.id}
+                    onClick={() => handleBulkMoveToAlbum(album.id)}
+                    className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-muted transition-colors"
+                  >
+                    <div 
+                      className="w-8 h-8 rounded-lg flex items-center justify-center"
+                      style={{ backgroundColor: `${album.color}20` }}
+                    >
+                      <Folder className="w-4 h-4" style={{ color: album.color }} />
+                    </div>
+                    <span className="text-foreground">{album.name}</span>
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
@@ -539,9 +746,11 @@ export default function Files() {
       >
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-foreground">Dateien</h1>
+            <h1 className="text-2xl md:text-3xl font-bold text-foreground">
+              {selectedAlbum ? selectedAlbum.name : 'Dateien'}
+            </h1>
             <p className="text-muted-foreground text-sm">
-              {files.length} Dateien • {formatFileSize(files.reduce((acc, f) => acc + f.size, 0))} gesamt
+              {filteredFiles.length} Dateien • {formatFileSize(filteredFiles.reduce((acc, f) => acc + f.size, 0))} gesamt
             </p>
           </div>
 

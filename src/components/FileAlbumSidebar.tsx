@@ -1,18 +1,11 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { FolderPlus, ChevronRight, ChevronLeft, Image as ImageIcon, Trash2, Pin, PinOff } from 'lucide-react';
+import { FolderPlus, ChevronRight, ChevronLeft, Folder, Trash2, Pin, PinOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { FileAlbum } from '@/hooks/useFileAlbums';
 
-interface Album {
-  id: string;
-  name: string;
-  cover_url?: string;
-  count?: number;
-  is_pinned?: boolean;
-}
-
-interface AlbumSidebarProps {
-  albums: Album[];
+interface FileAlbumSidebarProps {
+  albums: FileAlbum[];
   isOpen: boolean;
   onToggle: () => void;
   dragOverAlbum: string | null;
@@ -22,11 +15,12 @@ interface AlbumSidebarProps {
   onCreateAlbum: () => void;
   onDeleteAlbum?: (albumId: string) => void;
   onTogglePin?: (albumId: string) => void;
-  selectedAlbum?: Album | null;
-  onSelectAlbum?: (album: Album | null) => void;
+  selectedAlbum?: FileAlbum | null;
+  onSelectAlbum?: (album: FileAlbum | null) => void;
+  fileCounts?: Record<string, number>;
 }
 
-export function AlbumSidebar({
+export function FileAlbumSidebar({
   albums,
   isOpen,
   onToggle,
@@ -39,16 +33,11 @@ export function AlbumSidebar({
   onTogglePin,
   selectedAlbum,
   onSelectAlbum,
-}: AlbumSidebarProps) {
-  // Sort albums: pinned first
-  const sortedAlbums = [...albums].sort((a, b) => {
-    if (a.is_pinned !== b.is_pinned) return b.is_pinned ? 1 : -1;
-    return 0;
-  });
-
+  fileCounts = {},
+}: FileAlbumSidebarProps) {
   return (
     <>
-      {/* Toggle Button - always visible */}
+      {/* Toggle Button */}
       <button
         onClick={onToggle}
         className={cn(
@@ -76,7 +65,7 @@ export function AlbumSidebar({
         {/* Header */}
         <div className="p-4 border-b border-border">
           <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-foreground">Alben</h3>
+            <h3 className="font-semibold text-foreground">Datei-Alben</h3>
             <button
               onClick={onCreateAlbum}
               className="p-2 hover:bg-muted rounded-lg transition-colors"
@@ -86,13 +75,33 @@ export function AlbumSidebar({
             </button>
           </div>
           <p className="text-xs text-muted-foreground mt-1">
-            Fotos hierher ziehen
+            Dateien hierher ziehen
           </p>
+        </div>
+
+        {/* All Files Option */}
+        <div className="p-2 border-b border-border">
+          <button
+            onClick={() => onSelectAlbum?.(null)}
+            className={cn(
+              "w-full flex items-center gap-3 p-2 rounded-xl transition-all",
+              !selectedAlbum 
+                ? "bg-primary/10 ring-1 ring-primary/50"
+                : "hover:bg-muted/50"
+            )}
+          >
+            <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
+              <Folder className="w-5 h-5 text-muted-foreground" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="font-medium text-foreground text-sm">Alle Dateien</p>
+            </div>
+          </button>
         </div>
 
         {/* Albums List */}
         <div className="flex-1 overflow-y-auto p-2 space-y-2">
-          {sortedAlbums.length === 0 ? (
+          {albums.length === 0 ? (
             <div className="text-center py-8">
               <FolderPlus className="w-10 h-10 mx-auto mb-2 text-muted-foreground/30" />
               <p className="text-sm text-muted-foreground">Keine Alben</p>
@@ -104,7 +113,7 @@ export function AlbumSidebar({
               </button>
             </div>
           ) : (
-            sortedAlbums.map((album) => (
+            albums.map((album) => (
               <motion.div
                 key={album.id}
                 onDragOver={(e) => onDragOver(e, album.id)}
@@ -121,19 +130,12 @@ export function AlbumSidebar({
                 )}
               >
                 <div className="flex items-center gap-3 p-2">
-                  {/* Album Thumbnail */}
-                  <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-muted">
-                    {album.cover_url ? (
-                      <img
-                        src={album.cover_url}
-                        alt={album.name}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <ImageIcon className="w-5 h-5 text-muted-foreground" />
-                      </div>
-                    )}
+                  {/* Album Icon */}
+                  <div 
+                    className="w-10 h-10 rounded-lg flex items-center justify-center"
+                    style={{ backgroundColor: `${album.color}20` }}
+                  >
+                    <Folder className="w-5 h-5" style={{ color: album.color }} />
                   </div>
 
                   {/* Album Info */}
@@ -147,7 +149,7 @@ export function AlbumSidebar({
                       </p>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {album.count || 0} Elemente
+                      {fileCounts[album.id] || 0} Dateien
                     </p>
                   </div>
 
@@ -201,10 +203,10 @@ export function AlbumSidebar({
           )}
         </div>
 
-        {/* Footer hint */}
+        {/* Footer */}
         <div className="p-3 border-t border-border">
           <p className="text-xs text-muted-foreground text-center">
-            📸 Foto auf Album ziehen zum Hinzufügen
+            📁 Datei auf Album ziehen zum Hinzufügen
           </p>
         </div>
       </motion.div>

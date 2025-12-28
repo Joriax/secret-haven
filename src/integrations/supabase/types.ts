@@ -18,18 +18,21 @@ export type Database = {
         Row: {
           created_at: string | null
           id: string
+          is_pinned: boolean | null
           name: string
           user_id: string
         }
         Insert: {
           created_at?: string | null
           id?: string
+          is_pinned?: boolean | null
           name: string
           user_id: string
         }
         Update: {
           created_at?: string | null
           id?: string
+          is_pinned?: boolean | null
           name?: string
           user_id?: string
         }
@@ -43,8 +46,39 @@ export type Database = {
           },
         ]
       }
+      file_albums: {
+        Row: {
+          color: string | null
+          created_at: string | null
+          icon: string | null
+          id: string
+          is_pinned: boolean | null
+          name: string
+          user_id: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string | null
+          icon?: string | null
+          id?: string
+          is_pinned?: boolean | null
+          name: string
+          user_id: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string | null
+          icon?: string | null
+          id?: string
+          is_pinned?: boolean | null
+          name?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       files: {
         Row: {
+          album_id: string | null
           deleted_at: string | null
           filename: string
           id: string
@@ -56,6 +90,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          album_id?: string | null
           deleted_at?: string | null
           filename: string
           id?: string
@@ -67,6 +102,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          album_id?: string | null
           deleted_at?: string | null
           filename?: string
           id?: string
@@ -78,6 +114,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "files_album_id_fkey"
+            columns: ["album_id"]
+            isOneToOne: false
+            referencedRelation: "file_albums"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "files_user_id_fkey"
             columns: ["user_id"]
