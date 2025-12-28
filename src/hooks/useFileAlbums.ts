@@ -150,6 +150,25 @@ export function useFileAlbums() {
     }
   };
 
+  const updateAlbum = async (albumId: string, updates: { name?: string; color?: string; icon?: string }) => {
+    try {
+      const { error } = await supabase
+        .from('file_albums')
+        .update(updates)
+        .eq('id', albumId);
+
+      if (error) throw error;
+
+      setAlbums(prev => prev.map(a => 
+        a.id === albumId ? { ...a, ...updates } : a
+      ));
+      toast.success('Album aktualisiert');
+    } catch (error) {
+      console.error('Error updating album:', error);
+      toast.error('Fehler beim Aktualisieren');
+    }
+  };
+
   return {
     albums,
     isLoading,
@@ -158,5 +177,6 @@ export function useFileAlbums() {
     deleteAlbum,
     togglePin,
     renameAlbum,
+    updateAlbum,
   };
 }

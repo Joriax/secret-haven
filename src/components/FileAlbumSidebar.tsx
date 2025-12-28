@@ -8,6 +8,7 @@ import {
   Trash2, 
   Pin, 
   PinOff,
+  Pencil,
   Music,
   BookOpen,
   Archive,
@@ -35,6 +36,7 @@ interface FileAlbumSidebarProps {
   onCreateAlbum: () => void;
   onDeleteAlbum?: (albumId: string) => void;
   onTogglePin?: (albumId: string) => void;
+  onEditAlbum?: (album: FileAlbum) => void;
   selectedAlbum?: FileAlbum | null;
   onSelectAlbum?: (album: FileAlbum | null) => void;
   fileCounts?: Record<string, number>;
@@ -51,6 +53,7 @@ export function FileAlbumSidebar({
   onCreateAlbum,
   onDeleteAlbum,
   onTogglePin,
+  onEditAlbum,
   selectedAlbum,
   onSelectAlbum,
   fileCounts = {},
@@ -192,6 +195,18 @@ export function FileAlbumSidebar({
 
                   {/* Actions */}
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                    {onEditAlbum && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEditAlbum(album);
+                        }}
+                        className="p-1.5 rounded-lg hover:bg-muted transition-all"
+                        title="Album bearbeiten"
+                      >
+                        <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+                      </button>
+                    )}
                     {onTogglePin && (
                       <button
                         onClick={(e) => {

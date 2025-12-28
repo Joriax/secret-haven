@@ -111,13 +111,15 @@ export default function Files() {
   const [newAlbumColor, setNewAlbumColor] = useState('#6366f1');
   const [newAlbumIcon, setNewAlbumIcon] = useState('folder');
   const [showAlbumPicker, setShowAlbumPicker] = useState(false);
+  const [editingAlbum, setEditingAlbum] = useState<FileAlbum | null>(null);
+  const [showEditAlbumModal, setShowEditAlbumModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const touchStartX = useRef<number | null>(null);
   const { userId, isDecoyMode } = useAuth();
   const location = useLocation();
   const { tags } = useTags();
   const { recordView } = useViewHistory();
-  const { albums, createAlbum, deleteAlbum, togglePin, fetchAlbums } = useFileAlbums();
+  const { albums, createAlbum, deleteAlbum, togglePin, updateAlbum, fetchAlbums } = useFileAlbums();
 
   const fetchFiles = useCallback(async () => {
     if (!userId) return;
@@ -656,6 +658,10 @@ export default function Files() {
         onCreateAlbum={() => setShowNewAlbumModal(true)}
         onDeleteAlbum={deleteAlbum}
         onTogglePin={togglePin}
+        onEditAlbum={(album) => {
+          setEditingAlbum({ ...album });
+          setShowEditAlbumModal(true);
+        }}
         selectedAlbum={selectedAlbum}
         onSelectAlbum={setSelectedAlbum}
         fileCounts={fileCounts}
@@ -789,6 +795,147 @@ export default function Files() {
                   className="flex-1 px-4 py-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
                 >
                   Erstellen
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Edit Album Modal */}
+        {showEditAlbumModal && editingAlbum && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowEditAlbumModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-card border border-border rounded-2xl p-6 w-full max-w-md"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-semibold text-foreground mb-4">Album bearbeiten</h3>
+              
+              {/* Preview */}
+              <div className="flex items-center gap-3 mb-4 p-3 rounded-xl bg-muted/50">
+                <div 
+                  className="w-12 h-12 rounded-xl flex items-center justify-center"
+                  style={{ backgroundColor: `${editingAlbum.color}20` }}
+                >
+                  {(() => {
+                    const icons: Record<string, React.ReactNode> = {
+                      folder: <Folder className="w-6 h-6" style={{ color: editingAlbum.color }} />,
+                      music: <Music className="w-6 h-6" style={{ color: editingAlbum.color }} />,
+                      book: <BookOpen className="w-6 h-6" style={{ color: editingAlbum.color }} />,
+                      archive: <Archive className="w-6 h-6" style={{ color: editingAlbum.color }} />,
+                      briefcase: <Briefcase className="w-6 h-6" style={{ color: editingAlbum.color }} />,
+                      camera: <Camera className="w-6 h-6" style={{ color: editingAlbum.color }} />,
+                      film: <Film className="w-6 h-6" style={{ color: editingAlbum.color }} />,
+                      heart: <Heart className="w-6 h-6" style={{ color: editingAlbum.color }} />,
+                      home: <Home className="w-6 h-6" style={{ color: editingAlbum.color }} />,
+                      image: <ImageIcon className="w-6 h-6" style={{ color: editingAlbum.color }} />,
+                      inbox: <Inbox className="w-6 h-6" style={{ color: editingAlbum.color }} />,
+                      layers: <Layers className="w-6 h-6" style={{ color: editingAlbum.color }} />,
+                      package: <Package className="w-6 h-6" style={{ color: editingAlbum.color }} />,
+                    };
+                    return icons[editingAlbum.icon] || icons.folder;
+                  })()}
+                </div>
+                <span className="text-foreground font-medium">
+                  {editingAlbum.name || 'Album-Name'}
+                </span>
+              </div>
+              
+              <input
+                type="text"
+                value={editingAlbum.name}
+                onChange={(e) => setEditingAlbum({ ...editingAlbum, name: e.target.value })}
+                placeholder="Album-Name"
+                className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary mb-4"
+                autoFocus
+              />
+              
+              {/* Color Selection */}
+              <div className="mb-4">
+                <p className="text-sm text-muted-foreground mb-2">Farbe</p>
+                <div className="flex flex-wrap gap-2">
+                  {['#6366f1', '#ec4899', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#8b5cf6', '#ef4444', '#64748b'].map((color) => (
+                    <button
+                      key={color}
+                      onClick={() => setEditingAlbum({ ...editingAlbum, color })}
+                      className={cn(
+                        "w-8 h-8 rounded-full transition-all",
+                        editingAlbum.color === color && "ring-2 ring-offset-2 ring-offset-card ring-foreground"
+                      )}
+                      style={{ backgroundColor: color }}
+                    />
+                  ))}
+                </div>
+              </div>
+              
+              {/* Icon Selection */}
+              <div className="mb-4">
+                <p className="text-sm text-muted-foreground mb-2">Icon</p>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { id: 'folder', Icon: Folder },
+                    { id: 'music', Icon: Music },
+                    { id: 'book', Icon: BookOpen },
+                    { id: 'archive', Icon: Archive },
+                    { id: 'briefcase', Icon: Briefcase },
+                    { id: 'camera', Icon: Camera },
+                    { id: 'film', Icon: Film },
+                    { id: 'heart', Icon: Heart },
+                    { id: 'home', Icon: Home },
+                    { id: 'image', Icon: ImageIcon },
+                    { id: 'inbox', Icon: Inbox },
+                    { id: 'layers', Icon: Layers },
+                    { id: 'package', Icon: Package },
+                  ].map(({ id, Icon }) => (
+                    <button
+                      key={id}
+                      onClick={() => setEditingAlbum({ ...editingAlbum, icon: id })}
+                      className={cn(
+                        "w-9 h-9 rounded-lg flex items-center justify-center transition-all",
+                        editingAlbum.icon === id 
+                          ? "bg-primary text-primary-foreground" 
+                          : "bg-muted hover:bg-muted/80 text-muted-foreground"
+                      )}
+                    >
+                      <Icon className="w-4 h-4" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setShowEditAlbumModal(false);
+                    setEditingAlbum(null);
+                  }}
+                  className="flex-1 px-4 py-2 rounded-xl border border-border hover:bg-muted transition-colors"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  onClick={() => {
+                    if (editingAlbum) {
+                      updateAlbum(editingAlbum.id, {
+                        name: editingAlbum.name,
+                        color: editingAlbum.color,
+                        icon: editingAlbum.icon,
+                      });
+                      setShowEditAlbumModal(false);
+                      setEditingAlbum(null);
+                    }
+                  }}
+                  className="flex-1 px-4 py-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                >
+                  Speichern
                 </button>
               </div>
             </motion.div>
