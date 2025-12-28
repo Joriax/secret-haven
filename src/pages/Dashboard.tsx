@@ -267,6 +267,8 @@ export default function Dashboard() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'photos' }, fetchDashboardData)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'files' }, fetchDashboardData)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'secret_texts' }, fetchDashboardData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tiktok_videos' }, fetchDashboardData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'links' }, fetchDashboardData)
       .subscribe();
 
     return () => {

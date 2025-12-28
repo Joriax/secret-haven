@@ -52,6 +52,20 @@ export function useLinks() {
     fetchLinks();
   }, [fetchLinks]);
 
+  // Real-time updates
+  useEffect(() => {
+    if (!userId) return;
+
+    const channel = supabase
+      .channel('links-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'links' }, fetchLinks)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userId, fetchLinks]);
+
   const createLink = async (url: string, title: string, folderId?: string, description?: string, imageUrl?: string) => {
     if (!userId) return null;
 

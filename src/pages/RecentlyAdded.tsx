@@ -116,9 +116,9 @@ export default function RecentlyAdded() {
 
     const channel = supabase
       .channel('recent-changes')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notes' }, fetchRecentItems)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'photos' }, fetchRecentItems)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'files' }, fetchRecentItems)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, fetchRecentItems)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'photos' }, fetchRecentItems)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'files' }, fetchRecentItems)
       .subscribe();
 
     return () => {

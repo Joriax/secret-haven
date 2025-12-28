@@ -102,6 +102,23 @@ export default function RecentlyViewed() {
     fetchViewedItems();
   }, [fetchViewedItems]);
 
+  // Real-time updates
+  useEffect(() => {
+    if (!userId) return;
+
+    const channel = supabase
+      .channel('viewed-items-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'view_history' }, fetchViewedItems)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, fetchViewedItems)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'photos' }, fetchViewedItems)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'files' }, fetchViewedItems)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userId, fetchViewedItems]);
+
   const getIcon = (type: string) => {
     switch (type) {
       case 'note': return FileText;
