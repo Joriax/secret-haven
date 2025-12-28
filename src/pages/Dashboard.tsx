@@ -34,6 +34,8 @@ interface Stats {
   secretTexts: number;
   totalFilesSize: number;
   totalPhotosSize: number;
+  totalAttachmentsSize: number;
+  totalStorageSize: number;
   trashedItems: number;
   tiktokVideos: number;
   links: number;
@@ -69,8 +71,10 @@ const item = {
 
 export default function Dashboard() {
   const [stats, setStats] = useState<Stats>({ 
-    notes: 0, photos: 0, files: 0, favorites: 0, 
-    secureNotes: 0, secretTexts: 0, totalFilesSize: 0, totalPhotosSize: 0, trashedItems: 0, tiktokVideos: 0, links: 0
+    notes: 0, photos: 0, files: 0, favorites: 0,
+    secureNotes: 0, secretTexts: 0,
+    totalFilesSize: 0, totalPhotosSize: 0, totalAttachmentsSize: 0, totalStorageSize: 0,
+    trashedItems: 0, tiktokVideos: 0, links: 0
   });
   const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
   const [viewedItems, setViewedItems] = useState<ViewedItem[]>([]);
@@ -146,8 +150,10 @@ export default function Dashboard() {
     try {
       if (isDecoyMode) {
         setStats({ 
-          notes: 0, photos: 0, files: 0, favorites: 0, 
-          secureNotes: 0, secretTexts: 0, totalFilesSize: 0, totalPhotosSize: 0, trashedItems: 0, tiktokVideos: 0, links: 0
+          notes: 0, photos: 0, files: 0, favorites: 0,
+          secureNotes: 0, secretTexts: 0,
+          totalFilesSize: 0, totalPhotosSize: 0, totalAttachmentsSize: 0, totalStorageSize: 0,
+          trashedItems: 0, tiktokVideos: 0, links: 0
         });
         setRecentItems([]);
         setIsLoading(false);
@@ -175,7 +181,7 @@ export default function Dashboard() {
       ] = await Promise.all([
         supabase.from('notes').select('id', { count: 'exact', head: true }).eq('user_id', userId).is('deleted_at', null),
         supabase.from('photos').select('id', { count: 'exact', head: true }).eq('user_id', userId).is('deleted_at', null),
-        supabase.from('files').select('id, size', { count: 'exact' }).eq('user_id', userId).is('deleted_at', null),
+        supabase.from('files').select('id', { count: 'exact', head: true }).eq('user_id', userId).is('deleted_at', null),
         supabase.from('notes').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('is_favorite', true).is('deleted_at', null),
         supabase.from('photos').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('is_favorite', true).is('deleted_at', null),
         supabase.from('files').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('is_favorite', true).is('deleted_at', null),
@@ -192,20 +198,46 @@ export default function Dashboard() {
         supabase.from('files').select('id, filename, uploaded_at, is_favorite').eq('user_id', userId).is('deleted_at', null).order('uploaded_at', { ascending: false }).limit(5),
       ]);
 
-      const totalFilesSize = filesRes.data?.reduce((acc, f) => acc + (f.size || 0), 0) || 0;
       const totalFavorites = (favNotesRes.count || 0) + (favPhotosRes.count || 0) + (favFilesRes.count || 0);
       const totalTrashed = (trashedNotesRes.count || 0) + (trashedPhotosRes.count || 0) + (trashedFilesRes.count || 0) + (trashedTiktokRes.count || 0);
 
-      // Calculate photos storage size from storage API
-      let totalPhotosSize = 0;
-      try {
-        const { data: storageFiles } = await supabase.storage.from('photos').list(userId);
-        if (storageFiles) {
-          totalPhotosSize = storageFiles.reduce((acc, f) => acc + (f.metadata?.size || 0), 0);
+      // Calculate storage sizes from buckets (includes also items still sitting in trash)
+      const sumBucketSize = async (bucketId: 'photos' | 'files' | 'note-attachments') => {
+        try {
+          let total = 0;
+          const limit = 1000;
+
+          for (let offset = 0; ; offset += limit) {
+            const { data, error } = await supabase.storage
+              .from(bucketId)
+              .list(userId, { limit, offset });
+
+            if (error) throw error;
+
+            const items = data || [];
+            total += items.reduce((acc, f: any) => {
+              const raw = f?.metadata?.size;
+              const size = typeof raw === 'number' ? raw : (Number.parseInt(String(raw ?? 0), 10) || 0);
+              return acc + size;
+            }, 0);
+
+            if (items.length < limit) break;
+          }
+
+          return total;
+        } catch (e) {
+          console.error(`Error calculating ${bucketId} size:`, e);
+          return 0;
         }
-      } catch (e) {
-        console.error('Error calculating photos size:', e);
-      }
+      };
+
+      const [storagePhotosSize, storageFilesSize, storageAttachmentsSize] = await Promise.all([
+        sumBucketSize('photos'),
+        sumBucketSize('files'),
+        sumBucketSize('note-attachments'),
+      ]);
+
+      const storageTotalSize = storagePhotosSize + storageFilesSize + storageAttachmentsSize;
 
       setStats({
         notes: notesRes.count || 0,
@@ -214,12 +246,15 @@ export default function Dashboard() {
         favorites: totalFavorites,
         secureNotes: secureNotesRes.count || 0,
         secretTexts: secretTextsRes.count || 0,
-        totalFilesSize,
-        totalPhotosSize,
+        totalFilesSize: storageFilesSize,
+        totalPhotosSize: storagePhotosSize,
+        totalAttachmentsSize: storageAttachmentsSize,
+        totalStorageSize: storageTotalSize,
         trashedItems: totalTrashed,
         tiktokVideos: tiktokRes.count || 0,
         links: linksRes.count || 0,
       });
+
 
       const allRecent: RecentItem[] = [
         ...(recentNotesRes.data || []).map(n => ({
@@ -502,10 +537,10 @@ export default function Dashboard() {
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Speichernutzung</p>
                 <p className="text-2xl font-display font-bold text-foreground">
-                  {isLoading ? <Skeleton className="h-8 w-20" /> : formatSize(stats.totalFilesSize + stats.totalPhotosSize)}
+                  {isLoading ? <Skeleton className="h-8 w-20" /> : formatSize(stats.totalStorageSize)}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {formatSize(stats.totalFilesSize)} Dateien · {formatSize(stats.totalPhotosSize)} Fotos
+                  {formatSize(stats.totalFilesSize)} Dateien · {formatSize(stats.totalPhotosSize)} Fotos · {formatSize(stats.totalAttachmentsSize)} Anhänge
                 </p>
               </div>
               <div className="w-14 h-14 rounded-full border-4 border-muted flex items-center justify-center relative">
