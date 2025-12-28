@@ -326,7 +326,8 @@ export default function SharedAlbums() {
               <motion.div
                 key={album.id}
                 variants={itemVariants}
-                className="group relative bg-card border border-border rounded-xl p-5 hover:border-primary/30 hover:shadow-lg transition-all"
+                className="group relative bg-card border border-border rounded-xl p-5 hover:border-primary/30 hover:shadow-lg transition-all cursor-pointer"
+                onClick={() => window.location.href = `/shared-album/${album.id}`}
               >
                 {/* Header */}
                 <div className="flex items-start gap-4 mb-4">
@@ -344,29 +345,34 @@ export default function SharedAlbums() {
                   </div>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100">
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 opacity-0 group-hover:opacity-100"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <MoreVertical className="w-4 h-4" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => openEditDialog(album)}>
+                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openEditDialog(album); }}>
                         <Edit2 className="w-4 h-4 mr-2" />
                         Bearbeiten
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => openShareDialog(album)}>
+                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openShareDialog(album); }}>
                         <Settings2 className="w-4 h-4 mr-2" />
                         Teilen-Einstellungen
                       </DropdownMenuItem>
                       {album.public_link_token && (
-                        <DropdownMenuItem onClick={() => window.open(`/shared/${album.public_link_token}`, '_blank')}>
+                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); window.open(`/shared/${album.public_link_token}`, '_blank'); }}>
                           <ExternalLink className="w-4 h-4 mr-2" />
-                          Album öffnen
+                          Öffentlicher Link
                         </DropdownMenuItem>
                       )}
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         className="text-destructive"
-                        onClick={() => setDeleteConfirm({ isOpen: true, album })}
+                        onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ isOpen: true, album }); }}
                       >
                         <Trash2 className="w-4 h-4 mr-2" />
                         Löschen
@@ -402,7 +408,7 @@ export default function SharedAlbums() {
                     variant="ghost"
                     size="sm"
                     className="h-7 text-xs"
-                    onClick={() => openShareDialog(album)}
+                    onClick={(e) => { e.stopPropagation(); openShareDialog(album); }}
                   >
                     <Users className="w-3 h-3 mr-1" />
                     Teilen
