@@ -85,17 +85,22 @@ export default function Admin() {
   const { isAdmin, isLoading: rolesLoading, assignRole, roles } = useUserRoles();
 
   const fetchData = useCallback(async () => {
-    if (!userId) return;
+    console.log('Admin fetchData called, userId:', userId);
+    if (!userId) {
+      console.log('No userId, skipping fetch');
+      return;
+    }
 
     try {
       setIsLoading(true);
 
       // Fetch all users
-      const { data: usersData } = await supabase
+      const { data: usersData, error: usersError } = await supabase
         .from('vault_users')
         .select('id, created_at, recovery_key, admin_notes')
         .order('created_at', { ascending: false });
 
+      console.log('Fetched users:', usersData, 'Error:', usersError);
       setUsers(usersData as VaultUser[] || []);
 
       // Fetch counts
@@ -179,10 +184,13 @@ export default function Admin() {
   }, [userId]);
 
   useEffect(() => {
+    console.log('Admin useEffect - isAdmin:', isAdmin, 'rolesLoading:', rolesLoading);
     if (isAdmin) {
       fetchData();
     }
   }, [isAdmin, fetchData]);
+
+  console.log('Admin render - isAdmin:', isAdmin, 'rolesLoading:', rolesLoading, 'users:', users.length);
 
   const handleCreateUser = async () => {
     if (!newUserPin || newUserPin.length !== 6) {
