@@ -15,6 +15,7 @@ export interface SharedAlbum {
   content_type: ContentType;
   public_link_enabled: boolean;
   public_link_token: string | null;
+  public_link_password: string | null;
   created_at: string;
   updated_at: string;
   item_count?: number;

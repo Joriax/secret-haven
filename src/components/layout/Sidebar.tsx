@@ -19,7 +19,8 @@ import {
   Play,
   Star,
   Clock,
-  Crown
+  Crown,
+  Share2
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserRoles } from '@/hooks/useUserRoles';
@@ -44,6 +45,7 @@ const secondaryNavItems = [
   { icon: Star, label: 'Favoriten', path: '/favorites' },
   { icon: Clock, label: 'Verlauf', path: '/recently-viewed' },
   { icon: Tag, label: 'Tags', path: '/tags' },
+  { icon: Share2, label: 'Geteilte Alben', path: '/shared-albums' },
 ];
 
 const securityNavItems = [
