@@ -24,7 +24,19 @@ import {
   Tag,
   CheckSquare,
   Square,
-  Folder
+  Folder,
+  Music,
+  BookOpen,
+  Archive,
+  Briefcase,
+  Camera,
+  Film,
+  Heart,
+  Home,
+  Image as ImageIcon,
+  Inbox,
+  Layers,
+  Package
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -96,6 +108,8 @@ export default function Files() {
   const [draggedFile, setDraggedFile] = useState<FileItem | null>(null);
   const [showNewAlbumModal, setShowNewAlbumModal] = useState(false);
   const [newAlbumName, setNewAlbumName] = useState('');
+  const [newAlbumColor, setNewAlbumColor] = useState('#6366f1');
+  const [newAlbumIcon, setNewAlbumIcon] = useState('folder');
   const [showAlbumPicker, setShowAlbumPicker] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const touchStartX = useRef<number | null>(null);
@@ -538,8 +552,10 @@ export default function Files() {
 
   const handleCreateAlbum = async () => {
     if (!newAlbumName.trim()) return;
-    await createAlbum(newAlbumName);
+    await createAlbum(newAlbumName, newAlbumColor, newAlbumIcon);
     setNewAlbumName('');
+    setNewAlbumColor('#6366f1');
+    setNewAlbumIcon('folder');
     setShowNewAlbumModal(false);
   };
 
@@ -659,10 +675,41 @@ export default function Files() {
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-card border border-border rounded-2xl p-6 w-full max-w-sm"
+              className="bg-card border border-border rounded-2xl p-6 w-full max-w-md"
               onClick={(e) => e.stopPropagation()}
             >
               <h3 className="text-lg font-semibold text-foreground mb-4">Neues Album</h3>
+              
+              {/* Preview */}
+              <div className="flex items-center gap-3 mb-4 p-3 rounded-xl bg-muted/50">
+                <div 
+                  className="w-12 h-12 rounded-xl flex items-center justify-center"
+                  style={{ backgroundColor: `${newAlbumColor}20` }}
+                >
+                  {(() => {
+                    const icons: Record<string, React.ReactNode> = {
+                      folder: <Folder className="w-6 h-6" style={{ color: newAlbumColor }} />,
+                      music: <Music className="w-6 h-6" style={{ color: newAlbumColor }} />,
+                      book: <BookOpen className="w-6 h-6" style={{ color: newAlbumColor }} />,
+                      archive: <Archive className="w-6 h-6" style={{ color: newAlbumColor }} />,
+                      briefcase: <Briefcase className="w-6 h-6" style={{ color: newAlbumColor }} />,
+                      camera: <Camera className="w-6 h-6" style={{ color: newAlbumColor }} />,
+                      film: <Film className="w-6 h-6" style={{ color: newAlbumColor }} />,
+                      heart: <Heart className="w-6 h-6" style={{ color: newAlbumColor }} />,
+                      home: <Home className="w-6 h-6" style={{ color: newAlbumColor }} />,
+                      image: <ImageIcon className="w-6 h-6" style={{ color: newAlbumColor }} />,
+                      inbox: <Inbox className="w-6 h-6" style={{ color: newAlbumColor }} />,
+                      layers: <Layers className="w-6 h-6" style={{ color: newAlbumColor }} />,
+                      package: <Package className="w-6 h-6" style={{ color: newAlbumColor }} />,
+                    };
+                    return icons[newAlbumIcon] || icons.folder;
+                  })()}
+                </div>
+                <span className="text-foreground font-medium">
+                  {newAlbumName || 'Album-Name'}
+                </span>
+              </div>
+              
               <input
                 type="text"
                 value={newAlbumName}
@@ -670,11 +717,69 @@ export default function Files() {
                 placeholder="Album-Name"
                 className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary mb-4"
                 autoFocus
-                onKeyDown={(e) => e.key === 'Enter' && handleCreateAlbum()}
               />
+              
+              {/* Color Selection */}
+              <div className="mb-4">
+                <p className="text-sm text-muted-foreground mb-2">Farbe</p>
+                <div className="flex flex-wrap gap-2">
+                  {['#6366f1', '#ec4899', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#8b5cf6', '#ef4444', '#64748b'].map((color) => (
+                    <button
+                      key={color}
+                      onClick={() => setNewAlbumColor(color)}
+                      className={cn(
+                        "w-8 h-8 rounded-full transition-all",
+                        newAlbumColor === color && "ring-2 ring-offset-2 ring-offset-card ring-foreground"
+                      )}
+                      style={{ backgroundColor: color }}
+                    />
+                  ))}
+                </div>
+              </div>
+              
+              {/* Icon Selection */}
+              <div className="mb-4">
+                <p className="text-sm text-muted-foreground mb-2">Icon</p>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { id: 'folder', Icon: Folder },
+                    { id: 'music', Icon: Music },
+                    { id: 'book', Icon: BookOpen },
+                    { id: 'archive', Icon: Archive },
+                    { id: 'briefcase', Icon: Briefcase },
+                    { id: 'camera', Icon: Camera },
+                    { id: 'film', Icon: Film },
+                    { id: 'heart', Icon: Heart },
+                    { id: 'home', Icon: Home },
+                    { id: 'image', Icon: ImageIcon },
+                    { id: 'inbox', Icon: Inbox },
+                    { id: 'layers', Icon: Layers },
+                    { id: 'package', Icon: Package },
+                  ].map(({ id, Icon }) => (
+                    <button
+                      key={id}
+                      onClick={() => setNewAlbumIcon(id)}
+                      className={cn(
+                        "w-9 h-9 rounded-lg flex items-center justify-center transition-all",
+                        newAlbumIcon === id 
+                          ? "bg-primary text-primary-foreground" 
+                          : "bg-muted hover:bg-muted/80 text-muted-foreground"
+                      )}
+                    >
+                      <Icon className="w-4 h-4" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
               <div className="flex gap-2">
                 <button
-                  onClick={() => setShowNewAlbumModal(false)}
+                  onClick={() => {
+                    setShowNewAlbumModal(false);
+                    setNewAlbumName('');
+                    setNewAlbumColor('#6366f1');
+                    setNewAlbumIcon('folder');
+                  }}
                   className="flex-1 px-4 py-2 rounded-xl border border-border hover:bg-muted transition-colors"
                 >
                   Abbrechen

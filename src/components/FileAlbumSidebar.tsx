@@ -1,6 +1,26 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { FolderPlus, ChevronRight, ChevronLeft, Folder, Trash2, Pin, PinOff } from 'lucide-react';
+import { 
+  FolderPlus, 
+  ChevronRight, 
+  ChevronLeft, 
+  Folder, 
+  Trash2, 
+  Pin, 
+  PinOff,
+  Music,
+  BookOpen,
+  Archive,
+  Briefcase,
+  Camera,
+  Film,
+  Heart,
+  Home,
+  Image as ImageIcon,
+  Inbox,
+  Layers,
+  Package
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { FileAlbum } from '@/hooks/useFileAlbums';
 
@@ -135,7 +155,24 @@ export function FileAlbumSidebar({
                     className="w-10 h-10 rounded-lg flex items-center justify-center"
                     style={{ backgroundColor: `${album.color}20` }}
                   >
-                    <Folder className="w-5 h-5" style={{ color: album.color }} />
+                    {(() => {
+                      const iconMap: Record<string, React.ReactNode> = {
+                        folder: <Folder className="w-5 h-5" style={{ color: album.color }} />,
+                        music: <Music className="w-5 h-5" style={{ color: album.color }} />,
+                        book: <BookOpen className="w-5 h-5" style={{ color: album.color }} />,
+                        archive: <Archive className="w-5 h-5" style={{ color: album.color }} />,
+                        briefcase: <Briefcase className="w-5 h-5" style={{ color: album.color }} />,
+                        camera: <Camera className="w-5 h-5" style={{ color: album.color }} />,
+                        film: <Film className="w-5 h-5" style={{ color: album.color }} />,
+                        heart: <Heart className="w-5 h-5" style={{ color: album.color }} />,
+                        home: <Home className="w-5 h-5" style={{ color: album.color }} />,
+                        image: <ImageIcon className="w-5 h-5" style={{ color: album.color }} />,
+                        inbox: <Inbox className="w-5 h-5" style={{ color: album.color }} />,
+                        layers: <Layers className="w-5 h-5" style={{ color: album.color }} />,
+                        package: <Package className="w-5 h-5" style={{ color: album.color }} />,
+                      };
+                      return iconMap[album.icon] || iconMap.folder;
+                    })()}
                   </div>
 
                   {/* Album Info */}

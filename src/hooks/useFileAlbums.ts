@@ -47,7 +47,7 @@ export function useFileAlbums() {
     fetchAlbums();
   }, [fetchAlbums]);
 
-  const createAlbum = async (name: string) => {
+  const createAlbum = async (name: string, color?: string, icon?: string) => {
     if (!userId) return null;
 
     try {
@@ -56,6 +56,8 @@ export function useFileAlbums() {
         .insert({
           user_id: userId,
           name: name.trim(),
+          color: color || '#6366f1',
+          icon: icon || 'folder',
         })
         .select()
         .single();
