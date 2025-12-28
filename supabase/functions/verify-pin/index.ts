@@ -23,6 +23,14 @@ async function verifyPin(pin: string, storedHash: string): Promise<boolean> {
   return newHash === storedHash;
 }
 
+function normalizeRecoveryKey(key: string): string {
+  return key.trim().toUpperCase().replace(/\s+/g, '');
+}
+
+function normalizeRecoveryKeyComparable(key: string): string {
+  return normalizeRecoveryKey(key).replace(/-/g, '');
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -48,11 +56,10 @@ serve(async (req) => {
         );
       }
 
-      // Get user from database
+      // Get users from database
       const { data: users, error: fetchError } = await supabase
         .from('vault_users')
-        .select('id, pin_hash, decoy_pin_hash')
-        .limit(1);
+        .select('id, pin_hash, decoy_pin_hash');
 
       if (fetchError) {
         console.error('Database error:', fetchError);
@@ -63,7 +70,7 @@ serve(async (req) => {
       if (!users || users.length === 0) {
         console.log('No user found, creating default user with PIN 123456');
         const defaultHash = await hashPin('123456');
-        
+
         const { data: newUser, error: createError } = await supabase
           .from('vault_users')
           .insert({ pin_hash: defaultHash })
@@ -75,81 +82,88 @@ serve(async (req) => {
           throw createError;
         }
 
-        // Check if entered PIN matches default
         if (pin === '123456') {
           console.log('Login successful with default PIN');
           return new Response(
             JSON.stringify({ success: true, userId: newUser.id, isDecoy: false }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
-        } else {
-          console.log('Wrong PIN for default user');
-          return new Response(
-            JSON.stringify({ success: false, error: 'Falscher PIN' }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
-          );
         }
+
+        console.log('Wrong PIN for default user');
+        return new Response(
+          JSON.stringify({ success: false, error: 'Falscher PIN' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
 
-      const user = users[0];
-      
-      // Check if it's the decoy PIN first
-      if (user.decoy_pin_hash) {
-        const isDecoy = await verifyPin(pin, user.decoy_pin_hash);
-        if (isDecoy) {
-          console.log('Decoy PIN verification successful');
+      // Find matching user (decoy PIN has priority)
+      for (const user of users) {
+        if (user.decoy_pin_hash) {
+          const isDecoy = await verifyPin(pin, user.decoy_pin_hash);
+          if (isDecoy) {
+            console.log('Decoy PIN verification successful');
+            return new Response(
+              JSON.stringify({ success: true, userId: user.id, isDecoy: true }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+        }
+
+        const isMain = await verifyPin(pin, user.pin_hash);
+        if (isMain) {
+          console.log('PIN verification successful');
           return new Response(
-            JSON.stringify({ success: true, userId: user.id, isDecoy: true }),
+            JSON.stringify({ success: true, userId: user.id, isDecoy: false }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
       }
-      
-      // Verify main PIN
-      const isValid = await verifyPin(pin, user.pin_hash);
-      
-      if (isValid) {
-        console.log('PIN verification successful');
-        return new Response(
-          JSON.stringify({ success: true, userId: user.id, isDecoy: false }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      } else {
-        console.log('PIN verification failed');
-        return new Response(
-          JSON.stringify({ success: false, error: 'Falscher PIN' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
-        );
-      }
+
+      console.log('PIN verification failed');
+      return new Response(
+        JSON.stringify({ success: false, error: 'Falscher PIN' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     else if (action === 'verify-recovery') {
       // Verify with recovery key
-      if (!recoveryKey || recoveryKey.length < 10) {
+      const normalized = normalizeRecoveryKeyComparable(recoveryKey || '');
+      if (!normalized || normalized.length < 10) {
         return new Response(
           JSON.stringify({ success: false, error: 'Ungültiger Recovery-Key' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      // Get user with matching recovery key
-      const { data: user, error: fetchError } = await supabase
+      // Compare normalized keys (avoid .single() and case/format issues)
+      const { data: candidates, error: fetchError } = await supabase
         .from('vault_users')
         .select('id, recovery_key')
-        .eq('recovery_key', recoveryKey)
-        .single();
+        .not('recovery_key', 'is', null);
 
-      if (fetchError || !user) {
+      if (fetchError) {
+        console.error('Database error:', fetchError);
+        throw fetchError;
+      }
+
+      const matched = (candidates || []).find((u) => {
+        const stored = u.recovery_key as string | null;
+        return stored ? normalizeRecoveryKeyComparable(stored) === normalized : false;
+      });
+
+      if (!matched) {
         console.log('Recovery key not found');
         return new Response(
           JSON.stringify({ success: false, error: 'Recovery-Key nicht gefunden' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
       console.log('Recovery key verification successful');
       return new Response(
-        JSON.stringify({ success: true, userId: user.id, isDecoy: false }),
+        JSON.stringify({ success: true, userId: matched.id, isDecoy: false }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

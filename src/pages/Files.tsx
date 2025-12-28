@@ -18,6 +18,7 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   FolderPlus,
   Grid3X3,
   List,
@@ -49,7 +50,14 @@ import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
 import { RenameDialog } from '@/components/RenameDialog';
 import { MultiSelectBar } from '@/components/MultiSelect';
 import { TagManager } from '@/components/TagManager';
-import { FileAlbumSidebar } from '@/components/FileAlbumSidebar';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 
 interface FileItem {
@@ -103,9 +111,10 @@ export default function Files() {
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const [showBulkTagManager, setShowBulkTagManager] = useState(false);
   const [selectedAlbum, setSelectedAlbum] = useState<FileAlbum | null>(null);
-  const [isAlbumSidebarOpen, setIsAlbumSidebarOpen] = useState(true);
-  const [dragOverAlbum, setDragOverAlbum] = useState<string | null>(null);
-  const [draggedFile, setDraggedFile] = useState<FileItem | null>(null);
+  const [deleteAlbumConfirm, setDeleteAlbumConfirm] = useState<{ isOpen: boolean; album: FileAlbum | null }>({
+    isOpen: false,
+    album: null,
+  });
   const [showNewAlbumModal, setShowNewAlbumModal] = useState(false);
   const [newAlbumName, setNewAlbumName] = useState('');
   const [newAlbumColor, setNewAlbumColor] = useState('#6366f1');
@@ -119,7 +128,7 @@ export default function Files() {
   const location = useLocation();
   const { tags } = useTags();
   const { recordView } = useViewHistory();
-  const { albums, createAlbum, deleteAlbum, togglePin, updateAlbum, fetchAlbums } = useFileAlbums();
+  const { albums, createAlbum, deleteAlbum, togglePin, updateAlbum } = useFileAlbums();
 
   const fetchFiles = useCallback(async () => {
     if (!userId) return;
@@ -513,44 +522,7 @@ export default function Files() {
     return counts;
   }, [files]);
 
-  // Handle drag to album
-  const handleFileDragStart = (file: FileItem) => {
-    setDraggedFile(file);
-  };
-
-  const handleAlbumDragOver = (e: React.DragEvent, albumId: string) => {
-    e.preventDefault();
-    setDragOverAlbum(albumId);
-  };
-
-  const handleAlbumDragLeave = () => {
-    setDragOverAlbum(null);
-  };
-
-  const handleAlbumDrop = async (e: React.DragEvent, albumId: string) => {
-    e.preventDefault();
-    setDragOverAlbum(null);
-    
-    if (draggedFile) {
-      try {
-        const { error } = await supabase
-          .from('files')
-          .update({ album_id: albumId })
-          .eq('id', draggedFile.id);
-
-        if (error) throw error;
-
-        setFiles(prev => prev.map(f => 
-          f.id === draggedFile.id ? { ...f, album_id: albumId } : f
-        ));
-        toast.success('Datei zum Album hinzugefügt');
-      } catch (error) {
-        console.error('Error moving file to album:', error);
-        toast.error('Fehler beim Verschieben');
-      }
-      setDraggedFile(null);
-    }
-  };
+  // Album-Dropzone wurde mit der Sidebar entfernt – Album-Zuordnung läuft über den Album-Filter.
 
   const handleCreateAlbum = async () => {
     if (!newAlbumName.trim()) return;
@@ -645,27 +617,7 @@ export default function Files() {
   const currentPreviewFile = previewIndex !== null ? previewableFiles[previewIndex] : null;
 
   return (
-    <div className={cn("space-y-6", isAlbumSidebarOpen && "mr-64")}>
-      {/* Album Sidebar */}
-      <FileAlbumSidebar
-        albums={albums}
-        isOpen={isAlbumSidebarOpen}
-        onToggle={() => setIsAlbumSidebarOpen(!isAlbumSidebarOpen)}
-        dragOverAlbum={dragOverAlbum}
-        onDragOver={handleAlbumDragOver}
-        onDragLeave={handleAlbumDragLeave}
-        onDrop={handleAlbumDrop}
-        onCreateAlbum={() => setShowNewAlbumModal(true)}
-        onDeleteAlbum={deleteAlbum}
-        onTogglePin={togglePin}
-        onEditAlbum={(album) => {
-          setEditingAlbum({ ...album });
-          setShowEditAlbumModal(true);
-        }}
-        selectedAlbum={selectedAlbum}
-        onSelectAlbum={setSelectedAlbum}
-        fileCounts={fileCounts}
-      />
+    <div className="space-y-6">
 
       {/* New Album Modal */}
       <AnimatePresence>
@@ -1007,6 +959,68 @@ export default function Files() {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Album Filter */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-2 rounded-xl border border-border bg-card hover:bg-muted transition-colors text-sm max-w-[14rem]",
+                    albums.length === 0 && "opacity-60"
+                  )}
+                >
+                  <Folder className="w-4 h-4 text-muted-foreground" />
+                  <span className="hidden sm:inline truncate">
+                    {selectedAlbum ? selectedAlbum.name : 'Alle Dateien'}
+                  </span>
+                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-72">
+                <DropdownMenuLabel>Album-Filter</DropdownMenuLabel>
+                <DropdownMenuItem onSelect={() => setSelectedAlbum(null)}>
+                  Alle Dateien
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {albums.length === 0 ? (
+                  <DropdownMenuItem disabled>Keine Alben</DropdownMenuItem>
+                ) : (
+                  albums.map((album) => (
+                    <DropdownMenuItem key={album.id} onSelect={() => setSelectedAlbum(album)}>
+                      <span className="truncate">{album.name}</span>
+                      <span className="ml-auto text-xs text-muted-foreground">
+                        {fileCounts[album.id] || 0}
+                      </span>
+                    </DropdownMenuItem>
+                  ))
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => setShowNewAlbumModal(true)}>
+                  <FolderPlus className="mr-2 h-4 w-4" />
+                  Neues Album…
+                </DropdownMenuItem>
+                {selectedAlbum && (
+                  <>
+                    <DropdownMenuItem
+                      onSelect={() => {
+                        setEditingAlbum({ ...selectedAlbum });
+                        setShowEditAlbumModal(true);
+                      }}
+                    >
+                      <Pencil className="mr-2 h-4 w-4" />
+                      Album bearbeiten…
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onSelect={() => setDeleteAlbumConfirm({ isOpen: true, album: selectedAlbum })}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Album löschen…
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             {/* Multi-select toggle */}
             <button
               onClick={() => {
@@ -1556,6 +1570,28 @@ export default function Files() {
         )}
       </AnimatePresence>
 
+      {/* Album Delete Confirmation */}
+      <DeleteConfirmDialog
+        isOpen={deleteAlbumConfirm.isOpen}
+        onClose={() => setDeleteAlbumConfirm({ isOpen: false, album: null })}
+        onConfirm={async () => {
+          const album = deleteAlbumConfirm.album;
+          if (!album) return;
+          const ok = await deleteAlbum(album.id);
+          if (ok && selectedAlbum?.id === album.id) {
+            setSelectedAlbum(null);
+          }
+          setDeleteAlbumConfirm({ isOpen: false, album: null });
+        }}
+        title="Album löschen"
+        itemName={deleteAlbumConfirm.album?.name || undefined}
+        description={
+          deleteAlbumConfirm.album?.name
+            ? `Möchtest du "${deleteAlbumConfirm.album.name}" löschen? Dateien bleiben erhalten und werden aus dem Album entfernt.`
+            : 'Möchtest du dieses Album löschen? Dateien bleiben erhalten und werden aus dem Album entfernt.'
+        }
+      />
+
       {/* Delete Confirmation */}
       <DeleteConfirmDialog
         isOpen={deleteConfirm.isOpen}
@@ -1563,7 +1599,6 @@ export default function Files() {
         onConfirm={deleteConfirm.isMulti ? handleMultiDelete : handleDelete}
         itemName={deleteConfirm.isMulti ? `${selectedItems.size} Dateien` : deleteConfirm.file?.filename.replace(/^\d+-/, '')}
       />
-
       {/* Rename Dialog */}
       <RenameDialog
         isOpen={renameDialog.isOpen}
