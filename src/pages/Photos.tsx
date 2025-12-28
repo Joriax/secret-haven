@@ -114,7 +114,7 @@ export default function Photos() {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const touchStartX = useRef<number | null>(null);
-  const { userId } = useAuth();
+  const { userId, isDecoyMode } = useAuth();
   const location = useLocation();
   const { tags } = useTags();
   const { logEvent } = useSecurityLogs();
@@ -122,6 +122,13 @@ export default function Photos() {
 
   const fetchData = useCallback(async () => {
     if (!userId) return;
+
+    if (isDecoyMode) {
+      setMedia([]);
+      setAlbums([]);
+      setIsLoading(false);
+      return;
+    }
 
     try {
       setIsLoading(true);
@@ -169,7 +176,7 @@ export default function Photos() {
     } finally {
       setIsLoading(false);
     }
-  }, [userId]);
+  }, [userId, isDecoyMode]);
 
   useEffect(() => {
     fetchData();
@@ -285,6 +292,37 @@ export default function Photos() {
       toast.error('Fehler beim Erstellen');
     }
   };
+
+  const deleteAlbum = async (albumId: string) => {
+    if (!userId) return;
+
+    try {
+      // First, move all photos in this album to "no album"
+      await supabase
+        .from('photos')
+        .update({ album_id: null })
+        .eq('album_id', albumId);
+
+      // Then delete the album
+      const { error } = await supabase
+        .from('albums')
+        .delete()
+        .eq('id', albumId);
+
+      if (error) throw error;
+
+      setAlbums(prev => prev.filter(a => a.id !== albumId));
+      if (selectedAlbum?.id === albumId) {
+        setSelectedAlbum(null);
+      }
+      fetchData();
+      toast.success('Album gelöscht');
+    } catch (error) {
+      console.error('Error deleting album:', error);
+      toast.error('Fehler beim Löschen');
+    }
+  };
+
 
   const handleDelete = async () => {
     if (!userId || !deleteConfirm.item) return;

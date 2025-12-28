@@ -65,7 +65,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onSearchOpen
       to={item.path}
       onClick={() => window.innerWidth < 1024 && onToggle()}
       className={cn(
-        "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative",
+        "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative ml-1",
         isActive
           ? "bg-primary/10 text-primary"
           : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
@@ -74,7 +74,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onSearchOpen
       {isActive && (
         <motion.div
           layoutId="nav-indicator"
-          className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-full"
+          className="absolute -left-1 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-primary rounded-full"
           transition={{ type: 'spring', damping: 25, stiffness: 300 }}
         />
       )}

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Fingerprint } from 'lucide-react';
+import { Fingerprint, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { PageHeader } from '@/components/PageHeader';
 import { 
   Settings as SettingsIcon, 
-  Lock, 
+  Lock,
   Shield, 
   LogOut, 
   Loader2, 
@@ -288,15 +289,12 @@ export default function Settings() {
       className="space-y-6 max-w-2xl mx-auto"
     >
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center">
-          <SettingsIcon className="w-6 h-6 text-white" />
-        </div>
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-white">Einstellungen</h1>
-          <p className="text-white/60 text-sm">Verwalte deinen Vault</p>
-        </div>
-      </div>
+      <PageHeader
+        title="Einstellungen"
+        subtitle="Verwalte deinen Vault"
+        icon={<SettingsIcon className="w-5 h-5 text-primary" />}
+        backTo="/dashboard"
+      />
 
       {/* Auto-Lock Section */}
       <div className="glass-card p-6">

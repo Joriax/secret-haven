@@ -88,13 +88,19 @@ export default function Files() {
   const [showBulkTagManager, setShowBulkTagManager] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const touchStartX = useRef<number | null>(null);
-  const { userId } = useAuth();
+  const { userId, isDecoyMode } = useAuth();
   const location = useLocation();
   const { tags } = useTags();
   const { recordView } = useViewHistory();
 
   const fetchFiles = useCallback(async () => {
     if (!userId) return;
+
+    if (isDecoyMode) {
+      setFiles([]);
+      setIsLoading(false);
+      return;
+    }
 
     try {
       const { data, error } = await supabase
@@ -125,7 +131,7 @@ export default function Files() {
     } finally {
       setIsLoading(false);
     }
-  }, [userId]);
+  }, [userId, isDecoyMode]);
 
   useEffect(() => {
     fetchFiles();
