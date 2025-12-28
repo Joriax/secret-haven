@@ -106,6 +106,7 @@ export default function Photos() {
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const [showBulkTagManager, setShowBulkTagManager] = useState(false);
   const [showAlbumPicker, setShowAlbumPicker] = useState(false);
+  const [singlePhotoAlbumPicker, setSinglePhotoAlbumPicker] = useState<MediaItem | null>(null);
   const [showTagSelector, setShowTagSelector] = useState<string | null>(null);
   const [selectedTagFilter, setSelectedTagFilter] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -545,6 +546,27 @@ export default function Photos() {
       toast.success(albumId ? 'Zu Album hinzugefügt' : 'Aus Album entfernt');
     } catch (error) {
       console.error('Error moving to album:', error);
+    }
+  };
+
+  const handleSinglePhotoMoveToAlbum = async (item: MediaItem, albumId: string | null) => {
+    try {
+      const { error } = await supabase
+        .from('photos')
+        .update({ album_id: albumId })
+        .eq('id', item.id);
+
+      if (error) throw error;
+
+      setMedia(prev => prev.map(m => 
+        m.id === item.id ? { ...m, album_id: albumId } : m
+      ));
+      setSinglePhotoAlbumPicker(null);
+      fetchData();
+      toast.success(albumId ? 'Zu Album hinzugefügt' : 'Aus Album entfernt');
+    } catch (error) {
+      console.error('Error moving photo to album:', error);
+      toast.error('Fehler beim Verschieben');
     }
   };
 
@@ -1476,6 +1498,12 @@ export default function Photos() {
                               <Tag className="w-4 h-4 text-white" />
                             </button>
                             <button
+                              onClick={(e) => { e.stopPropagation(); setSinglePhotoAlbumPicker(item); }}
+                              className="p-1.5 hover:bg-white/20 rounded-lg transition-colors"
+                            >
+                              <Folder className="w-4 h-4 text-white" />
+                            </button>
+                            <button
                               onClick={(e) => { e.stopPropagation(); downloadMedia(item); }}
                               className="p-1.5 hover:bg-white/20 rounded-lg transition-colors"
                             >
@@ -2065,6 +2093,66 @@ export default function Photos() {
               >
                 Abbrechen
               </button>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Single Photo Album Picker */}
+        {singlePhotoAlbumPicker && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setSinglePhotoAlbumPicker(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-card border border-border rounded-2xl p-6 w-full max-w-sm max-h-[60vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-semibold text-foreground mb-2">In Album verschieben</h3>
+              <p className="text-sm text-muted-foreground mb-4 truncate">
+                {singlePhotoAlbumPicker.caption || singlePhotoAlbumPicker.filename.replace(/^\d+-/, '')}
+              </p>
+              <div className="space-y-2">
+                <button
+                  onClick={() => handleSinglePhotoMoveToAlbum(singlePhotoAlbumPicker, null)}
+                  className={cn(
+                    "w-full flex items-center gap-3 p-3 rounded-xl hover:bg-muted transition-colors",
+                    !singlePhotoAlbumPicker.album_id && "bg-muted"
+                  )}
+                >
+                  <Folder className="w-5 h-5 text-muted-foreground" />
+                  <span className="text-foreground">Kein Album</span>
+                  {!singlePhotoAlbumPicker.album_id && (
+                    <span className="ml-auto text-xs text-primary">Aktuell</span>
+                  )}
+                </button>
+                {albums.map((album) => (
+                  <button
+                    key={album.id}
+                    onClick={() => handleSinglePhotoMoveToAlbum(singlePhotoAlbumPicker, album.id)}
+                    className={cn(
+                      "w-full flex items-center gap-3 p-3 rounded-xl hover:bg-muted transition-colors",
+                      singlePhotoAlbumPicker.album_id === album.id && "bg-muted"
+                    )}
+                  >
+                    <div 
+                      className="w-8 h-8 rounded-lg flex items-center justify-center"
+                      style={{ backgroundColor: `${album.color || '#6366f1'}20` }}
+                    >
+                      <Folder className="w-4 h-4" style={{ color: album.color || '#6366f1' }} />
+                    </div>
+                    <span className="text-foreground">{album.name}</span>
+                    {singlePhotoAlbumPicker.album_id === album.id && (
+                      <span className="ml-auto text-xs text-primary">Aktuell</span>
+                    )}
+                  </button>
+                ))}
+              </div>
             </motion.div>
           </motion.div>
         )}

@@ -123,6 +123,12 @@ export default function Files() {
   const [singleFileAlbumPicker, setSingleFileAlbumPicker] = useState<FileItem | null>(null);
   const [editingAlbum, setEditingAlbum] = useState<FileAlbum | null>(null);
   const [showEditAlbumModal, setShowEditAlbumModal] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ isOpen: boolean; file: FileItem | null; position: { x: number; y: number } }>({
+    isOpen: false,
+    file: null,
+    position: { x: 0, y: 0 }
+  });
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const touchStartX = useRef<number | null>(null);
   const { userId, isDecoyMode } = useAuth();
@@ -636,6 +642,57 @@ export default function Files() {
   };
 
   const currentPreviewFile = previewIndex !== null ? previewableFiles[previewIndex] : null;
+
+  // Context menu handlers
+  const handleContextMenu = (e: React.MouseEvent, file: FileItem) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({
+      isOpen: true,
+      file,
+      position: { x: e.clientX, y: e.clientY }
+    });
+  };
+
+  const handleLongPressStart = (file: FileItem, e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    longPressTimerRef.current = setTimeout(() => {
+      setContextMenu({
+        isOpen: true,
+        file,
+        position: { x: touch.clientX, y: touch.clientY }
+      });
+    }, 500);
+  };
+
+  const handleLongPressEnd = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const closeContextMenu = () => {
+    setContextMenu({ isOpen: false, file: null, position: { x: 0, y: 0 } });
+  };
+
+  // Close context menu on click outside
+  useEffect(() => {
+    const handleClick = () => closeContextMenu();
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeContextMenu();
+    };
+
+    if (contextMenu.isOpen) {
+      window.addEventListener('click', handleClick);
+      window.addEventListener('keydown', handleEscape);
+    }
+
+    return () => {
+      window.removeEventListener('click', handleClick);
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [contextMenu.isOpen]);
 
   return (
     <div className="space-y-6">
@@ -1321,6 +1378,10 @@ export default function Files() {
                     recordView('file', file.id);
                   }
                 }}
+                onContextMenu={(e) => handleContextMenu(e, file)}
+                onTouchStart={(e) => handleLongPressStart(file, e)}
+                onTouchEnd={handleLongPressEnd}
+                onTouchMove={handleLongPressEnd}
               >
                 {/* Selection checkbox */}
                 {isMultiSelectMode && (
@@ -1485,6 +1546,10 @@ export default function Files() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.03 }}
                 className="glass-card-hover p-4 flex items-center gap-4 group"
+                onContextMenu={(e) => handleContextMenu(e, file)}
+                onTouchStart={(e) => handleLongPressStart(file, e)}
+                onTouchEnd={handleLongPressEnd}
+                onTouchMove={handleLongPressEnd}
               >
                 <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center shrink-0">
                   <FileIcon className="w-6 h-6 text-primary" />
@@ -1772,6 +1837,87 @@ export default function Files() {
                 </button>
               </div>
             </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Context Menu */}
+      <AnimatePresence>
+        {contextMenu.isOpen && contextMenu.file && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.1 }}
+            className="fixed z-[100] min-w-[200px] py-2 bg-card border border-border rounded-xl shadow-xl"
+            style={{
+              left: Math.min(contextMenu.position.x, window.innerWidth - 220),
+              top: Math.min(contextMenu.position.y, window.innerHeight - 320),
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => {
+                toggleFavorite(contextMenu.file!);
+                closeContextMenu();
+              }}
+              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-muted transition-colors"
+            >
+              <Star className={cn("w-4 h-4", contextMenu.file.is_favorite ? "text-yellow-500 fill-yellow-500" : "")} />
+              {contextMenu.file.is_favorite ? 'Favorit entfernen' : 'Als Favorit'}
+            </button>
+            <button
+              onClick={() => {
+                setShowTagSelector(contextMenu.file!.id);
+                closeContextMenu();
+              }}
+              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-muted transition-colors"
+            >
+              <Tag className="w-4 h-4" />
+              Tags bearbeiten
+            </button>
+            <button
+              onClick={() => {
+                setSingleFileAlbumPicker(contextMenu.file!);
+                closeContextMenu();
+              }}
+              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-muted transition-colors"
+            >
+              <Folder className="w-4 h-4" />
+              In Album verschieben
+            </button>
+            <div className="my-1 border-t border-border" />
+            <button
+              onClick={() => {
+                downloadFile(contextMenu.file!);
+                closeContextMenu();
+              }}
+              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-muted transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              Herunterladen
+            </button>
+            <button
+              onClick={() => {
+                setRenameDialog({ isOpen: true, file: contextMenu.file! });
+                closeContextMenu();
+              }}
+              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-muted transition-colors"
+            >
+              <Pencil className="w-4 h-4" />
+              Umbenennen
+            </button>
+            <div className="my-1 border-t border-border" />
+            <button
+              onClick={() => {
+                setDeleteConfirm({ isOpen: true, file: contextMenu.file! });
+                closeContextMenu();
+              }}
+              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-destructive hover:bg-destructive/10 transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
+              Löschen
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
