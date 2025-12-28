@@ -31,7 +31,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ShareToAlbumDialog } from '@/components/ShareToAlbumDialog';
+import { AddContentToAlbumDialog } from '@/components/AddContentToAlbumDialog';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { toast } from 'sonner';
@@ -847,20 +847,14 @@ export default function SharedAlbumView() {
         )}
       </AnimatePresence>
 
-      {/* Add Content Dialog - placeholder for now */}
-      {addContentOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-xl p-6 max-w-md w-full">
-            <h2 className="text-lg font-semibold mb-4">Inhalt hinzufügen</h2>
-            <p className="text-muted-foreground mb-4">
-              Gehe zu Fotos, Notizen, Dateien, Links oder TikToks und nutze dort "Zu Album hinzufügen" um Inhalte zu diesem Album hinzuzufügen.
-            </p>
-            <Button onClick={() => setAddContentOpen(false)} className="w-full">
-              Verstanden
-            </Button>
-          </div>
-        </div>
-      )}
+      {/* Add Content Dialog */}
+      <AddContentToAlbumDialog
+        open={addContentOpen}
+        onOpenChange={setAddContentOpen}
+        albumId={albumId || ''}
+        existingItemIds={items.map(item => item.data.id)}
+        onItemsAdded={fetchAlbumData}
+      />
     </div>
   );
 }
