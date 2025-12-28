@@ -42,9 +42,9 @@ interface ContentItem {
   thumbnail?: string;
 }
 
-const getPhotoUrl = (filename: string): string => {
-  const { data } = supabase.storage.from('photos').getPublicUrl(filename);
-  return data.publicUrl;
+const getPhotoSignedUrl = async (filename: string): Promise<string> => {
+  const { data } = await supabase.storage.from('photos').createSignedUrl(filename, 3600);
+  return data?.signedUrl || '';
 };
 
 export function AddContentToAlbumDialog({
@@ -86,7 +86,7 @@ export function AddContentToAlbumDialog({
     setIsLoading(true);
 
     try {
-      // Fetch photos
+      // Fetch photos with signed URLs
       const { data: photosData } = await supabase
         .from('photos')
         .select('id, filename, caption')
@@ -95,12 +95,19 @@ export function AddContentToAlbumDialog({
         .order('uploaded_at', { ascending: false })
         .limit(100);
 
-      setPhotos((photosData || []).map(p => ({
-        id: p.id,
-        type: 'photo' as const,
-        title: p.caption || p.filename.split('/').pop() || 'Foto',
-        thumbnail: getPhotoUrl(p.filename),
-      })));
+      // Generate signed URLs for photos
+      const photosWithUrls = await Promise.all(
+        (photosData || []).map(async (p) => {
+          const thumbnail = await getPhotoSignedUrl(p.filename);
+          return {
+            id: p.id,
+            type: 'photo' as const,
+            title: p.caption || p.filename.split('/').pop() || 'Foto',
+            thumbnail,
+          };
+        })
+      );
+      setPhotos(photosWithUrls);
 
       // Fetch notes
       const { data: notesData } = await supabase

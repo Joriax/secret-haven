@@ -40,7 +40,8 @@ import {
   Music,
   Video,
   FileText,
-  Palette
+  Palette,
+  Share2,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -53,6 +54,7 @@ import { RenameDialog } from '@/components/RenameDialog';
 import { MultiSelectBar } from '@/components/MultiSelect';
 import { TagManager } from '@/components/TagManager';
 import { SharedAlbumButton } from '@/components/SharedAlbumButton';
+import { ShareToAlbumDialog } from '@/components/ShareToAlbumDialog';
 import { toast } from 'sonner';
 import { useSecurityLogs } from '@/hooks/useSecurityLogs';
 
@@ -108,6 +110,7 @@ export default function Photos() {
   const [showBulkTagManager, setShowBulkTagManager] = useState(false);
   const [showAlbumPicker, setShowAlbumPicker] = useState(false);
   const [singlePhotoAlbumPicker, setSinglePhotoAlbumPicker] = useState<MediaItem | null>(null);
+  const [shareToAlbum, setShareToAlbum] = useState<{ isOpen: boolean; photo: MediaItem | null }>({ isOpen: false, photo: null });
   const [showTagSelector, setShowTagSelector] = useState<string | null>(null);
   const [selectedTagFilter, setSelectedTagFilter] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1505,6 +1508,13 @@ export default function Photos() {
                               <Folder className="w-4 h-4 text-white" />
                             </button>
                             <button
+                              onClick={(e) => { e.stopPropagation(); setShareToAlbum({ isOpen: true, photo: item }); }}
+                              className="p-1.5 hover:bg-white/20 rounded-lg transition-colors"
+                              title="Zu geteiltem Album hinzufügen"
+                            >
+                              <Share2 className="w-4 h-4 text-white" />
+                            </button>
+                            <button
                               onClick={(e) => { e.stopPropagation(); downloadMedia(item); }}
                               className="p-1.5 hover:bg-white/20 rounded-lg transition-colors"
                             >
@@ -2173,6 +2183,15 @@ export default function Photos() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Share to Album Dialog */}
+      <ShareToAlbumDialog
+        isOpen={shareToAlbum.isOpen}
+        onClose={() => setShareToAlbum({ isOpen: false, photo: null })}
+        itemId={shareToAlbum.photo?.id || ''}
+        itemType="photo"
+        contentType="photos"
+      />
     </div>
   );
 }
