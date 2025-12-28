@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { FolderPlus, ChevronRight, ChevronLeft, Image as ImageIcon, Trash2, Pin, PinOff } from 'lucide-react';
+import { FolderPlus, ChevronRight, ChevronLeft, Image as ImageIcon, Trash2, Pin, PinOff, Pencil, Folder, Star, Heart, Video, Music } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Album {
@@ -9,7 +9,18 @@ interface Album {
   cover_url?: string;
   count?: number;
   is_pinned?: boolean;
+  color?: string;
+  icon?: string;
 }
+
+const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
+  folder: Folder,
+  star: Star,
+  heart: Heart,
+  image: Image as any,
+  video: Video,
+  music: Music,
+};
 
 interface AlbumSidebarProps {
   albums: Album[];
@@ -22,6 +33,7 @@ interface AlbumSidebarProps {
   onCreateAlbum: () => void;
   onDeleteAlbum?: (albumId: string) => void;
   onTogglePin?: (albumId: string) => void;
+  onEditAlbum?: (album: Album) => void;
   selectedAlbum?: Album | null;
   onSelectAlbum?: (album: Album | null) => void;
 }
@@ -37,6 +49,7 @@ export function AlbumSidebar({
   onCreateAlbum,
   onDeleteAlbum,
   onTogglePin,
+  onEditAlbum,
   selectedAlbum,
   onSelectAlbum,
 }: AlbumSidebarProps) {
@@ -122,7 +135,10 @@ export function AlbumSidebar({
               >
                 <div className="flex items-center gap-3 p-2">
                   {/* Album Thumbnail */}
-                  <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-muted">
+                  <div 
+                    className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center"
+                    style={{ backgroundColor: album.color || '#6366f1' }}
+                  >
                     {album.cover_url ? (
                       <img
                         src={album.cover_url}
@@ -130,9 +146,10 @@ export function AlbumSidebar({
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <ImageIcon className="w-5 h-5 text-muted-foreground" />
-                      </div>
+                      (() => {
+                        const IconComponent = iconMap[album.icon || 'folder'] || Folder;
+                        return <IconComponent className="w-5 h-5 text-white" />;
+                      })()
                     )}
                   </div>
 
@@ -153,6 +170,18 @@ export function AlbumSidebar({
 
                   {/* Actions */}
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                    {onEditAlbum && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEditAlbum(album);
+                        }}
+                        className="p-1.5 rounded-lg hover:bg-muted transition-all"
+                        title="Album bearbeiten"
+                      >
+                        <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+                      </button>
+                    )}
                     {onTogglePin && (
                       <button
                         onClick={(e) => {

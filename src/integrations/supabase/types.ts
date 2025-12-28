@@ -16,21 +16,27 @@ export type Database = {
     Tables: {
       albums: {
         Row: {
+          color: string | null
           created_at: string | null
+          icon: string | null
           id: string
           is_pinned: boolean | null
           name: string
           user_id: string
         }
         Insert: {
+          color?: string | null
           created_at?: string | null
+          icon?: string | null
           id?: string
           is_pinned?: boolean | null
           name: string
           user_id: string
         }
         Update: {
+          color?: string | null
           created_at?: string | null
+          icon?: string | null
           id?: string
           is_pinned?: boolean | null
           name?: string
