@@ -30,8 +30,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Input } from '@/components/ui/input';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
+import { toast } from 'sonner';
 
 interface SharedAlbumData {
   id: string;
@@ -41,6 +43,7 @@ interface SharedAlbumData {
   content_type: string;
   owner_id: string;
   public_link_enabled: boolean;
+  public_link_password: string | null;
 }
 
 interface AlbumItem {
@@ -75,6 +78,12 @@ export default function SharedAlbum() {
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [selectedItem, setSelectedItem] = useState<AlbumItem | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  
+  // Password protection states
+  const [needsPassword, setNeedsPassword] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [passwordError, setPasswordError] = useState(false);
+  const [isUnlocked, setIsUnlocked] = useState(false);
 
   useEffect(() => {
     if (token) {
@@ -82,7 +91,7 @@ export default function SharedAlbum() {
     }
   }, [token]);
 
-  const fetchAlbum = async () => {
+  const fetchAlbum = async (skipPasswordCheck = false) => {
     try {
       // Fetch album by public token
       const { data: albumData, error: albumError } = await supabase
@@ -99,6 +108,13 @@ export default function SharedAlbum() {
       }
 
       setAlbum(albumData as SharedAlbumData);
+      
+      // Check if password is required
+      if (albumData.public_link_password && !skipPasswordCheck && !isUnlocked) {
+        setNeedsPassword(true);
+        setIsLoading(false);
+        return;
+      }
 
       // Fetch album items
       const { data: itemsData, error: itemsError } = await supabase
@@ -141,6 +157,20 @@ export default function SharedAlbum() {
       setError('Fehler beim Laden des Albums');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handlePasswordSubmit = () => {
+    if (!album) return;
+    
+    if (passwordInput === album.public_link_password) {
+      setIsUnlocked(true);
+      setNeedsPassword(false);
+      setPasswordError(false);
+      setIsLoading(true);
+      fetchAlbum(true);
+    } else {
+      setPasswordError(true);
     }
   };
 
@@ -193,6 +223,34 @@ export default function SharedAlbum() {
     setLightboxIndex(newIndex);
   };
 
+  const handleDownload = async (item: AlbumItem) => {
+    try {
+      const bucket = item.type === 'photo' ? 'photos' : 'files';
+      const filename = item.data.filename;
+      
+      const { data, error } = await supabase.storage
+        .from(bucket)
+        .download(filename);
+      
+      if (error) throw error;
+      
+      // Create download link
+      const url = URL.createObjectURL(data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename.split('/').pop() || filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast.success('Download gestartet');
+    } catch (err) {
+      console.error('Download error:', err);
+      toast.error('Download fehlgeschlagen');
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -226,6 +284,59 @@ export default function SharedAlbum() {
 
   if (!album) {
     return <Navigate to="/login" replace />;
+  }
+
+  // Password protection screen
+  if (needsPassword) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="text-center max-w-md px-4"
+        >
+          <div 
+            className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"
+            style={{ backgroundColor: `${album.color}20` }}
+          >
+            <Lock className="w-10 h-10" style={{ color: album.color }} />
+          </div>
+          <h1 className="text-2xl font-bold text-foreground mb-2">{album.name}</h1>
+          <p className="text-muted-foreground mb-6">
+            Dieses Album ist passwortgeschützt. Bitte gib das Passwort ein.
+          </p>
+          <div className="space-y-4">
+            <div>
+              <input
+                type="password"
+                value={passwordInput}
+                onChange={(e) => {
+                  setPasswordInput(e.target.value);
+                  setPasswordError(false);
+                }}
+                onKeyDown={(e) => e.key === 'Enter' && handlePasswordSubmit()}
+                placeholder="Passwort eingeben"
+                className={cn(
+                  "w-full px-4 py-3 rounded-xl bg-muted border text-foreground text-center text-lg",
+                  passwordError ? "border-destructive" : "border-border"
+                )}
+                autoFocus
+              />
+              {passwordError && (
+                <p className="text-destructive text-sm mt-2">Falsches Passwort</p>
+              )}
+            </div>
+            <Button onClick={handlePasswordSubmit} className="w-full" size="lg">
+              Album öffnen
+            </Button>
+            <Button variant="ghost" onClick={() => window.history.back()} className="w-full">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Zurück
+            </Button>
+          </div>
+        </motion.div>
+      </div>
+    );
   }
 
   return (
@@ -395,8 +506,18 @@ export default function SharedAlbum() {
                 {/* File */}
                 {item.type === 'file' && (
                   <div className="p-5">
-                    <div className="w-12 h-12 rounded-xl bg-purple-500/10 flex items-center justify-center mb-4">
-                      <FolderOpen className="w-6 h-6 text-purple-500" />
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="w-12 h-12 rounded-xl bg-purple-500/10 flex items-center justify-center">
+                        <FolderOpen className="w-6 h-6 text-purple-500" />
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 opacity-0 group-hover:opacity-100"
+                        onClick={() => handleDownload(item)}
+                      >
+                        <Download className="w-4 h-4" />
+                      </Button>
                     </div>
                     <h3 className="font-semibold text-foreground mb-2 line-clamp-2">
                       {item.data.filename}
