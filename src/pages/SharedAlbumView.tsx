@@ -52,6 +52,7 @@ interface AlbumItem {
   added_at: string;
   added_by: string;
   added_by_name?: string;
+  signedUrl?: string; // For photos and files
 }
 
 interface UserPermission {
@@ -70,16 +71,6 @@ const containerVariants = {
 const itemVariants = {
   hidden: { opacity: 0, y: 20 },
   visible: { opacity: 1, y: 0 },
-};
-
-const getPhotoUrl = (filename: string): string => {
-  const { data } = supabase.storage.from('photos').getPublicUrl(filename);
-  return data.publicUrl;
-};
-
-const getFileUrl = (filename: string): string => {
-  const { data } = supabase.storage.from('files').getPublicUrl(filename);
-  return data.publicUrl;
 };
 
 export default function SharedAlbumView() {
@@ -174,11 +165,17 @@ export default function SharedAlbumView() {
       for (const item of itemsData || []) {
         let itemData = null;
         let itemType: AlbumItem['type'] = 'photo';
+        let signedUrl: string | undefined;
 
         if (item.photo_id) {
           const { data } = await supabase.from('photos').select('*').eq('id', item.photo_id).single();
           itemData = data;
           itemType = 'photo';
+          // Get signed URL for the photo
+          if (data?.filename) {
+            const { data: urlData } = await supabase.storage.from('photos').createSignedUrl(data.filename, 3600);
+            signedUrl = urlData?.signedUrl;
+          }
         } else if (item.note_id) {
           const { data } = await supabase.from('notes').select('id, title, content, created_at, updated_at').eq('id', item.note_id).single();
           itemData = data;
@@ -187,6 +184,11 @@ export default function SharedAlbumView() {
           const { data } = await supabase.from('files').select('*').eq('id', item.file_id).single();
           itemData = data;
           itemType = 'file';
+          // Get signed URL for the file
+          if (data?.filename) {
+            const { data: urlData } = await supabase.storage.from('files').createSignedUrl(data.filename, 3600);
+            signedUrl = urlData?.signedUrl;
+          }
         } else if (item.link_id) {
           const { data } = await supabase.from('links').select('*').eq('id', item.link_id).single();
           itemData = data;
@@ -205,6 +207,7 @@ export default function SharedAlbumView() {
             added_at: item.added_at,
             added_by: item.added_by,
             added_by_name: `Benutzer ${item.added_by.slice(0, 8)}`,
+            signedUrl,
           });
         }
       }
@@ -479,7 +482,7 @@ export default function SharedAlbumView() {
                       onClick={() => setLightboxIndex(photoItems.findIndex(p => p.id === item.id))}
                     >
                       <img 
-                        src={getPhotoUrl(item.data.filename)} 
+                        src={item.signedUrl || ''} 
                         alt={item.data.caption || 'Foto'} 
                         className="w-full h-full object-cover"
                         loading="lazy"
@@ -615,7 +618,7 @@ export default function SharedAlbumView() {
                 onClick={() => setLightboxIndex(index)}
               >
                 <img 
-                  src={getPhotoUrl(item.data.filename)} 
+                  src={item.signedUrl || ''} 
                   alt={item.data.caption || 'Foto'} 
                   className="w-full h-full object-cover"
                   loading="lazy"
@@ -829,7 +832,7 @@ export default function SharedAlbumView() {
 
             <div className="max-w-5xl max-h-[85vh] p-4" onClick={(e) => e.stopPropagation()}>
               <img 
-                src={getPhotoUrl(photoItems[lightboxIndex].data.filename)} 
+                src={photoItems[lightboxIndex].signedUrl || ''} 
                 alt={photoItems[lightboxIndex].data.caption || 'Foto'} 
                 className="max-w-full max-h-[75vh] object-contain rounded-xl mx-auto"
               />
