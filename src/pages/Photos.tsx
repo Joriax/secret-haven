@@ -32,7 +32,9 @@ import {
   PlayCircle,
   ZoomIn,
   ZoomOut,
-  RotateCcw
+  RotateCcw,
+  Pin,
+  PinOff
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -67,6 +69,7 @@ interface Album {
   created_at: string;
   cover_url?: string;
   count?: number;
+  is_pinned?: boolean;
 }
 
 type ViewMode = 'all' | 'photos' | 'videos' | 'albums';
@@ -320,6 +323,36 @@ export default function Photos() {
     } catch (error) {
       console.error('Error deleting album:', error);
       toast.error('Fehler beim Löschen');
+    }
+  };
+
+  const toggleAlbumPin = async (albumId: string) => {
+    const album = albums.find(a => a.id === albumId);
+    if (!album) return;
+
+    try {
+      const newPinned = !album.is_pinned;
+      const { error } = await supabase
+        .from('albums')
+        .update({ is_pinned: newPinned })
+        .eq('id', albumId);
+
+      if (error) throw error;
+
+      setAlbums(prev => {
+        const updated = prev.map(a => 
+          a.id === albumId ? { ...a, is_pinned: newPinned } : a
+        );
+        // Re-sort: pinned first
+        return updated.sort((a, b) => {
+          if (a.is_pinned !== b.is_pinned) return b.is_pinned ? 1 : -1;
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        });
+      });
+      
+      toast.success(newPinned ? 'Album angepinnt' : 'Album losgelöst');
+    } catch (error) {
+      console.error('Error toggling pin:', error);
     }
   };
 
@@ -1173,6 +1206,40 @@ export default function Photos() {
                 </div>
               )}
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+              
+              {/* Pin indicator & actions */}
+              <div className="absolute top-2 right-2 flex items-center gap-1">
+                {album.is_pinned && (
+                  <div className="p-1.5 rounded-lg bg-primary/80">
+                    <Pin className="w-3.5 h-3.5 text-white" />
+                  </div>
+                )}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleAlbumPin(album.id);
+                  }}
+                  className="p-1.5 rounded-lg bg-black/40 opacity-0 group-hover:opacity-100 hover:bg-black/60 transition-all"
+                  title={album.is_pinned ? 'Loslösen' : 'Anpinnen'}
+                >
+                  {album.is_pinned ? (
+                    <PinOff className="w-3.5 h-3.5 text-white" />
+                  ) : (
+                    <Pin className="w-3.5 h-3.5 text-white" />
+                  )}
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deleteAlbum(album.id);
+                  }}
+                  className="p-1.5 rounded-lg bg-black/40 opacity-0 group-hover:opacity-100 hover:bg-destructive/80 transition-all"
+                  title="Album löschen"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-white" />
+                </button>
+              </div>
+              
               <div className="absolute bottom-0 left-0 right-0 p-4">
                 <h3 className="font-semibold text-white truncate">{album.name}</h3>
                 <p className="text-white/70 text-sm">{album.count} Elemente</p>
