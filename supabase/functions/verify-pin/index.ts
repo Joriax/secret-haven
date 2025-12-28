@@ -354,6 +354,128 @@ serve(async (req) => {
       );
     }
 
+    else if (action === 'admin-delete-user') {
+      // Admin deletes user and all associated data
+      const body = await req.json().catch(() => ({}));
+      const { targetUserId, adminUserId } = body;
+      
+      if (!targetUserId || !adminUserId) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Ungültige Parameter' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
+      }
+
+      // Prevent self-deletion
+      if (targetUserId === adminUserId) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Du kannst dich nicht selbst löschen' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
+      }
+
+      // Verify admin has admin role
+      const { data: adminRole } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', adminUserId)
+        .eq('role', 'admin')
+        .single();
+
+      if (!adminRole) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Keine Admin-Berechtigung' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+        );
+      }
+
+      console.log(`Admin ${adminUserId} deleting user ${targetUserId}`);
+
+      // Delete all user data in order (respecting foreign keys)
+      const deletionOrder = [
+        // First delete items with foreign keys to other tables
+        'note_attachments',
+        'note_versions',
+        'view_history',
+        'security_logs',
+        // Then delete main data tables
+        'notes',
+        'photos',
+        'files',
+        'links',
+        'tiktok_videos',
+        'secret_texts',
+        // Delete folders/albums
+        'note_folders',
+        'link_folders',
+        'tiktok_folders',
+        'albums',
+        'file_albums',
+        // Delete tags
+        'tags',
+        // Delete user roles
+        'user_roles',
+        // Finally delete the user
+        'vault_users'
+      ];
+
+      for (const table of deletionOrder) {
+        const { error } = await supabase
+          .from(table)
+          .delete()
+          .eq(table === 'vault_users' ? 'id' : 'user_id', targetUserId);
+        
+        if (error) {
+          console.error(`Error deleting from ${table}:`, error);
+          // Continue with other tables even if one fails
+        } else {
+          console.log(`Deleted data from ${table}`);
+        }
+      }
+
+      // Also delete storage files
+      try {
+        // Delete photos from storage
+        const { data: photosList } = await supabase.storage
+          .from('photos')
+          .list(targetUserId);
+        if (photosList && photosList.length > 0) {
+          const photoPaths = photosList.map(f => `${targetUserId}/${f.name}`);
+          await supabase.storage.from('photos').remove(photoPaths);
+          console.log('Deleted photos from storage');
+        }
+
+        // Delete files from storage
+        const { data: filesList } = await supabase.storage
+          .from('files')
+          .list(targetUserId);
+        if (filesList && filesList.length > 0) {
+          const filePaths = filesList.map(f => `${targetUserId}/${f.name}`);
+          await supabase.storage.from('files').remove(filePaths);
+          console.log('Deleted files from storage');
+        }
+
+        // Delete note attachments from storage
+        const { data: attachmentsList } = await supabase.storage
+          .from('note-attachments')
+          .list(targetUserId);
+        if (attachmentsList && attachmentsList.length > 0) {
+          const attachmentPaths = attachmentsList.map(f => `${targetUserId}/${f.name}`);
+          await supabase.storage.from('note-attachments').remove(attachmentPaths);
+          console.log('Deleted note attachments from storage');
+        }
+      } catch (storageError) {
+        console.error('Error deleting storage files:', storageError);
+        // Continue even if storage deletion fails
+      }
+
+      console.log(`User ${targetUserId} deleted successfully`);
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     return new Response(
       JSON.stringify({ success: false, error: 'Ungültige Aktion' }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }

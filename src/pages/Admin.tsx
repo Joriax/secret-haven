@@ -17,12 +17,15 @@ import {
   Key,
   ChevronDown,
   ChevronUp,
-  Eye
+  Eye,
+  Trash2,
+  Loader2
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserRoles } from '@/hooks/useUserRoles';
 import { PageHeader } from '@/components/PageHeader';
+import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Navigate } from 'react-router-dom';
@@ -76,6 +79,8 @@ export default function Admin() {
   const [resetPinUser, setResetPinUser] = useState<string | null>(null);
   const [newPinValue, setNewPinValue] = useState('');
   const [showRecoveryKey, setShowRecoveryKey] = useState<string | null>(null);
+  const [deleteUserTarget, setDeleteUserTarget] = useState<VaultUser | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const { userId } = useAuth();
   const { isAdmin, isLoading: rolesLoading, assignRole, roles } = useUserRoles();
 
@@ -254,6 +259,36 @@ export default function Admin() {
   const getTotalItems = (stats: UserStats | undefined) => {
     if (!stats) return 0;
     return stats.notes + stats.photos + stats.files + stats.links + stats.tiktokVideos + stats.secretTexts;
+  };
+
+  const handleDeleteUser = async () => {
+    if (!deleteUserTarget || !userId) return;
+
+    setIsDeleting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('verify-pin', {
+        body: { 
+          action: 'admin-delete-user', 
+          targetUserId: deleteUserTarget.id,
+          adminUserId: userId
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        toast.success('Benutzer und alle Daten wurden gelöscht');
+        setDeleteUserTarget(null);
+        fetchData();
+      } else {
+        throw new Error(data?.error || 'Fehler beim Löschen');
+      }
+    } catch (error: any) {
+      console.error('Error deleting user:', error);
+      toast.error(error.message || 'Fehler beim Löschen');
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   if (rolesLoading) {
@@ -573,6 +608,20 @@ export default function Admin() {
                               Zum Admin machen
                             </button>
                           )}
+
+                          {/* Delete User */}
+                          {!isCurrentUser && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteUserTarget(user);
+                              }}
+                              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-destructive/20 hover:bg-destructive/30 text-destructive text-sm transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              Benutzer löschen
+                            </button>
+                          )}
                         </div>
 
                         {/* Recovery Key Display */}
@@ -616,6 +665,18 @@ export default function Admin() {
           </div>
         </div>
       </div>
+
+      {/* Delete User Confirmation Dialog */}
+      {deleteUserTarget && (
+        <DeleteConfirmDialog
+          isOpen={!!deleteUserTarget}
+          onClose={() => setDeleteUserTarget(null)}
+          onConfirm={handleDeleteUser}
+          title="Benutzer löschen"
+          description={`Bist du sicher, dass du den Benutzer ${deleteUserTarget.id.slice(0, 8)}... und ALLE zugehörigen Daten (Notizen, Fotos, Dateien, Links, TikToks, Geheime Texte, Ordner, Alben, Tags, Logs) endgültig löschen möchtest? Diese Aktion kann nicht rückgängig gemacht werden!`}
+          isPermanent
+        />
+      )}
     </div>
   );
 }
