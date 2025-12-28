@@ -1282,9 +1282,19 @@ export default function Files() {
                 )}
 
                 {/* Favorite indicator */}
-                {file.is_favorite && (
+                {file.is_favorite && !isMultiSelectMode && (
                   <div className="absolute top-2 left-2">
                     <Star className="w-5 h-5 text-yellow-500 fill-yellow-500" />
+                  </div>
+                )}
+
+                {/* Album indicator */}
+                {file.album_id && (
+                  <div className="absolute bottom-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/60 text-white text-xs">
+                    <Folder className="w-3 h-3" />
+                    <span className="truncate max-w-[4rem]">
+                      {albums.find((a) => a.id === file.album_id)?.name || 'Album'}
+                    </span>
                   </div>
                 )}
 
@@ -1402,10 +1412,17 @@ export default function Files() {
                       <Star className="w-4 h-4 text-yellow-500 fill-yellow-500 shrink-0" />
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-sm text-muted-foreground">
                       {formatFileSize(file.size)} • {formatDate(file.uploaded_at)}
                     </p>
+                    {/* Album badge */}
+                    {file.album_id && (
+                      <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-muted text-xs text-muted-foreground">
+                        <Folder className="w-3 h-3" />
+                        {albums.find((a) => a.id === file.album_id)?.name || 'Album'}
+                      </span>
+                    )}
                     {file.tags && file.tags.length > 0 && (
                       <div className="flex gap-1">
                         {file.tags.slice(0, 3).map(tagId => {
@@ -1626,6 +1643,7 @@ export default function Files() {
         onDelete={() => setDeleteConfirm({ isOpen: true, file: null, isMulti: true })}
         onTag={() => setShowBulkTagManager(true)}
         onFavorite={handleBulkFavorite}
+        onMove={() => setShowAlbumPicker(true)}
       />
 
       {/* Bulk Tag Manager Modal */}
