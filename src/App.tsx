@@ -25,6 +25,7 @@ import Links from "./pages/Links";
 import TikTok from "./pages/TikTok";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
+import SharedAlbum from "./pages/SharedAlbum";
 
 const queryClient = new QueryClient();
 
@@ -57,6 +58,7 @@ const App = () => (
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/admin" element={<Admin />} />
               </Route>
+              <Route path="/shared/:token" element={<SharedAlbum />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>

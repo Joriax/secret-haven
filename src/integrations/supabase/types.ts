@@ -496,6 +496,127 @@ export type Database = {
         }
         Relationships: []
       }
+      shared_album_access: {
+        Row: {
+          created_at: string
+          id: string
+          permission: string
+          shared_album_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          permission?: string
+          shared_album_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          permission?: string
+          shared_album_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shared_album_access_shared_album_id_fkey"
+            columns: ["shared_album_id"]
+            isOneToOne: false
+            referencedRelation: "shared_albums"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shared_album_items: {
+        Row: {
+          added_at: string
+          added_by: string
+          file_id: string | null
+          id: string
+          link_id: string | null
+          note_id: string | null
+          photo_id: string | null
+          shared_album_id: string
+          tiktok_id: string | null
+        }
+        Insert: {
+          added_at?: string
+          added_by: string
+          file_id?: string | null
+          id?: string
+          link_id?: string | null
+          note_id?: string | null
+          photo_id?: string | null
+          shared_album_id: string
+          tiktok_id?: string | null
+        }
+        Update: {
+          added_at?: string
+          added_by?: string
+          file_id?: string | null
+          id?: string
+          link_id?: string | null
+          note_id?: string | null
+          photo_id?: string | null
+          shared_album_id?: string
+          tiktok_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shared_album_items_shared_album_id_fkey"
+            columns: ["shared_album_id"]
+            isOneToOne: false
+            referencedRelation: "shared_albums"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shared_albums: {
+        Row: {
+          color: string | null
+          content_type: string
+          created_at: string
+          description: string | null
+          icon: string | null
+          id: string
+          name: string
+          owner_id: string
+          public_link_enabled: boolean | null
+          public_link_password: string | null
+          public_link_token: string | null
+          updated_at: string
+        }
+        Insert: {
+          color?: string | null
+          content_type?: string
+          created_at?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          name: string
+          owner_id: string
+          public_link_enabled?: boolean | null
+          public_link_password?: string | null
+          public_link_token?: string | null
+          updated_at?: string
+        }
+        Update: {
+          color?: string | null
+          content_type?: string
+          created_at?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          name?: string
+          owner_id?: string
+          public_link_enabled?: boolean | null
+          public_link_password?: string | null
+          public_link_token?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       tags: {
         Row: {
           color: string | null

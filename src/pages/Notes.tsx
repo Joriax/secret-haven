@@ -1036,7 +1036,8 @@ export default function Notes() {
                       value={editContent}
                       onChange={(e) => setEditContent(e.target.value)}
                       placeholder="Schreibe deine Notiz... (Markdown unterstützt)"
-                      className="flex-1 bg-transparent border-none outline-none text-foreground placeholder:text-muted-foreground resize-none font-mono text-sm leading-relaxed"
+                      className="flex-1 bg-transparent border-none outline-none text-foreground placeholder:text-muted-foreground resize-none font-mono text-sm leading-relaxed select-text cursor-text"
+                      style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
                     />
                   </div>
 

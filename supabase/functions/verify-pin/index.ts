@@ -541,6 +541,121 @@ serve(async (req) => {
       );
     }
 
+    else if (action === 'admin-assign-role') {
+      // Admin assigns role to user
+      const { role } = body;
+      if (!targetUserId || !adminUserId || !role) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Ungültige Parameter' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
+      }
+
+      // Verify admin has admin role
+      const { data: adminRole } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', adminUserId)
+        .eq('role', 'admin')
+        .single();
+
+      if (!adminRole) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Keine Admin-Berechtigung' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+        );
+      }
+
+      // Check if role already exists
+      const { data: existingRole } = await supabase
+        .from('user_roles')
+        .select('id')
+        .eq('user_id', targetUserId)
+        .eq('role', role)
+        .single();
+
+      if (existingRole) {
+        return new Response(
+          JSON.stringify({ success: true, message: 'Rolle bereits zugewiesen' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Insert new role
+      const { error: insertError } = await supabase
+        .from('user_roles')
+        .insert({ user_id: targetUserId, role });
+
+      if (insertError) {
+        console.error('Error assigning role:', insertError);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Fehler beim Zuweisen der Rolle' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        );
+      }
+
+      console.log(`Admin ${adminUserId} assigned role ${role} to user ${targetUserId}`);
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    else if (action === 'admin-remove-role') {
+      // Admin removes role from user
+      const { role } = body;
+      if (!targetUserId || !adminUserId || !role) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Ungültige Parameter' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
+      }
+
+      // Verify admin has admin role
+      const { data: adminRole } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', adminUserId)
+        .eq('role', 'admin')
+        .single();
+
+      if (!adminRole) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Keine Admin-Berechtigung' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+        );
+      }
+
+      // Prevent removing own admin role
+      if (targetUserId === adminUserId && role === 'admin') {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Du kannst dir nicht selbst die Admin-Rolle entziehen' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
+      }
+
+      // Delete role
+      const { error: deleteError } = await supabase
+        .from('user_roles')
+        .delete()
+        .eq('user_id', targetUserId)
+        .eq('role', role);
+
+      if (deleteError) {
+        console.error('Error removing role:', deleteError);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Fehler beim Entfernen der Rolle' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        );
+      }
+
+      console.log(`Admin ${adminUserId} removed role ${role} from user ${targetUserId}`);
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     return new Response(
       JSON.stringify({ success: false, error: 'Ungültige Aktion' }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
