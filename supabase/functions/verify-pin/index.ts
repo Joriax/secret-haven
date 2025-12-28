@@ -309,6 +309,51 @@ serve(async (req) => {
       );
     }
 
+    else if (action === 'admin-reset-pin') {
+      // Admin resets user PIN
+      const { targetUserId, adminUserId } = await req.json().catch(() => ({}));
+      
+      if (!targetUserId || !newPin || newPin.length !== 6) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Ungültige Parameter' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
+      }
+
+      // Verify admin has admin role
+      const { data: adminRole } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', adminUserId)
+        .eq('role', 'admin')
+        .single();
+
+      if (!adminRole) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Keine Admin-Berechtigung' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+        );
+      }
+
+      // Hash new PIN and update
+      const newHash = await hashPin(newPin);
+      const { error: updateError } = await supabase
+        .from('vault_users')
+        .update({ pin_hash: newHash, updated_at: new Date().toISOString() })
+        .eq('id', targetUserId);
+
+      if (updateError) {
+        console.error('Error resetting PIN:', updateError);
+        throw updateError;
+      }
+
+      console.log(`Admin ${adminUserId} reset PIN for user ${targetUserId}`);
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     return new Response(
       JSON.stringify({ success: false, error: 'Ungültige Aktion' }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
