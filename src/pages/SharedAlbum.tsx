@@ -68,6 +68,12 @@ const itemVariants = {
   visible: { opacity: 1, y: 0 },
 };
 
+// Helper to get photo URL from Supabase Storage
+const getPhotoUrl = (filename: string): string => {
+  const { data } = supabase.storage.from('photos').getPublicUrl(filename);
+  return data.publicUrl;
+};
+
 export default function SharedAlbum() {
   const { token } = useParams<{ token: string }>();
   const { userId, isAuthenticated } = useAuth();
@@ -466,18 +472,27 @@ export default function SharedAlbum() {
                 {/* Photo */}
                 {item.type === 'photo' && (
                   <div 
-                    className="aspect-square bg-muted cursor-pointer"
+                    className="aspect-square bg-muted cursor-pointer relative overflow-hidden"
                     onClick={() => setLightboxIndex(photoItems.findIndex(p => p.id === item.id))}
                   >
                     {item.data.filename ? (
-                      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-green-500/20 to-emerald-500/10">
-                        <Image className="w-16 h-16 text-green-500/50" />
-                      </div>
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <Image className="w-12 h-12 text-muted-foreground" />
-                      </div>
-                    )}
+                      <img 
+                        src={getPhotoUrl(item.data.filename)} 
+                        alt={item.data.caption || 'Foto'} 
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                          e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                        }}
+                      />
+                    ) : null}
+                    <div className={cn(
+                      "w-full h-full flex items-center justify-center bg-gradient-to-br from-green-500/20 to-emerald-500/10 absolute inset-0",
+                      item.data.filename ? "hidden" : ""
+                    )}>
+                      <Image className="w-16 h-16 text-green-500/50" />
+                    </div>
                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                       <Eye className="w-8 h-8 text-white" />
                     </div>
@@ -632,13 +647,24 @@ export default function SharedAlbum() {
                 variants={itemVariants}
                 className="flex items-center gap-4 p-4 bg-card border border-border rounded-xl hover:border-primary/30 transition-colors group"
               >
-                {/* Icon */}
-                <div className={cn(
-                  "w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0",
-                  getTypeColor(item.type)
-                )}>
-                  {getTypeIcon(item.type)}
-                </div>
+                {/* Thumbnail / Icon */}
+                {item.type === 'photo' && item.data.filename ? (
+                  <div className="w-12 h-12 rounded-xl flex-shrink-0 overflow-hidden bg-muted">
+                    <img 
+                      src={getPhotoUrl(item.data.filename)} 
+                      alt={item.data.caption || 'Foto'} 
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                    />
+                  </div>
+                ) : (
+                  <div className={cn(
+                    "w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0",
+                    getTypeColor(item.type)
+                  )}>
+                    {getTypeIcon(item.type)}
+                  </div>
+                )}
 
                 {/* Content */}
                 <div className="flex-1 min-w-0">
@@ -717,9 +743,17 @@ export default function SharedAlbum() {
             )}
 
             <div className="max-w-4xl max-h-[80vh] p-4" onClick={(e) => e.stopPropagation()}>
-              <div className="bg-muted rounded-xl flex items-center justify-center min-h-[300px]">
-                <Image className="w-24 h-24 text-muted-foreground/50" />
-              </div>
+              {photoItems[lightboxIndex].data.filename ? (
+                <img 
+                  src={getPhotoUrl(photoItems[lightboxIndex].data.filename)} 
+                  alt={photoItems[lightboxIndex].data.caption || 'Foto'} 
+                  className="max-w-full max-h-[70vh] object-contain rounded-xl mx-auto"
+                />
+              ) : (
+                <div className="bg-muted rounded-xl flex items-center justify-center min-h-[300px]">
+                  <Image className="w-24 h-24 text-muted-foreground/50" />
+                </div>
+              )}
               <div className="text-center mt-4 text-white">
                 <p className="font-medium">{photoItems[lightboxIndex].data.caption || photoItems[lightboxIndex].data.filename}</p>
                 <p className="text-sm text-white/60">
