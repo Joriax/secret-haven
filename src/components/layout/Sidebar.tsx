@@ -74,7 +74,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onSearchOpen
       {isActive && (
         <motion.div
           layoutId="nav-indicator"
-          className="absolute -left-1 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-primary rounded-full"
+          className="absolute -left-1 inset-y-0 my-auto w-0.5 h-5 bg-primary rounded-full"
           transition={{ type: 'spring', damping: 25, stiffness: 300 }}
         />
       )}
