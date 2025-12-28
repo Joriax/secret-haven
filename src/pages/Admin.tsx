@@ -19,7 +19,13 @@ import {
   ChevronUp,
   Eye,
   Trash2,
-  Loader2
+  Loader2,
+  Copy,
+  Check,
+  UserX,
+  Settings,
+  Calendar,
+  Hash
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -29,6 +35,7 @@ import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Navigate } from 'react-router-dom';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface VaultUser {
   id: string;
@@ -75,21 +82,20 @@ export default function Admin() {
   const [isLoading, setIsLoading] = useState(true);
   const [showAddUser, setShowAddUser] = useState(false);
   const [newUserPin, setNewUserPin] = useState('');
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
   const [resetPinUser, setResetPinUser] = useState<string | null>(null);
   const [newPinValue, setNewPinValue] = useState('');
+  const [isResettingPin, setIsResettingPin] = useState(false);
   const [showRecoveryKey, setShowRecoveryKey] = useState<string | null>(null);
+  const [copiedRecoveryKey, setCopiedRecoveryKey] = useState<string | null>(null);
   const [deleteUserTarget, setDeleteUserTarget] = useState<VaultUser | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const { userId } = useAuth();
-  const { isAdmin, isLoading: rolesLoading, assignRole, roles } = useUserRoles();
+  const { isAdmin, isLoading: rolesLoading, assignRole, removeRole, roles } = useUserRoles();
 
   const fetchData = useCallback(async () => {
-    console.log('Admin fetchData called, userId:', userId);
-    if (!userId) {
-      console.log('No userId, skipping fetch');
-      return;
-    }
+    if (!userId) return;
 
     try {
       setIsLoading(true);
@@ -100,7 +106,7 @@ export default function Admin() {
         .select('id, created_at, recovery_key, admin_notes')
         .order('created_at', { ascending: false });
 
-      console.log('Fetched users:', usersData, 'Error:', usersError);
+      if (usersError) throw usersError;
       setUsers(usersData as VaultUser[] || []);
 
       // Fetch counts
@@ -178,19 +184,17 @@ export default function Admin() {
 
     } catch (error) {
       console.error('Error fetching admin data:', error);
+      toast.error('Fehler beim Laden der Daten');
     } finally {
       setIsLoading(false);
     }
   }, [userId]);
 
   useEffect(() => {
-    console.log('Admin useEffect - isAdmin:', isAdmin, 'rolesLoading:', rolesLoading);
     if (isAdmin) {
       fetchData();
     }
   }, [isAdmin, fetchData]);
-
-  console.log('Admin render - isAdmin:', isAdmin, 'rolesLoading:', rolesLoading, 'users:', users.length);
 
   const handleCreateUser = async () => {
     if (!newUserPin || newUserPin.length !== 6) {
@@ -198,6 +202,7 @@ export default function Admin() {
       return;
     }
 
+    setIsCreatingUser(true);
     try {
       const { data, error } = await supabase.functions.invoke('verify-pin', {
         body: { action: 'create-user', pin: newUserPin }
@@ -206,7 +211,13 @@ export default function Admin() {
       if (error) throw error;
 
       if (data?.success) {
-        toast.success(`Benutzer erstellt! Recovery-Key: ${data.recoveryKey}`);
+        toast.success(
+          <div>
+            <p className="font-medium">Benutzer erstellt!</p>
+            <p className="text-xs mt-1 font-mono">Recovery-Key: {data.recoveryKey}</p>
+          </div>,
+          { duration: 10000 }
+        );
         setNewUserPin('');
         setShowAddUser(false);
         fetchData();
@@ -216,6 +227,8 @@ export default function Admin() {
     } catch (error: any) {
       console.error('Error creating user:', error);
       toast.error(error.message || 'Fehler beim Erstellen');
+    } finally {
+      setIsCreatingUser(false);
     }
   };
 
@@ -225,6 +238,7 @@ export default function Admin() {
       return;
     }
 
+    setIsResettingPin(true);
     try {
       const { data, error } = await supabase.functions.invoke('verify-pin', {
         body: { 
@@ -247,6 +261,8 @@ export default function Admin() {
     } catch (error: any) {
       console.error('Error resetting PIN:', error);
       toast.error(error.message || 'Fehler beim Zurücksetzen');
+    } finally {
+      setIsResettingPin(false);
     }
   };
 
@@ -254,8 +270,19 @@ export default function Admin() {
     const success = await assignRole(targetUserId, 'admin');
     if (success) {
       toast.success('Admin-Rolle zugewiesen');
+      fetchData();
     } else {
       toast.error('Fehler beim Zuweisen der Rolle');
+    }
+  };
+
+  const handleRemoveAdmin = async (targetUserId: string) => {
+    const success = await removeRole(targetUserId, 'admin');
+    if (success) {
+      toast.success('Admin-Rolle entfernt');
+      fetchData();
+    } else {
+      toast.error('Fehler beim Entfernen der Rolle');
     }
   };
 
@@ -299,10 +326,17 @@ export default function Admin() {
     }
   };
 
+  const copyRecoveryKey = (key: string, id: string) => {
+    navigator.clipboard.writeText(key);
+    setCopiedRecoveryKey(id);
+    toast.success('Recovery-Key kopiert');
+    setTimeout(() => setCopiedRecoveryKey(null), 2000);
+  };
+
   if (rolesLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <RefreshCw className="w-8 h-8 text-primary animate-spin" />
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
       </div>
     );
   }
@@ -312,14 +346,14 @@ export default function Admin() {
   }
 
   const statCards = [
-    { label: 'Benutzer', value: dataCounts.users, icon: Users, color: 'text-blue-500' },
-    { label: 'Notizen', value: dataCounts.notes, icon: FileText, color: 'text-yellow-500' },
-    { label: 'Fotos', value: dataCounts.photos, icon: Image, color: 'text-green-500' },
-    { label: 'Dateien', value: dataCounts.files, icon: FolderOpen, color: 'text-purple-500' },
-    { label: 'Links', value: dataCounts.links, icon: Link2, color: 'text-cyan-500' },
-    { label: 'TikToks', value: dataCounts.tiktokVideos, icon: Play, color: 'text-pink-500' },
-    { label: 'Geheime Texte', value: dataCounts.secretTexts, icon: Lock, color: 'text-red-500' },
-    { label: 'Alben', value: dataCounts.albums + dataCounts.fileAlbums, icon: Database, color: 'text-orange-500' },
+    { label: 'Benutzer', value: dataCounts.users, icon: Users, color: 'text-blue-500', bgColor: 'bg-blue-500/10' },
+    { label: 'Notizen', value: dataCounts.notes, icon: FileText, color: 'text-yellow-500', bgColor: 'bg-yellow-500/10' },
+    { label: 'Fotos', value: dataCounts.photos, icon: Image, color: 'text-green-500', bgColor: 'bg-green-500/10' },
+    { label: 'Dateien', value: dataCounts.files, icon: FolderOpen, color: 'text-purple-500', bgColor: 'bg-purple-500/10' },
+    { label: 'Links', value: dataCounts.links, icon: Link2, color: 'text-cyan-500', bgColor: 'bg-cyan-500/10' },
+    { label: 'TikToks', value: dataCounts.tiktokVideos, icon: Play, color: 'text-pink-500', bgColor: 'bg-pink-500/10' },
+    { label: 'Geheime Texte', value: dataCounts.secretTexts, icon: Lock, color: 'text-red-500', bgColor: 'bg-red-500/10' },
+    { label: 'Alben', value: dataCounts.albums + dataCounts.fileAlbums, icon: Database, color: 'text-orange-500', bgColor: 'bg-orange-500/10' },
   ];
 
   return (
@@ -335,331 +369,468 @@ export default function Admin() {
             onClick={() => fetchData()}
             className="p-2 rounded-xl hover:bg-muted transition-colors"
             title="Aktualisieren"
+            disabled={isLoading}
           >
             <RefreshCw className={cn("w-5 h-5 text-muted-foreground", isLoading && "animate-spin")} />
           </button>
         }
       />
 
-      {/* Stats Overview */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        {statCards.map((stat) => (
-          <motion.div
-            key={stat.label}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="glass-card p-4"
-          >
-            <div className="flex items-center gap-3">
-              <div className={cn("p-2 rounded-lg bg-muted", stat.color)}>
-                <stat.icon className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-foreground">{stat.value}</p>
-                <p className="text-sm text-muted-foreground">{stat.label}</p>
-              </div>
-            </div>
-          </motion.div>
-        ))}
-      </div>
+      <Tabs defaultValue="overview" className="w-full">
+        <TabsList className="grid w-full grid-cols-2 mb-6">
+          <TabsTrigger value="overview" className="flex items-center gap-2">
+            <Database className="w-4 h-4" />
+            Übersicht
+          </TabsTrigger>
+          <TabsTrigger value="users" className="flex items-center gap-2">
+            <Users className="w-4 h-4" />
+            Benutzer ({dataCounts.users})
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Users Section */}
-      <div className="glass-card p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
-            <Users className="w-5 h-5 text-primary" />
-            Benutzerverwaltung
-          </h2>
-          <button
-            onClick={() => setShowAddUser(!showAddUser)}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-          >
-            <UserPlus className="w-4 h-4" />
-            Benutzer hinzufügen
-          </button>
-        </div>
-
-        {/* Add User Form */}
-        <AnimatePresence>
-          {showAddUser && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              className="mb-6 p-4 rounded-xl bg-muted/50 border border-border"
-            >
-              <h3 className="font-medium text-foreground mb-3">Neuen Benutzer erstellen</h3>
-              <div className="flex gap-3">
-                <input
-                  type="text"
-                  value={newUserPin}
-                  onChange={(e) => setNewUserPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  placeholder="6-stelliger PIN"
-                  className="flex-1 px-4 py-2 rounded-xl bg-background border border-border text-foreground"
-                  maxLength={6}
-                />
-                <button
-                  onClick={handleCreateUser}
-                  disabled={newUserPin.length !== 6}
-                  className="px-4 py-2 rounded-xl bg-primary text-primary-foreground disabled:opacity-50"
-                >
-                  Erstellen
-                </button>
-                <button
-                  onClick={() => {
-                    setShowAddUser(false);
-                    setNewUserPin('');
-                  }}
-                  className="px-4 py-2 rounded-xl border border-border hover:bg-muted"
-                >
-                  Abbrechen
-                </button>
-              </div>
-              <p className="text-xs text-muted-foreground mt-2">
-                Der Benutzer kann sich mit diesem PIN anmelden. Ein Recovery-Key wird automatisch generiert.
-              </p>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Users List */}
-        <div className="space-y-3">
-          {users.map((user) => {
-            const role = getUserRole(user.id);
-            const isCurrentUser = user.id === userId;
-            const isExpanded = expandedUser === user.id;
-            const stats = userStats[user.id];
-            const totalItems = getTotalItems(stats);
-            
-            return (
+        {/* Overview Tab */}
+        <TabsContent value="overview" className="space-y-6">
+          {/* Stats Overview */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {statCards.map((stat, index) => (
               <motion.div
-                key={user.id}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className={cn(
-                  "rounded-xl border border-border overflow-hidden",
-                  isCurrentUser && "bg-primary/5 border-primary/30"
-                )}
+                key={stat.label}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.05 }}
+                className="glass-card p-4 hover:border-primary/30 transition-colors"
               >
-                {/* User Header */}
-                <div 
-                  className="flex items-center justify-between p-4 cursor-pointer hover:bg-muted/50 transition-colors"
-                  onClick={() => setExpandedUser(isExpanded ? null : user.id)}
-                >
-                  <div className="flex items-center gap-4">
-                    <div className={cn(
-                      "w-10 h-10 rounded-full flex items-center justify-center",
-                      role === 'admin' ? "bg-yellow-500/20" : "bg-muted"
-                    )}>
-                      {role === 'admin' ? (
-                        <Crown className="w-5 h-5 text-yellow-500" />
-                      ) : (
-                        <Users className="w-5 h-5 text-muted-foreground" />
-                      )}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium text-foreground font-mono text-sm">
-                          {user.id.slice(0, 8)}...
-                        </p>
-                        {isCurrentUser && (
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-primary/20 text-primary">
-                            Du
-                          </span>
-                        )}
-                        {role === 'admin' && (
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-500">
-                            Admin
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                        <span>Erstellt: {new Date(user.created_at).toLocaleDateString('de-DE')}</span>
-                        <span className="text-primary">{totalItems} Elemente</span>
-                      </div>
-                    </div>
+                <div className="flex items-center gap-3">
+                  <div className={cn("p-2.5 rounded-xl", stat.bgColor)}>
+                    <stat.icon className={cn("w-5 h-5", stat.color)} />
                   </div>
-
-                  <div className="flex items-center gap-2">
-                    {user.recovery_key && (
-                      <span className="text-xs px-2 py-1 rounded bg-green-500/20 text-green-500">
-                        Recovery
-                      </span>
-                    )}
-                    {isExpanded ? (
-                      <ChevronUp className="w-5 h-5 text-muted-foreground" />
-                    ) : (
-                      <ChevronDown className="w-5 h-5 text-muted-foreground" />
-                    )}
+                  <div>
+                    <p className="text-2xl font-bold text-foreground">{stat.value}</p>
+                    <p className="text-xs text-muted-foreground">{stat.label}</p>
                   </div>
                 </div>
+              </motion.div>
+            ))}
+          </div>
 
-                {/* Expanded User Details */}
-                <AnimatePresence>
-                  {isExpanded && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      className="border-t border-border"
-                    >
-                      <div className="p-4 space-y-4">
-                        {/* User Statistics */}
-                        <div>
-                          <h4 className="text-sm font-medium text-foreground mb-3">Benutzer-Statistiken</h4>
-                          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-                            <div className="text-center p-2 rounded-lg bg-muted/50">
-                              <FileText className="w-4 h-4 mx-auto text-yellow-500 mb-1" />
-                              <p className="text-lg font-bold text-foreground">{stats?.notes || 0}</p>
-                              <p className="text-xs text-muted-foreground">Notizen</p>
-                            </div>
-                            <div className="text-center p-2 rounded-lg bg-muted/50">
-                              <Image className="w-4 h-4 mx-auto text-green-500 mb-1" />
-                              <p className="text-lg font-bold text-foreground">{stats?.photos || 0}</p>
-                              <p className="text-xs text-muted-foreground">Fotos</p>
-                            </div>
-                            <div className="text-center p-2 rounded-lg bg-muted/50">
-                              <FolderOpen className="w-4 h-4 mx-auto text-purple-500 mb-1" />
-                              <p className="text-lg font-bold text-foreground">{stats?.files || 0}</p>
-                              <p className="text-xs text-muted-foreground">Dateien</p>
-                            </div>
-                            <div className="text-center p-2 rounded-lg bg-muted/50">
-                              <Link2 className="w-4 h-4 mx-auto text-cyan-500 mb-1" />
-                              <p className="text-lg font-bold text-foreground">{stats?.links || 0}</p>
-                              <p className="text-xs text-muted-foreground">Links</p>
-                            </div>
-                            <div className="text-center p-2 rounded-lg bg-muted/50">
-                              <Play className="w-4 h-4 mx-auto text-pink-500 mb-1" />
-                              <p className="text-lg font-bold text-foreground">{stats?.tiktokVideos || 0}</p>
-                              <p className="text-xs text-muted-foreground">TikToks</p>
-                            </div>
-                            <div className="text-center p-2 rounded-lg bg-muted/50">
-                              <Lock className="w-4 h-4 mx-auto text-red-500 mb-1" />
-                              <p className="text-lg font-bold text-foreground">{stats?.secretTexts || 0}</p>
-                              <p className="text-xs text-muted-foreground">Geheime</p>
-                            </div>
-                          </div>
-                        </div>
+          {/* Quick Stats Summary */}
+          <div className="glass-card p-6">
+            <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+              <Hash className="w-5 h-5 text-primary" />
+              Zusammenfassung
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              <div className="p-4 rounded-xl bg-muted/50">
+                <p className="text-3xl font-bold text-foreground">
+                  {dataCounts.notes + dataCounts.photos + dataCounts.files + dataCounts.links + dataCounts.tiktokVideos + dataCounts.secretTexts}
+                </p>
+                <p className="text-sm text-muted-foreground">Gesamt Elemente</p>
+              </div>
+              <div className="p-4 rounded-xl bg-muted/50">
+                <p className="text-3xl font-bold text-foreground">{dataCounts.albums + dataCounts.fileAlbums}</p>
+                <p className="text-sm text-muted-foreground">Ordner/Alben</p>
+              </div>
+              <div className="p-4 rounded-xl bg-muted/50">
+                <p className="text-3xl font-bold text-foreground">
+                  {dataCounts.users > 0 ? Math.round((dataCounts.notes + dataCounts.photos + dataCounts.files + dataCounts.links + dataCounts.tiktokVideos + dataCounts.secretTexts) / dataCounts.users) : 0}
+                </p>
+                <p className="text-sm text-muted-foreground">Ø pro Benutzer</p>
+              </div>
+            </div>
+          </div>
+        </TabsContent>
 
-                        {/* User Actions */}
-                        <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
-                          {/* PIN Reset */}
-                          {resetPinUser === user.id ? (
-                            <div className="flex items-center gap-2 flex-1">
-                              <input
-                                type="text"
-                                value={newPinValue}
-                                onChange={(e) => setNewPinValue(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                                placeholder="Neuer 6-stelliger PIN"
-                                className="flex-1 px-3 py-1.5 rounded-lg bg-background border border-border text-foreground text-sm"
-                                maxLength={6}
-                                onClick={(e) => e.stopPropagation()}
-                              />
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleResetPin(user.id);
-                                }}
-                                disabled={newPinValue.length !== 6}
-                                className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm disabled:opacity-50"
-                              >
-                                Speichern
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setResetPinUser(null);
-                                  setNewPinValue('');
-                                }}
-                                className="px-3 py-1.5 rounded-lg border border-border text-sm hover:bg-muted"
-                              >
-                                Abbrechen
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setResetPinUser(user.id);
-                              }}
-                              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted hover:bg-muted/80 text-sm transition-colors"
-                            >
-                              <Key className="w-4 h-4" />
-                              PIN zurücksetzen
-                            </button>
-                          )}
+        {/* Users Tab */}
+        <TabsContent value="users" className="space-y-6">
+          {/* Add User Section */}
+          <div className="glass-card p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                <UserPlus className="w-5 h-5 text-primary" />
+                Neuen Benutzer erstellen
+              </h3>
+              <button
+                onClick={() => setShowAddUser(!showAddUser)}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2 rounded-xl transition-colors",
+                  showAddUser 
+                    ? "bg-muted text-foreground" 
+                    : "bg-primary text-primary-foreground hover:bg-primary/90"
+                )}
+              >
+                {showAddUser ? (
+                  <>Abbrechen</>
+                ) : (
+                  <>
+                    <UserPlus className="w-4 h-4" />
+                    Hinzufügen
+                  </>
+                )}
+              </button>
+            </div>
 
-                          {/* Show Recovery Key */}
-                          {user.recovery_key && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setShowRecoveryKey(showRecoveryKey === user.id ? null : user.id);
-                              }}
-                              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted hover:bg-muted/80 text-sm transition-colors"
-                            >
-                              <Eye className="w-4 h-4" />
-                              Recovery-Key
-                            </button>
-                          )}
-
-                          {/* Make Admin */}
-                          {!isCurrentUser && role !== 'admin' && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleMakeAdmin(user.id);
-                              }}
-                              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-500 text-sm transition-colors"
-                            >
-                              <Crown className="w-4 h-4" />
-                              Zum Admin machen
-                            </button>
-                          )}
-
-                          {/* Delete User */}
-                          {!isCurrentUser && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDeleteUserTarget(user);
-                              }}
-                              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-destructive/20 hover:bg-destructive/30 text-destructive text-sm transition-colors"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                              Benutzer löschen
-                            </button>
-                          )}
-                        </div>
-
-                        {/* Recovery Key Display */}
-                        {showRecoveryKey === user.id && user.recovery_key && (
-                          <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/30">
-                            <p className="text-xs text-muted-foreground mb-1">Recovery-Key:</p>
-                            <p className="font-mono text-sm text-green-500 select-all">{user.recovery_key}</p>
-                          </div>
+            <AnimatePresence>
+              {showAddUser && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="space-y-4"
+                >
+                  <div className="p-4 rounded-xl bg-muted/50 border border-border">
+                    <label className="block text-sm font-medium text-foreground mb-2">
+                      6-stelliger PIN für den neuen Benutzer
+                    </label>
+                    <div className="flex gap-3">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={newUserPin}
+                        onChange={(e) => setNewUserPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        placeholder="000000"
+                        className="flex-1 px-4 py-3 rounded-xl bg-background border border-border text-foreground text-center text-xl tracking-[0.5em] font-mono"
+                        maxLength={6}
+                      />
+                      <button
+                        onClick={handleCreateUser}
+                        disabled={newUserPin.length !== 6 || isCreatingUser}
+                        className="px-6 py-3 rounded-xl bg-primary text-primary-foreground disabled:opacity-50 flex items-center gap-2"
+                      >
+                        {isCreatingUser ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <UserPlus className="w-4 h-4" />
                         )}
+                        Erstellen
+                      </button>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-3">
+                      ⚠️ Der PIN darf nicht bereits von einem anderen Benutzer oder als Fake-Vault PIN verwendet werden.
+                    </p>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
 
-                        {/* Full User ID */}
-                        <div className="text-xs text-muted-foreground">
-                          <span className="font-medium">Vollständige ID:</span>{' '}
-                          <span className="font-mono select-all">{user.id}</span>
+          {/* Users List */}
+          <div className="glass-card p-6">
+            <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+              <Users className="w-5 h-5 text-primary" />
+              Alle Benutzer ({users.length})
+            </h3>
+
+            <div className="space-y-3">
+              {users.map((user) => {
+                const role = getUserRole(user.id);
+                const isCurrentUser = user.id === userId;
+                const isExpanded = expandedUser === user.id;
+                const stats = userStats[user.id];
+                const totalItems = getTotalItems(stats);
+                
+                return (
+                  <motion.div
+                    key={user.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className={cn(
+                      "rounded-xl border overflow-hidden transition-colors",
+                      isCurrentUser 
+                        ? "border-primary/50 bg-primary/5" 
+                        : "border-border hover:border-border/80"
+                    )}
+                  >
+                    {/* User Header */}
+                    <div 
+                      className="flex items-center justify-between p-4 cursor-pointer hover:bg-muted/30 transition-colors"
+                      onClick={() => setExpandedUser(isExpanded ? null : user.id)}
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className={cn(
+                          "w-12 h-12 rounded-xl flex items-center justify-center",
+                          role === 'admin' ? "bg-yellow-500/20" : "bg-muted"
+                        )}>
+                          {role === 'admin' ? (
+                            <Crown className="w-6 h-6 text-yellow-500" />
+                          ) : (
+                            <Users className="w-6 h-6 text-muted-foreground" />
+                          )}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-medium text-foreground font-mono">
+                              {user.id.slice(0, 8)}...
+                            </p>
+                            {isCurrentUser && (
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-primary text-primary-foreground font-medium">
+                                Du
+                              </span>
+                            )}
+                            {role === 'admin' && (
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-500 font-medium">
+                                Admin
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
+                            <span className="flex items-center gap-1">
+                              <Calendar className="w-3 h-3" />
+                              {new Date(user.created_at).toLocaleDateString('de-DE')}
+                            </span>
+                            <span className="flex items-center gap-1 text-primary">
+                              <Database className="w-3 h-3" />
+                              {totalItems} Elemente
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </motion.div>
-            );
-          })}
 
-          {users.length === 0 && !isLoading && (
-            <div className="text-center py-8 text-muted-foreground">
-              Keine Benutzer gefunden
+                      <div className="flex items-center gap-2">
+                        {user.recovery_key && (
+                          <span className="text-xs px-2 py-1 rounded-full bg-green-500/10 text-green-500 border border-green-500/20">
+                            <Key className="w-3 h-3 inline mr-1" />
+                            Recovery
+                          </span>
+                        )}
+                        <div className={cn(
+                          "p-2 rounded-lg transition-colors",
+                          isExpanded ? "bg-primary/10" : "bg-transparent"
+                        )}>
+                          {isExpanded ? (
+                            <ChevronUp className="w-5 h-5 text-primary" />
+                          ) : (
+                            <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Expanded User Details */}
+                    <AnimatePresence>
+                      {isExpanded && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          className="border-t border-border"
+                        >
+                          <div className="p-4 space-y-5">
+                            {/* User Statistics */}
+                            <div>
+                              <h4 className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
+                                <Database className="w-4 h-4 text-primary" />
+                                Statistiken
+                              </h4>
+                              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                                {[
+                                  { icon: FileText, value: stats?.notes || 0, label: 'Notizen', color: 'text-yellow-500', bg: 'bg-yellow-500/10' },
+                                  { icon: Image, value: stats?.photos || 0, label: 'Fotos', color: 'text-green-500', bg: 'bg-green-500/10' },
+                                  { icon: FolderOpen, value: stats?.files || 0, label: 'Dateien', color: 'text-purple-500', bg: 'bg-purple-500/10' },
+                                  { icon: Link2, value: stats?.links || 0, label: 'Links', color: 'text-cyan-500', bg: 'bg-cyan-500/10' },
+                                  { icon: Play, value: stats?.tiktokVideos || 0, label: 'TikToks', color: 'text-pink-500', bg: 'bg-pink-500/10' },
+                                  { icon: Lock, value: stats?.secretTexts || 0, label: 'Geheime', color: 'text-red-500', bg: 'bg-red-500/10' },
+                                ].map((item) => (
+                                  <div key={item.label} className={cn("text-center p-3 rounded-xl", item.bg)}>
+                                    <item.icon className={cn("w-4 h-4 mx-auto mb-1", item.color)} />
+                                    <p className="text-lg font-bold text-foreground">{item.value}</p>
+                                    <p className="text-xs text-muted-foreground">{item.label}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Actions Section */}
+                            <div>
+                              <h4 className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
+                                <Settings className="w-4 h-4 text-primary" />
+                                Aktionen
+                              </h4>
+                              
+                              <div className="space-y-3">
+                                {/* PIN Reset */}
+                                <div className="p-3 rounded-xl bg-muted/30 border border-border">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <span className="text-sm font-medium text-foreground flex items-center gap-2">
+                                      <Key className="w-4 h-4" />
+                                      PIN zurücksetzen
+                                    </span>
+                                  </div>
+                                  
+                                  {resetPinUser === user.id ? (
+                                    <div className="flex items-center gap-2">
+                                      <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={newPinValue}
+                                        onChange={(e) => setNewPinValue(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                        placeholder="Neuer PIN"
+                                        className="flex-1 px-3 py-2 rounded-lg bg-background border border-border text-foreground text-center font-mono tracking-wider"
+                                        maxLength={6}
+                                        onClick={(e) => e.stopPropagation()}
+                                      />
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleResetPin(user.id);
+                                        }}
+                                        disabled={newPinValue.length !== 6 || isResettingPin}
+                                        className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm disabled:opacity-50 flex items-center gap-1"
+                                      >
+                                        {isResettingPin ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setResetPinUser(null);
+                                          setNewPinValue('');
+                                        }}
+                                        className="px-4 py-2 rounded-lg border border-border text-sm hover:bg-muted"
+                                      >
+                                        ✕
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setResetPinUser(user.id);
+                                      }}
+                                      className="w-full px-4 py-2 rounded-lg bg-muted hover:bg-muted/80 text-sm transition-colors text-left"
+                                    >
+                                      Neuen PIN vergeben...
+                                    </button>
+                                  )}
+                                </div>
+
+                                {/* Recovery Key */}
+                                {user.recovery_key && (
+                                  <div className="p-3 rounded-xl bg-green-500/5 border border-green-500/20">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <span className="text-sm font-medium text-foreground flex items-center gap-2">
+                                        <Key className="w-4 h-4 text-green-500" />
+                                        Recovery-Key
+                                      </span>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setShowRecoveryKey(showRecoveryKey === user.id ? null : user.id);
+                                        }}
+                                        className="text-xs px-2 py-1 rounded bg-green-500/10 text-green-500 hover:bg-green-500/20 transition-colors"
+                                      >
+                                        {showRecoveryKey === user.id ? 'Verbergen' : 'Anzeigen'}
+                                      </button>
+                                    </div>
+                                    
+                                    {showRecoveryKey === user.id && (
+                                      <div className="flex items-center gap-2 mt-2">
+                                        <code className="flex-1 px-3 py-2 rounded-lg bg-background border border-green-500/30 text-green-500 font-mono text-sm select-all">
+                                          {user.recovery_key}
+                                        </code>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            copyRecoveryKey(user.recovery_key!, user.id);
+                                          }}
+                                          className="p-2 rounded-lg bg-green-500/10 text-green-500 hover:bg-green-500/20 transition-colors"
+                                        >
+                                          {copiedRecoveryKey === user.id ? (
+                                            <Check className="w-4 h-4" />
+                                          ) : (
+                                            <Copy className="w-4 h-4" />
+                                          )}
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* Role Management */}
+                                {!isCurrentUser && (
+                                  <div className="p-3 rounded-xl bg-yellow-500/5 border border-yellow-500/20">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-sm font-medium text-foreground flex items-center gap-2">
+                                        <Crown className="w-4 h-4 text-yellow-500" />
+                                        Admin-Rolle
+                                      </span>
+                                      {role === 'admin' ? (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleRemoveAdmin(user.id);
+                                          }}
+                                          className="text-xs px-3 py-1.5 rounded-lg bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500/20 transition-colors"
+                                        >
+                                          Admin-Rolle entfernen
+                                        </button>
+                                      ) : (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleMakeAdmin(user.id);
+                                          }}
+                                          className="text-xs px-3 py-1.5 rounded-lg bg-yellow-500 text-yellow-950 hover:bg-yellow-400 transition-colors"
+                                        >
+                                          Zum Admin machen
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Delete User */}
+                                {!isCurrentUser && (
+                                  <div className="p-3 rounded-xl bg-destructive/5 border border-destructive/20">
+                                    <div className="flex items-center justify-between">
+                                      <div>
+                                        <span className="text-sm font-medium text-foreground flex items-center gap-2">
+                                          <UserX className="w-4 h-4 text-destructive" />
+                                          Benutzer löschen
+                                        </span>
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                          Löscht den Benutzer und alle zugehörigen Daten unwiderruflich.
+                                        </p>
+                                      </div>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setDeleteUserTarget(user);
+                                        }}
+                                        className="text-xs px-3 py-1.5 rounded-lg bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors flex items-center gap-1"
+                                      >
+                                        <Trash2 className="w-3 h-3" />
+                                        Löschen
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Full User ID */}
+                            <div className="pt-3 border-t border-border">
+                              <p className="text-xs text-muted-foreground">
+                                <span className="font-medium">Vollständige ID:</span>{' '}
+                                <code className="font-mono select-all bg-muted px-2 py-0.5 rounded">{user.id}</code>
+                              </p>
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
+                );
+              })}
+
+              {users.length === 0 && !isLoading && (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Users className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                  <p>Keine Benutzer gefunden</p>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      </div>
+          </div>
+        </TabsContent>
+      </Tabs>
 
       {/* Security Notice */}
       <div className="glass-card p-4 border-yellow-500/30 bg-yellow-500/5">
@@ -669,6 +840,7 @@ export default function Admin() {
             <p className="font-medium text-foreground">Sicherheitshinweis</p>
             <p className="text-sm text-muted-foreground">
               Als Admin hast du Zugriff auf alle Systemdaten. Gehe verantwortungsvoll mit diesen Berechtigungen um.
+              Alle Admin-Aktionen werden protokolliert.
             </p>
           </div>
         </div>
@@ -681,7 +853,7 @@ export default function Admin() {
           onClose={() => setDeleteUserTarget(null)}
           onConfirm={handleDeleteUser}
           title="Benutzer löschen"
-          description={`Bist du sicher, dass du den Benutzer ${deleteUserTarget.id.slice(0, 8)}... und ALLE zugehörigen Daten (Notizen, Fotos, Dateien, Links, TikToks, Geheime Texte, Ordner, Alben, Tags, Logs) endgültig löschen möchtest? Diese Aktion kann nicht rückgängig gemacht werden!`}
+          description={`Bist du sicher, dass du den Benutzer ${deleteUserTarget.id.slice(0, 8)}... und ALLE zugehörigen Daten (Notizen, Fotos, Dateien, Links, TikToks, Geheime Texte, Ordner, Alben, Tags) endgültig löschen möchtest? Diese Aktion kann nicht rückgängig gemacht werden!`}
           isPermanent
         />
       )}

@@ -34,7 +34,8 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { action, pin, newPin, userId, recoveryKey } = await req.json();
+    const body = await req.json();
+    const { action, pin, newPin, userId, recoveryKey, targetUserId, adminUserId } = body;
     console.log(`PIN action requested: ${action}`);
 
     if (action === 'verify') {
@@ -278,6 +279,34 @@ serve(async (req) => {
         );
       }
 
+      // Check if PIN is already in use by any user (main PIN or decoy PIN)
+      const { data: existingUsers } = await supabase
+        .from('vault_users')
+        .select('id, pin_hash, decoy_pin_hash');
+
+      if (existingUsers) {
+        for (const user of existingUsers) {
+          // Check main PIN
+          const isMainPin = await verifyPin(pin, user.pin_hash);
+          if (isMainPin) {
+            return new Response(
+              JSON.stringify({ success: false, error: 'Dieser PIN wird bereits verwendet' }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+            );
+          }
+          // Check decoy PIN
+          if (user.decoy_pin_hash) {
+            const isDecoyPin = await verifyPin(pin, user.decoy_pin_hash);
+            if (isDecoyPin) {
+              return new Response(
+                JSON.stringify({ success: false, error: 'Dieser PIN wird bereits als Fake-Vault PIN verwendet' }),
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+              );
+            }
+          }
+        }
+      }
+
       // Generate recovery key
       const recoveryKey = `${crypto.randomUUID().slice(0, 4)}-${crypto.randomUUID().slice(0, 4)}-${crypto.randomUUID().slice(0, 4)}-${crypto.randomUUID().slice(0, 4)}`.toUpperCase();
       
@@ -310,9 +339,7 @@ serve(async (req) => {
     }
 
     else if (action === 'admin-reset-pin') {
-      // Admin resets user PIN
-      const { targetUserId, adminUserId } = await req.json().catch(() => ({}));
-      
+      // Admin resets user PIN - uses targetUserId and adminUserId from initial body parse
       if (!targetUserId || !newPin || newPin.length !== 6) {
         return new Response(
           JSON.stringify({ success: false, error: 'Ungültige Parameter' }),
@@ -335,6 +362,33 @@ serve(async (req) => {
         );
       }
 
+      // Check if new PIN is already in use
+      const { data: existingUsers } = await supabase
+        .from('vault_users')
+        .select('id, pin_hash, decoy_pin_hash')
+        .neq('id', targetUserId);
+
+      if (existingUsers) {
+        for (const user of existingUsers) {
+          const isMainPin = await verifyPin(newPin, user.pin_hash);
+          if (isMainPin) {
+            return new Response(
+              JSON.stringify({ success: false, error: 'Dieser PIN wird bereits verwendet' }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+            );
+          }
+          if (user.decoy_pin_hash) {
+            const isDecoyPin = await verifyPin(newPin, user.decoy_pin_hash);
+            if (isDecoyPin) {
+              return new Response(
+                JSON.stringify({ success: false, error: 'Dieser PIN wird bereits als Fake-Vault PIN verwendet' }),
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+              );
+            }
+          }
+        }
+      }
+
       // Hash new PIN and update
       const newHash = await hashPin(newPin);
       const { error: updateError } = await supabase
@@ -355,10 +409,7 @@ serve(async (req) => {
     }
 
     else if (action === 'admin-delete-user') {
-      // Admin deletes user and all associated data
-      const body = await req.json().catch(() => ({}));
-      const { targetUserId, adminUserId } = body;
-      
+      // Admin deletes user and all associated data - uses targetUserId and adminUserId from initial body parse
       if (!targetUserId || !adminUserId) {
         return new Response(
           JSON.stringify({ success: false, error: 'Ungültige Parameter' }),
