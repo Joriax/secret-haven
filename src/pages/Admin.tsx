@@ -267,22 +267,52 @@ export default function Admin() {
   };
 
   const handleMakeAdmin = async (targetUserId: string) => {
-    const success = await assignRole(targetUserId, 'admin');
-    if (success) {
+    if (!userId) return;
+
+    try {
+      const { data, error } = await supabase.functions.invoke('verify-pin', {
+        body: {
+          action: 'admin-assign-role',
+          targetUserId,
+          adminUserId: userId,
+          role: 'admin',
+        },
+      });
+
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'Fehler beim Zuweisen der Rolle');
+
       toast.success('Admin-Rolle zugewiesen');
+      await fetchRoles();
       fetchData();
-    } else {
-      toast.error('Fehler beim Zuweisen der Rolle');
+    } catch (err: any) {
+      console.error('Error assigning role:', err);
+      toast.error(err?.message || 'Fehler beim Zuweisen der Rolle');
     }
   };
 
   const handleRemoveAdmin = async (targetUserId: string) => {
-    const success = await removeRole(targetUserId, 'admin');
-    if (success) {
+    if (!userId) return;
+
+    try {
+      const { data, error } = await supabase.functions.invoke('verify-pin', {
+        body: {
+          action: 'admin-remove-role',
+          targetUserId,
+          adminUserId: userId,
+          role: 'admin',
+        },
+      });
+
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'Fehler beim Entfernen der Rolle');
+
       toast.success('Admin-Rolle entfernt');
+      await fetchRoles();
       fetchData();
-    } else {
-      toast.error('Fehler beim Entfernen der Rolle');
+    } catch (err: any) {
+      console.error('Error removing role:', err);
+      toast.error(err?.message || 'Fehler beim Entfernen der Rolle');
     }
   };
 
