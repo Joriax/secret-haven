@@ -18,9 +18,11 @@ import {
   Link2,
   Play,
   Star,
-  Clock
+  Clock,
+  Crown
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useUserRoles } from '@/hooks/useUserRoles';
 import { cn } from '@/lib/utils';
 
 interface SidebarProps {
@@ -50,10 +52,15 @@ const securityNavItems = [
   { icon: Trash2, label: 'Papierkorb', path: '/trash' },
 ];
 
+const adminNavItems = [
+  { icon: Crown, label: 'Admin', path: '/admin' },
+];
+
 export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onSearchOpen }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { logout, isDecoyMode } = useAuth();
+  const { isAdmin } = useUserRoles();
 
   const handleLogout = () => {
     logout();
@@ -202,6 +209,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onSearchOpen
               />
             ))}
           </div>
+
+          {/* Admin (nur für Admins sichtbar) */}
+          {isAdmin && !isDecoyMode && (
+            <div className="space-y-1">
+              <p className="px-3 text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                Administration
+              </p>
+              {adminNavItems.map((item) => (
+                <NavItem 
+                  key={item.path} 
+                  item={item} 
+                  isActive={location.pathname === item.path} 
+                />
+              ))}
+            </div>
+          )}
         </nav>
 
         {/* Decoy Mode Indicator */}

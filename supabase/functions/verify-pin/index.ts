@@ -269,6 +269,46 @@ serve(async (req) => {
       );
     }
 
+    else if (action === 'create-user') {
+      // Create new user (admin function)
+      if (!pin || pin.length !== 6) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'PIN muss 6 Ziffern haben' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
+      }
+
+      // Generate recovery key
+      const recoveryKey = `${crypto.randomUUID().slice(0, 4)}-${crypto.randomUUID().slice(0, 4)}-${crypto.randomUUID().slice(0, 4)}-${crypto.randomUUID().slice(0, 4)}`.toUpperCase();
+      
+      // Hash the PIN
+      const pinHash = await hashPin(pin);
+      
+      const { data: newUser, error: createError } = await supabase
+        .from('vault_users')
+        .insert({ 
+          pin_hash: pinHash,
+          recovery_key: recoveryKey
+        })
+        .select()
+        .single();
+
+      if (createError) {
+        console.error('Error creating user:', createError);
+        throw createError;
+      }
+
+      console.log('New user created:', newUser.id);
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          userId: newUser.id,
+          recoveryKey
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     return new Response(
       JSON.stringify({ success: false, error: 'Ungültige Aktion' }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
