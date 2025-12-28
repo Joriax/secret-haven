@@ -533,18 +533,58 @@ export default function Dashboard() {
 
           {/* Storage */}
           <div className="bento-card">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between mb-4">
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Speichernutzung</p>
                 <p className="text-2xl font-display font-bold text-foreground">
                   {isLoading ? <Skeleton className="h-8 w-20" /> : formatSize(stats.totalStorageSize)}
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {formatSize(stats.totalFilesSize)} Dateien · {formatSize(stats.totalPhotosSize)} Fotos · {formatSize(stats.totalAttachmentsSize)} Anhänge
-                </p>
               </div>
-              <div className="w-14 h-14 rounded-full border-4 border-muted flex items-center justify-center relative">
-                <div className="absolute inset-1 rounded-full border-4 border-primary border-t-transparent animate-spin" style={{ animationDuration: '3s' }} />
+              <FolderOpen className="w-8 h-8 text-primary/50" />
+            </div>
+            
+            {/* Storage breakdown */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-pink-400" />
+                  <span className="text-xs text-muted-foreground">Fotos</span>
+                </div>
+                <span className="text-xs font-medium text-foreground">{formatSize(stats.totalPhotosSize)}</span>
+              </div>
+              <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-pink-400 rounded-full transition-all duration-500"
+                  style={{ width: stats.totalStorageSize > 0 ? `${(stats.totalPhotosSize / stats.totalStorageSize) * 100}%` : '0%' }}
+                />
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-blue-400" />
+                  <span className="text-xs text-muted-foreground">Dateien</span>
+                </div>
+                <span className="text-xs font-medium text-foreground">{formatSize(stats.totalFilesSize)}</span>
+              </div>
+              <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-blue-400 rounded-full transition-all duration-500"
+                  style={{ width: stats.totalStorageSize > 0 ? `${(stats.totalFilesSize / stats.totalStorageSize) * 100}%` : '0%' }}
+                />
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-primary" />
+                  <span className="text-xs text-muted-foreground">Anhänge</span>
+                </div>
+                <span className="text-xs font-medium text-foreground">{formatSize(stats.totalAttachmentsSize)}</span>
+              </div>
+              <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-primary rounded-full transition-all duration-500"
+                  style={{ width: stats.totalStorageSize > 0 ? `${(stats.totalAttachmentsSize / stats.totalStorageSize) * 100}%` : '0%' }}
+                />
               </div>
             </div>
           </div>
