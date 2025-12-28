@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { FolderPlus, ChevronRight, ChevronLeft, Image as ImageIcon } from 'lucide-react';
+import { FolderPlus, ChevronRight, ChevronLeft, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Album {
@@ -19,6 +19,9 @@ interface AlbumSidebarProps {
   onDragLeave: () => void;
   onDrop: (e: React.DragEvent, albumId: string) => void;
   onCreateAlbum: () => void;
+  onDeleteAlbum?: (albumId: string) => void;
+  selectedAlbum?: Album | null;
+  onSelectAlbum?: (album: Album | null) => void;
 }
 
 export function AlbumSidebar({
@@ -30,6 +33,9 @@ export function AlbumSidebar({
   onDragLeave,
   onDrop,
   onCreateAlbum,
+  onDeleteAlbum,
+  selectedAlbum,
+  onSelectAlbum,
 }: AlbumSidebarProps) {
   return (
     <>
@@ -95,9 +101,12 @@ export function AlbumSidebar({
                 onDragOver={(e) => onDragOver(e, album.id)}
                 onDragLeave={onDragLeave}
                 onDrop={(e) => onDrop(e, album.id)}
+                onClick={() => onSelectAlbum?.(album)}
                 className={cn(
                   "rounded-xl overflow-hidden transition-all cursor-pointer group",
-                  dragOverAlbum === album.id 
+                  selectedAlbum?.id === album.id 
+                    ? "bg-primary/10 ring-1 ring-primary/50"
+                    : dragOverAlbum === album.id 
                     ? "ring-2 ring-primary scale-[1.02] bg-primary/10" 
                     : "hover:bg-muted/50"
                 )}
@@ -127,6 +136,20 @@ export function AlbumSidebar({
                       {album.count || 0} Elemente
                     </p>
                   </div>
+
+                  {/* Delete Button */}
+                  {onDeleteAlbum && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeleteAlbum(album.id);
+                      }}
+                      className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-destructive/20 transition-all"
+                      title="Album löschen"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                    </button>
+                  )}
                 </div>
 
                 {/* Drop Indicator */}

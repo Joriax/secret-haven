@@ -32,7 +32,8 @@ interface Stats {
   favorites: number;
   secureNotes: number;
   secretTexts: number;
-  totalSize: number;
+  totalFilesSize: number;
+  totalPhotosSize: number;
   trashedItems: number;
   tiktokVideos: number;
   links: number;
@@ -69,7 +70,7 @@ const item = {
 export default function Dashboard() {
   const [stats, setStats] = useState<Stats>({ 
     notes: 0, photos: 0, files: 0, favorites: 0, 
-    secureNotes: 0, secretTexts: 0, totalSize: 0, trashedItems: 0, tiktokVideos: 0, links: 0
+    secureNotes: 0, secretTexts: 0, totalFilesSize: 0, totalPhotosSize: 0, trashedItems: 0, tiktokVideos: 0, links: 0
   });
   const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
   const [viewedItems, setViewedItems] = useState<ViewedItem[]>([]);
@@ -146,7 +147,7 @@ export default function Dashboard() {
       if (isDecoyMode) {
         setStats({ 
           notes: 0, photos: 0, files: 0, favorites: 0, 
-          secureNotes: 0, secretTexts: 0, totalSize: 0, trashedItems: 0, tiktokVideos: 0, links: 0
+          secureNotes: 0, secretTexts: 0, totalFilesSize: 0, totalPhotosSize: 0, trashedItems: 0, tiktokVideos: 0, links: 0
         });
         setRecentItems([]);
         setIsLoading(false);
@@ -191,9 +192,20 @@ export default function Dashboard() {
         supabase.from('files').select('id, filename, uploaded_at, is_favorite').eq('user_id', userId).is('deleted_at', null).order('uploaded_at', { ascending: false }).limit(5),
       ]);
 
-      const totalSize = filesRes.data?.reduce((acc, f) => acc + (f.size || 0), 0) || 0;
+      const totalFilesSize = filesRes.data?.reduce((acc, f) => acc + (f.size || 0), 0) || 0;
       const totalFavorites = (favNotesRes.count || 0) + (favPhotosRes.count || 0) + (favFilesRes.count || 0);
       const totalTrashed = (trashedNotesRes.count || 0) + (trashedPhotosRes.count || 0) + (trashedFilesRes.count || 0) + (trashedTiktokRes.count || 0);
+
+      // Calculate photos storage size from storage API
+      let totalPhotosSize = 0;
+      try {
+        const { data: storageFiles } = await supabase.storage.from('photos').list(userId);
+        if (storageFiles) {
+          totalPhotosSize = storageFiles.reduce((acc, f) => acc + (f.metadata?.size || 0), 0);
+        }
+      } catch (e) {
+        console.error('Error calculating photos size:', e);
+      }
 
       setStats({
         notes: notesRes.count || 0,
@@ -202,7 +214,8 @@ export default function Dashboard() {
         favorites: totalFavorites,
         secureNotes: secureNotesRes.count || 0,
         secretTexts: secretTextsRes.count || 0,
-        totalSize,
+        totalFilesSize,
+        totalPhotosSize,
         trashedItems: totalTrashed,
         tiktokVideos: tiktokRes.count || 0,
         links: linksRes.count || 0,
@@ -487,7 +500,10 @@ export default function Dashboard() {
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Speichernutzung</p>
                 <p className="text-2xl font-display font-bold text-foreground">
-                  {isLoading ? <Skeleton className="h-8 w-20" /> : formatSize(stats.totalSize)}
+                  {isLoading ? <Skeleton className="h-8 w-20" /> : formatSize(stats.totalFilesSize + stats.totalPhotosSize)}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {formatSize(stats.totalFilesSize)} Dateien · {formatSize(stats.totalPhotosSize)} Fotos
                 </p>
               </div>
               <div className="w-14 h-14 rounded-full border-4 border-muted flex items-center justify-center relative">
