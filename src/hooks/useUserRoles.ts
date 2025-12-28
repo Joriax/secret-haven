@@ -54,21 +54,27 @@ export function useUserRoles() {
   }, [fetchRoles]);
 
   const assignRole = async (targetUserId: string, role: AppRole) => {
-    if (!isAdmin) return false;
+    if (!isAdmin || !userId) return false;
 
     try {
-      const { error } = await supabase
-        .from('user_roles')
-        .upsert({
-          user_id: targetUserId,
-          role,
-        }, {
-          onConflict: 'user_id,role'
-        });
+      const { data, error } = await supabase.functions.invoke('verify-pin', {
+        body: { 
+          action: 'admin-assign-role', 
+          targetUserId,
+          adminUserId: userId,
+          role
+        }
+      });
 
       if (error) throw error;
-      await fetchRoles();
-      return true;
+      
+      if (data?.success) {
+        await fetchRoles();
+        return true;
+      } else {
+        console.error('Error assigning role:', data?.error);
+        return false;
+      }
     } catch (error) {
       console.error('Error assigning role:', error);
       return false;
@@ -76,18 +82,27 @@ export function useUserRoles() {
   };
 
   const removeRole = async (targetUserId: string, role: AppRole) => {
-    if (!isAdmin) return false;
+    if (!isAdmin || !userId) return false;
 
     try {
-      const { error } = await supabase
-        .from('user_roles')
-        .delete()
-        .eq('user_id', targetUserId)
-        .eq('role', role);
+      const { data, error } = await supabase.functions.invoke('verify-pin', {
+        body: { 
+          action: 'admin-remove-role', 
+          targetUserId,
+          adminUserId: userId,
+          role
+        }
+      });
 
       if (error) throw error;
-      await fetchRoles();
-      return true;
+      
+      if (data?.success) {
+        await fetchRoles();
+        return true;
+      } else {
+        console.error('Error removing role:', data?.error);
+        return false;
+      }
     } catch (error) {
       console.error('Error removing role:', error);
       return false;
