@@ -92,7 +92,7 @@ export default function Admin() {
   const [deleteUserTarget, setDeleteUserTarget] = useState<VaultUser | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const { userId } = useAuth();
-  const { isAdmin, isLoading: rolesLoading, assignRole, removeRole, roles } = useUserRoles();
+  const { isAdmin, isLoading: rolesLoading, assignRole, removeRole, roles, fetchRoles } = useUserRoles();
 
   const fetchData = useCallback(async () => {
     if (!userId) return;
