@@ -52,6 +52,7 @@ import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
 import { RenameDialog } from '@/components/RenameDialog';
 import { MultiSelectBar } from '@/components/MultiSelect';
 import { TagManager } from '@/components/TagManager';
+import { SharedAlbumButton } from '@/components/SharedAlbumButton';
 import { toast } from 'sonner';
 import { useSecurityLogs } from '@/hooks/useSecurityLogs';
 
@@ -1999,6 +2000,21 @@ export default function Photos() {
         onFavorite={handleBulkFavorite}
         onMove={() => setShowAlbumPicker(true)}
       />
+
+      {/* Shared Album Button for Multi-Select */}
+      {selectedItems.size > 0 && (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-40">
+          <SharedAlbumButton
+            selectedItemIds={Array.from(selectedItems)}
+            itemType="photo"
+            contentType="photos"
+            onComplete={() => {
+              setSelectedItems(new Set());
+              setIsMultiSelectMode(false);
+            }}
+          />
+        </div>
+      )}
 
       {/* Bulk Tag Manager Modal */}
       <AnimatePresence>

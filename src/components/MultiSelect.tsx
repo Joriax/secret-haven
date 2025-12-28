@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Trash2, Tag, FolderOpen, Star, RotateCcw } from 'lucide-react';
+import { X, Trash2, Tag, FolderOpen, Star, RotateCcw, Share2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface MultiSelectBarProps {
@@ -11,6 +11,7 @@ interface MultiSelectBarProps {
   onMove?: () => void;
   onFavorite?: () => void;
   onRestore?: () => void;
+  onShare?: () => void;
   isTrash?: boolean;
 }
 
@@ -22,6 +23,7 @@ export const MultiSelectBar: React.FC<MultiSelectBarProps> = ({
   onMove,
   onFavorite,
   onRestore,
+  onShare,
   isTrash = false
 }) => {
   return (
@@ -53,6 +55,9 @@ export const MultiSelectBar: React.FC<MultiSelectBarProps> = ({
                 </>
               ) : (
                 <>
+                  {onShare && (
+                    <ActionButton icon={Share2} label="Teilen" onClick={onShare} variant="primary" />
+                  )}
                   {onFavorite && (
                     <ActionButton icon={Star} label="Favorit" onClick={onFavorite} />
                   )}
@@ -86,7 +91,7 @@ interface ActionButtonProps {
   icon: React.ElementType;
   label: string;
   onClick: () => void;
-  variant?: 'default' | 'danger';
+  variant?: 'default' | 'danger' | 'primary';
 }
 
 const ActionButton: React.FC<ActionButtonProps> = ({ icon: Icon, label, onClick, variant = 'default' }) => (
@@ -96,6 +101,8 @@ const ActionButton: React.FC<ActionButtonProps> = ({ icon: Icon, label, onClick,
       "flex items-center gap-2 px-3 py-2 rounded-lg transition-colors text-sm",
       variant === 'danger'
         ? "text-red-400 hover:bg-red-500/10"
+        : variant === 'primary'
+        ? "text-primary hover:bg-primary/10"
         : "text-white/80 hover:bg-white/10"
     )}
     title={label}
