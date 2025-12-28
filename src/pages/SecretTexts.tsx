@@ -72,6 +72,20 @@ export default function SecretTexts() {
     fetchTexts();
   }, [fetchTexts]);
 
+  // Real-time updates
+  useEffect(() => {
+    if (!userId) return;
+
+    const channel = supabase
+      .channel('secret-texts-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'secret_texts' }, fetchTexts)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userId, fetchTexts]);
+
   const createNewText = async () => {
     if (!password || !userId) return;
 

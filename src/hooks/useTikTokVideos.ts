@@ -77,6 +77,20 @@ export function useTikTokVideos() {
     fetchVideos();
   }, [fetchVideos]);
 
+  // Real-time updates
+  useEffect(() => {
+    if (!userId) return;
+
+    const channel = supabase
+      .channel('tiktok-videos-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tiktok_videos' }, fetchVideos)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userId, fetchVideos]);
+
   const fetchMetadata = async (url: string) => {
     try {
       const { data, error } = await supabase.functions.invoke('fetch-tiktok-metadata', {

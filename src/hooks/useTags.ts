@@ -37,6 +37,20 @@ export const useTags = () => {
     fetchTags();
   }, [fetchTags]);
 
+  // Real-time updates
+  useEffect(() => {
+    if (!userId) return;
+
+    const channel = supabase
+      .channel('tags-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tags' }, fetchTags)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userId, fetchTags]);
+
   const createTag = async (name: string, color: string = '#6366f1') => {
     if (!userId) return null;
 

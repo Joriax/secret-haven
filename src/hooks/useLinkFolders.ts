@@ -44,6 +44,20 @@ export function useLinkFolders() {
     fetchFolders();
   }, [fetchFolders]);
 
+  // Real-time updates
+  useEffect(() => {
+    if (!userId) return;
+
+    const channel = supabase
+      .channel('link-folders-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'link_folders' }, fetchFolders)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userId, fetchFolders]);
+
   const createFolder = async (name: string, color: string = '#6366f1', icon: string = 'folder') => {
     if (!userId) return null;
 

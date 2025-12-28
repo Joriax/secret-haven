@@ -44,6 +44,20 @@ export function useTikTokFolders() {
     fetchFolders();
   }, [fetchFolders]);
 
+  // Real-time updates
+  useEffect(() => {
+    if (!userId) return;
+
+    const channel = supabase
+      .channel('tiktok-folders-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tiktok_folders' }, fetchFolders)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userId, fetchFolders]);
+
   const createFolder = async (name: string, icon?: string, color?: string) => {
     if (!userId) return null;
 
