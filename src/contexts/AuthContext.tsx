@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 
 interface AuthContextType {
   isAuthenticated: boolean;
+  isAuthLoading: boolean;
   userId: string | null;
   isDecoyMode: boolean;
   login: (userId: string, isDecoy?: boolean) => void;
@@ -40,6 +41,7 @@ const logSecurityEvent = async (userId: string, eventType: string, details: Reco
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const [isDecoyMode, setIsDecoyMode] = useState(false);
   const [sessionExpiresAt, setSessionExpiresAt] = useState<Date | null>(null);
@@ -63,6 +65,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         sessionStorage.removeItem('vault_decoy_mode');
       }
     }
+    setIsAuthLoading(false);
   }, []);
 
   const login = useCallback((newUserId: string, isDecoy: boolean = false) => {
@@ -107,7 +110,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, [userId]);
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, userId, isDecoyMode, login, logout, extendSession, sessionExpiresAt }}>
+    <AuthContext.Provider value={{ isAuthenticated, isAuthLoading, userId, isDecoyMode, login, logout, extendSession, sessionExpiresAt }}>
       {children}
     </AuthContext.Provider>
   );

@@ -202,6 +202,7 @@ export function AddContentToAlbumDialog({
     try {
       const allItems = [...photos, ...notes, ...files, ...links, ...tiktoks];
       const itemsToAdd = allItems.filter(item => selectedItems.has(item.id));
+      let successCount = 0;
 
       for (const item of itemsToAdd) {
         const insertData: Record<string, string> = {
@@ -210,14 +211,24 @@ export function AddContentToAlbumDialog({
         };
         insertData[`${item.type}_id`] = item.id;
 
-        await supabase
+        const { error } = await supabase
           .from('shared_album_items')
           .insert(insertData as any);
+
+        if (error) {
+          console.error('Error adding item:', error);
+        } else {
+          successCount++;
+        }
       }
 
-      toast.success(`${itemsToAdd.length} Element${itemsToAdd.length !== 1 ? 'e' : ''} hinzugefügt`);
-      onItemsAdded();
-      onOpenChange(false);
+      if (successCount > 0) {
+        toast.success(`${successCount} Element${successCount !== 1 ? 'e' : ''} hinzugefügt`);
+        onItemsAdded();
+        onOpenChange(false);
+      } else {
+        toast.error('Fehler beim Hinzufügen - keine Berechtigung?');
+      }
     } catch (error) {
       console.error('Error adding items:', error);
       toast.error('Fehler beim Hinzufügen');

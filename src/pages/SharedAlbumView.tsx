@@ -76,7 +76,7 @@ const itemVariants = {
 export default function SharedAlbumView() {
   const { albumId } = useParams<{ albumId: string }>();
   const navigate = useNavigate();
-  const { userId, isAuthenticated } = useAuth();
+  const { userId, isAuthenticated, isAuthLoading } = useAuth();
   
   const [album, setAlbum] = useState<SharedAlbumData | null>(null);
   const [items, setItems] = useState<AlbumItem[]>([]);
@@ -103,12 +103,15 @@ export default function SharedAlbumView() {
   const tiktokItems = items.filter(i => i.type === 'tiktok');
 
   useEffect(() => {
+    // Wait for auth to finish loading before deciding to redirect
+    if (isAuthLoading) return;
+    
     if (albumId && userId) {
       fetchAlbumData();
     } else if (!isAuthenticated) {
       navigate('/login');
     }
-  }, [albumId, userId, isAuthenticated]);
+  }, [albumId, userId, isAuthenticated, isAuthLoading]);
 
   const fetchAlbumData = async () => {
     if (!albumId || !userId) return;
