@@ -36,6 +36,8 @@ interface Stats {
   totalPhotosSize: number;
   totalAttachmentsSize: number;
   totalStorageSize: number;
+  trashedFilesSize: number;
+  trashedPhotosSize: number;
   trashedItems: number;
   tiktokVideos: number;
   links: number;
@@ -74,6 +76,7 @@ export default function Dashboard() {
     notes: 0, photos: 0, files: 0, favorites: 0,
     secureNotes: 0, secretTexts: 0,
     totalFilesSize: 0, totalPhotosSize: 0, totalAttachmentsSize: 0, totalStorageSize: 0,
+    trashedFilesSize: 0, trashedPhotosSize: 0,
     trashedItems: 0, tiktokVideos: 0, links: 0
   });
   const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
@@ -153,6 +156,7 @@ export default function Dashboard() {
           notes: 0, photos: 0, files: 0, favorites: 0,
           secureNotes: 0, secretTexts: 0,
           totalFilesSize: 0, totalPhotosSize: 0, totalAttachmentsSize: 0, totalStorageSize: 0,
+          trashedFilesSize: 0, trashedPhotosSize: 0,
           trashedItems: 0, tiktokVideos: 0, links: 0
         });
         setRecentItems([]);
@@ -231,6 +235,32 @@ export default function Dashboard() {
         }
       };
 
+      // Calculate trashed files size from database
+      const [trashedPhotosData, trashedFilesData] = await Promise.all([
+        supabase.from('photos').select('filename').eq('user_id', userId).not('deleted_at', 'is', null),
+        supabase.from('files').select('filename, size').eq('user_id', userId).not('deleted_at', 'is', null),
+      ]);
+
+      // Get trashed files size from the database size column
+      const trashedFilesSize = (trashedFilesData.data || []).reduce((acc, f) => acc + (f.size || 0), 0);
+
+      // For photos, we need to estimate based on average or calculate from storage
+      // Since photos table doesn't have size, we'll estimate from bucket
+      const trashedPhotoFilenames = new Set((trashedPhotosData.data || []).map(p => p.filename));
+      let trashedPhotosSize = 0;
+      
+      try {
+        const { data: allPhotos } = await supabase.storage.from('photos').list(userId, { limit: 1000 });
+        trashedPhotosSize = (allPhotos || [])
+          .filter((f: any) => trashedPhotoFilenames.has(f.name))
+          .reduce((acc, f: any) => {
+            const raw = f?.metadata?.size;
+            return acc + (typeof raw === 'number' ? raw : (Number.parseInt(String(raw ?? 0), 10) || 0));
+          }, 0);
+      } catch (e) {
+        console.error('Error calculating trashed photos size:', e);
+      }
+
       const [storagePhotosSize, storageFilesSize, storageAttachmentsSize] = await Promise.all([
         sumBucketSize('photos'),
         sumBucketSize('files'),
@@ -250,6 +280,8 @@ export default function Dashboard() {
         totalPhotosSize: storagePhotosSize,
         totalAttachmentsSize: storageAttachmentsSize,
         totalStorageSize: storageTotalSize,
+        trashedFilesSize,
+        trashedPhotosSize,
         trashedItems: totalTrashed,
         tiktokVideos: tiktokRes.count || 0,
         links: linksRes.count || 0,
@@ -578,7 +610,7 @@ export default function Dashboard() {
                   <div className="w-2 h-2 rounded-full bg-primary" />
                   <span className="text-xs text-muted-foreground">Anhänge</span>
                 </div>
-                <span className="text-xs font-medium text-foreground">{formatSize(stats.totalAttachmentsSize)}</span>
+              <span className="text-xs font-medium text-foreground">{formatSize(stats.totalAttachmentsSize)}</span>
               </div>
               <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
                 <div 
@@ -586,6 +618,54 @@ export default function Dashboard() {
                   style={{ width: stats.totalStorageSize > 0 ? `${(stats.totalAttachmentsSize / stats.totalStorageSize) * 100}%` : '0%' }}
                 />
               </div>
+              
+              {/* Trash separator */}
+              {(stats.trashedFilesSize + stats.trashedPhotosSize) > 0 && (
+                <>
+                  <div className="border-t border-border my-2 pt-2">
+                    <div className="flex items-center gap-1 mb-2">
+                      <Trash2 className="w-3 h-3 text-muted-foreground" />
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Papierkorb</span>
+                    </div>
+                  </div>
+                  
+                  {stats.trashedPhotosSize > 0 && (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-pink-400/50" />
+                          <span className="text-xs text-muted-foreground">Fotos</span>
+                        </div>
+                        <span className="text-xs font-medium text-muted-foreground">{formatSize(stats.trashedPhotosSize)}</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-pink-400/50 rounded-full transition-all duration-500"
+                          style={{ width: stats.totalStorageSize > 0 ? `${(stats.trashedPhotosSize / stats.totalStorageSize) * 100}%` : '0%' }}
+                        />
+                      </div>
+                    </>
+                  )}
+                  
+                  {stats.trashedFilesSize > 0 && (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-blue-400/50" />
+                          <span className="text-xs text-muted-foreground">Dateien</span>
+                        </div>
+                        <span className="text-xs font-medium text-muted-foreground">{formatSize(stats.trashedFilesSize)}</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-blue-400/50 rounded-full transition-all duration-500"
+                          style={{ width: stats.totalStorageSize > 0 ? `${(stats.trashedFilesSize / stats.totalStorageSize) * 100}%` : '0%' }}
+                        />
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
             </div>
           </div>
 
