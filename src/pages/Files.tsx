@@ -120,6 +120,7 @@ export default function Files() {
   const [newAlbumColor, setNewAlbumColor] = useState('#6366f1');
   const [newAlbumIcon, setNewAlbumIcon] = useState('folder');
   const [showAlbumPicker, setShowAlbumPicker] = useState(false);
+  const [singleFileAlbumPicker, setSingleFileAlbumPicker] = useState<FileItem | null>(null);
   const [editingAlbum, setEditingAlbum] = useState<FileAlbum | null>(null);
   const [showEditAlbumModal, setShowEditAlbumModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -556,6 +557,26 @@ export default function Files() {
     }
   };
 
+  const handleSingleFileMoveToAlbum = async (file: FileItem, albumId: string | null) => {
+    try {
+      const { error } = await supabase
+        .from('files')
+        .update({ album_id: albumId })
+        .eq('id', file.id);
+
+      if (error) throw error;
+
+      setFiles(prev => prev.map(f => 
+        f.id === file.id ? { ...f, album_id: albumId } : f
+      ));
+      setSingleFileAlbumPicker(null);
+      toast.success(albumId ? 'Zu Album hinzugefügt' : 'Aus Album entfernt');
+    } catch (error) {
+      console.error('Error moving file to album:', error);
+      toast.error('Fehler beim Verschieben');
+    }
+  };
+
   // Previewable files for lightbox
   const previewableFiles = useMemo(() => 
     filteredFiles.filter(f => f.mime_type.startsWith('image/') || f.mime_type.startsWith('video/') || f.mime_type === 'application/pdf'),
@@ -934,6 +955,66 @@ export default function Files() {
                       <Folder className="w-4 h-4" style={{ color: album.color }} />
                     </div>
                     <span className="text-foreground">{album.name}</span>
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Album Picker for single file */}
+        {singleFileAlbumPicker && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setSingleFileAlbumPicker(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-card border border-border rounded-2xl p-6 w-full max-w-sm max-h-[60vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-semibold text-foreground mb-2">In Album verschieben</h3>
+              <p className="text-sm text-muted-foreground mb-4 truncate">
+                {singleFileAlbumPicker.filename.replace(/^\d+-/, '')}
+              </p>
+              <div className="space-y-2">
+                <button
+                  onClick={() => handleSingleFileMoveToAlbum(singleFileAlbumPicker, null)}
+                  className={cn(
+                    "w-full flex items-center gap-3 p-3 rounded-xl hover:bg-muted transition-colors",
+                    !singleFileAlbumPicker.album_id && "bg-muted"
+                  )}
+                >
+                  <Folder className="w-5 h-5 text-muted-foreground" />
+                  <span className="text-foreground">Kein Album</span>
+                  {!singleFileAlbumPicker.album_id && (
+                    <span className="ml-auto text-xs text-primary">Aktuell</span>
+                  )}
+                </button>
+                {albums.map((album) => (
+                  <button
+                    key={album.id}
+                    onClick={() => handleSingleFileMoveToAlbum(singleFileAlbumPicker, album.id)}
+                    className={cn(
+                      "w-full flex items-center gap-3 p-3 rounded-xl hover:bg-muted transition-colors",
+                      singleFileAlbumPicker.album_id === album.id && "bg-muted"
+                    )}
+                  >
+                    <div 
+                      className="w-8 h-8 rounded-lg flex items-center justify-center"
+                      style={{ backgroundColor: `${album.color}20` }}
+                    >
+                      <Folder className="w-4 h-4" style={{ color: album.color }} />
+                    </div>
+                    <span className="text-foreground">{album.name}</span>
+                    {singleFileAlbumPicker.album_id === album.id && (
+                      <span className="ml-auto text-xs text-primary">Aktuell</span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -1330,6 +1411,12 @@ export default function Files() {
                         <Tag className="w-4 h-4 text-white" />
                       </button>
                       <button
+                        onClick={(e) => { e.stopPropagation(); setSingleFileAlbumPicker(file); }}
+                        className="p-1.5 hover:bg-white/20 rounded-lg transition-colors"
+                      >
+                        <Folder className="w-4 h-4 text-white" />
+                      </button>
+                      <button
                         onClick={(e) => { e.stopPropagation(); downloadFile(file); }}
                         className="p-1.5 hover:bg-white/20 rounded-lg transition-colors"
                       >
@@ -1454,6 +1541,12 @@ export default function Files() {
                     className="p-2 hover:bg-muted rounded-lg transition-colors"
                   >
                     <Download className="w-5 h-5 text-muted-foreground" />
+                  </button>
+                  <button
+                    onClick={() => setSingleFileAlbumPicker(file)}
+                    className="p-2 hover:bg-muted rounded-lg transition-colors"
+                  >
+                    <Folder className="w-5 h-5 text-muted-foreground" />
                   </button>
                   <button
                     onClick={() => setRenameDialog({ isOpen: true, file })}
