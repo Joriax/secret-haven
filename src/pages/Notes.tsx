@@ -32,7 +32,8 @@ import {
   Eye,
   EyeOff,
   CheckSquare,
-  Folder
+  Folder,
+  Share2
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { supabase } from '@/integrations/supabase/client';
@@ -47,6 +48,7 @@ import { toast } from 'sonner';
 import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
 import { NoteFolderSidebar } from '@/components/NoteFolderSidebar';
 import { NoteAttachmentsPanel } from '@/components/NoteAttachmentsPanel';
+import { ShareToAlbumDialog } from '@/components/ShareToAlbumDialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -107,6 +109,7 @@ export default function Notes() {
   const [versions, setVersions] = useState<NoteVersion[]>([]);
   const [showVersions, setShowVersions] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; note: Note | null }>({ isOpen: false, note: null });
+  const [shareToAlbum, setShareToAlbum] = useState<{ isOpen: boolean; note: Note | null }>({ isOpen: false, note: null });
   const [autoSaveTimeout, setAutoSaveTimeout] = useState<NodeJS.Timeout | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -793,6 +796,10 @@ export default function Notes() {
                           <Share className="w-4 h-4 mr-2" />
                           Teilen
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setShareToAlbum({ isOpen: true, note }); }}>
+                          <Share2 className="w-4 h-4 mr-2" />
+                          Zu Album hinzufügen
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         {/* Move to folder */}
                         {folders.length > 0 && (
@@ -1314,6 +1321,15 @@ export default function Notes() {
         onClose={() => setDeleteConfirm({ isOpen: false, note: null })}
         onConfirm={handleDelete}
         itemName={deleteConfirm.note?.title}
+      />
+
+      {/* Share to Album Dialog */}
+      <ShareToAlbumDialog
+        isOpen={shareToAlbum.isOpen}
+        onClose={() => setShareToAlbum({ isOpen: false, note: null })}
+        itemId={shareToAlbum.note?.id || ''}
+        itemType="note"
+        contentType="notes"
       />
 
       {/* Click outside to close tag selector */}

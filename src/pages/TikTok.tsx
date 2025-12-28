@@ -17,9 +17,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { useTikTokVideos, TikTokVideo } from '@/hooks/useTikTokVideos';
 import { useTikTokFolders } from '@/hooks/useTikTokFolders';
 import { TikTokFullscreenViewer } from '@/components/TikTokFullscreenViewer';
+import { ShareToAlbumDialog } from '@/components/ShareToAlbumDialog';
 import {
   Plus,
   Trash2,
@@ -35,6 +43,8 @@ import {
   ChevronLeft,
   ChevronRight,
   MonitorPlay,
+  MoreVertical,
+  Share2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -53,6 +63,7 @@ export default function TikTok() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [filterFavorites, setFilterFavorites] = useState(false);
+  const [shareToAlbum, setShareToAlbum] = useState<{ isOpen: boolean; video: TikTokVideo | null }>({ isOpen: false, video: null });
   const [filterFolderId, setFilterFolderId] = useState<string | null>(null);
   const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
   const [fullscreenStartIndex, setFullscreenStartIndex] = useState(0);
@@ -428,28 +439,49 @@ export default function TikTok() {
 
                   {/* Actions on Hover */}
                   <div className="absolute bottom-2 left-2 right-2 flex justify-between opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 bg-black/50 text-white hover:bg-black/70"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleFavorite(video.id);
-                      }}
-                    >
-                      <Heart className={cn("h-4 w-4", video.is_favorite && "fill-red-500 text-red-500")} />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 bg-black/50 text-white hover:bg-red-500/70"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deleteVideo(video.id);
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 bg-black/50 text-white hover:bg-black/70"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleFavorite(video.id);
+                        }}
+                      >
+                        <Heart className={cn("h-4 w-4", video.is_favorite && "fill-red-500 text-red-500")} />
+                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 bg-black/50 text-white hover:bg-black/70"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start">
+                          <DropdownMenuItem onClick={() => window.open(video.url, '_blank')}>
+                            <ExternalLink className="h-4 w-4 mr-2" />
+                            In TikTok öffnen
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setShareToAlbum({ isOpen: true, video })}>
+                            <Share2 className="h-4 w-4 mr-2" />
+                            Zu Album hinzufügen
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem 
+                            className="text-destructive"
+                            onClick={() => deleteVideo(video.id)}
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Löschen
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </div>
                 </div>
                 
@@ -572,6 +604,15 @@ export default function TikTok() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Share to Album Dialog */}
+      <ShareToAlbumDialog
+        isOpen={shareToAlbum.isOpen}
+        onClose={() => setShareToAlbum({ isOpen: false, video: null })}
+        itemId={shareToAlbum.video?.id || ''}
+        itemType="tiktok"
+        contentType="tiktoks"
+      />
     </>
   );
 }

@@ -49,12 +49,14 @@ import {
   Check,
   Loader2,
   X,
+  Share2,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
+import { ShareToAlbumDialog } from '@/components/ShareToAlbumDialog';
 
 const FOLDER_COLORS = [
   '#6366f1', '#8b5cf6', '#ec4899', '#ef4444', '#f97316',
@@ -90,6 +92,7 @@ export default function Links() {
   const [isFetchingMeta, setIsFetchingMeta] = useState(false);
   const [newImageUrl, setNewImageUrl] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; link: Link | null }>({ isOpen: false, link: null });
+  const [shareToAlbum, setShareToAlbum] = useState<{ isOpen: boolean; link: Link | null }>({ isOpen: false, link: null });
 
   // Folder management states
   const [newFolderName, setNewFolderName] = useState('');
@@ -540,6 +543,13 @@ export default function Links() {
 
                         <DropdownMenuSeparator />
 
+                        <DropdownMenuItem onClick={() => setShareToAlbum({ isOpen: true, link })}>
+                          <Share2 className="h-4 w-4 mr-2" />
+                          Zu Album hinzufügen
+                        </DropdownMenuItem>
+
+                        <DropdownMenuSeparator />
+
                         <DropdownMenuItem
                           className="text-destructive"
                           onClick={() => setDeleteConfirm({ isOpen: true, link })}
@@ -727,6 +737,15 @@ export default function Links() {
         onClose={() => setDeleteConfirm({ isOpen: false, link: null })}
         onConfirm={handleDelete}
         itemName={deleteConfirm.link?.title || 'Link'}
+      />
+
+      {/* Share to Album Dialog */}
+      <ShareToAlbumDialog
+        isOpen={shareToAlbum.isOpen}
+        onClose={() => setShareToAlbum({ isOpen: false, link: null })}
+        itemId={shareToAlbum.link?.id || ''}
+        itemType="link"
+        contentType="links"
       />
     </>
   );
