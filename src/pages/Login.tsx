@@ -152,13 +152,21 @@ export default function Login() {
     setError('');
 
     try {
-      const { data, error: invokeError } = await supabase.functions.invoke('verify-pin', {
+      const response = await supabase.functions.invoke('verify-pin', {
         body: { action: 'verify', pin: pinValue }
       });
 
+      // supabase.functions.invoke always returns data (even on HTTP errors); parse error from JSON body
+      const data = response.data;
+      const invokeError = response.error;
+
       if (invokeError) {
         console.error('Edge function error:', invokeError);
-        throw new Error('Verbindungsfehler');
+        // Try to extract message from context or body
+        const errMsg = (invokeError as any)?.context?.body
+          ? JSON.parse((invokeError as any).context.body)?.error
+          : null;
+        throw new Error(errMsg || 'Verbindungsfehler');
       }
 
       if (data?.success && data?.userId) {
@@ -205,13 +213,19 @@ export default function Login() {
     setError('');
 
     try {
-      const { data, error: invokeError } = await supabase.functions.invoke('verify-pin', {
+      const response = await supabase.functions.invoke('verify-pin', {
         body: { action: 'verify-recovery', recoveryKey: recoveryKey.trim() }
       });
 
+      const data = response.data;
+      const invokeError = response.error;
+
       if (invokeError) {
         console.error('Edge function error:', invokeError);
-        throw new Error('Verbindungsfehler');
+        const errMsg = (invokeError as any)?.context?.body
+          ? JSON.parse((invokeError as any).context.body)?.error
+          : null;
+        throw new Error(errMsg || 'Verbindungsfehler');
       }
 
       if (data?.success && data?.userId) {
