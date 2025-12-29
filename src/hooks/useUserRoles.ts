@@ -15,53 +15,62 @@ export function useUserRoles() {
   const [roles, setRoles] = useState<UserRole[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const { userId } = useAuth();
+  const { userId, sessionToken } = useAuth();
 
   const fetchRoles = useCallback(async () => {
-    if (!userId) {
+    if (!userId || !sessionToken) {
       setIsLoading(false);
       return;
     }
 
     try {
-      // Check if current user is admin
-      const { data: userRoles } = await supabase
-        .from('user_roles')
-        .select('*')
-        .eq('user_id', userId);
+      // Get current user's roles via edge function
+      const { data: userRolesResponse, error: userRolesError } = await supabase.functions.invoke('verify-pin', {
+        body: { 
+          action: 'get-user-roles',
+          sessionToken 
+        }
+      });
 
-      const hasAdminRole = userRoles?.some(r => r.role === 'admin') || false;
+      if (userRolesError) throw userRolesError;
+
+      const userRoles = userRolesResponse?.roles || [];
+      const hasAdminRole = userRoles.some((r: UserRole) => r.role === 'admin');
       setIsAdmin(hasAdminRole);
 
       // If admin, fetch all roles
       if (hasAdminRole) {
-        const { data: allRoles } = await supabase
-          .from('user_roles')
-          .select('*')
-          .order('created_at', { ascending: false });
+        const { data: allRolesResponse, error: allRolesError } = await supabase.functions.invoke('verify-pin', {
+          body: { 
+            action: 'admin-get-all-roles',
+            sessionToken 
+          }
+        });
+
+        if (allRolesError) throw allRolesError;
         
-        setRoles(allRoles as UserRole[] || []);
+        setRoles(allRolesResponse?.roles as UserRole[] || []);
       }
     } catch (error) {
       console.error('Error fetching roles:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [userId]);
+  }, [userId, sessionToken]);
 
   useEffect(() => {
     fetchRoles();
   }, [fetchRoles]);
 
   const assignRole = async (targetUserId: string, role: AppRole) => {
-    if (!isAdmin || !userId) return false;
+    if (!isAdmin || !userId || !sessionToken) return false;
 
     try {
       const { data, error } = await supabase.functions.invoke('verify-pin', {
         body: { 
           action: 'admin-assign-role', 
           targetUserId,
-          adminUserId: userId,
+          sessionToken,
           role
         }
       });
@@ -82,14 +91,14 @@ export function useUserRoles() {
   };
 
   const removeRole = async (targetUserId: string, role: AppRole) => {
-    if (!isAdmin || !userId) return false;
+    if (!isAdmin || !userId || !sessionToken) return false;
 
     try {
       const { data, error } = await supabase.functions.invoke('verify-pin', {
         body: { 
           action: 'admin-remove-role', 
           targetUserId,
-          adminUserId: userId,
+          sessionToken,
           role
         }
       });

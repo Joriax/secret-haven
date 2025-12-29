@@ -69,11 +69,11 @@ export default function Login() {
       if (biometricEnabled && !isAuthenticated && !lockoutUntil) {
         setIsBiometricLoading(true);
         try {
-          const userId = await authenticateBiometric();
-          if (userId) {
+          const result = await authenticateBiometric();
+          if (result) {
             localStorage.removeItem('vault_attempts');
             localStorage.removeItem('vault_lockout');
-            login(userId, false);
+            login(result, false, '');
             toast.success('Biometrische Anmeldung erfolgreich');
             navigate('/dashboard', { replace: true });
           }
@@ -96,11 +96,11 @@ export default function Login() {
     setError('');
     
     try {
-      const userId = await authenticateBiometric();
-      if (userId) {
+      const result = await authenticateBiometric();
+      if (result) {
         localStorage.removeItem('vault_attempts');
         localStorage.removeItem('vault_lockout');
-        login(userId, false);
+        login(result, false, '');
         toast.success('Biometrische Anmeldung erfolgreich');
         navigate('/dashboard', { replace: true });
       } else {
@@ -169,10 +169,10 @@ export default function Login() {
         throw new Error(errMsg || 'Verbindungsfehler');
       }
 
-      if (data?.success && data?.userId) {
+      if (data?.success && data?.userId && data?.sessionToken) {
         localStorage.removeItem('vault_attempts');
         localStorage.removeItem('vault_lockout');
-        login(data.userId, data.isDecoy || false);
+        login(data.userId, data.isDecoy || false, data.sessionToken);
         navigate('/dashboard', { replace: true });
       } else {
         throw new Error(data?.error || 'Falscher PIN');
@@ -228,10 +228,10 @@ export default function Login() {
         throw new Error(errMsg || 'Verbindungsfehler');
       }
 
-      if (data?.success && data?.userId) {
+      if (data?.success && data?.userId && data?.sessionToken) {
         localStorage.removeItem('vault_attempts');
         localStorage.removeItem('vault_lockout');
-        login(data.userId, false);
+        login(data.userId, false, data.sessionToken);
         navigate('/dashboard', { replace: true });
       } else {
         throw new Error(data?.error || 'Ungültiger Recovery-Key');
