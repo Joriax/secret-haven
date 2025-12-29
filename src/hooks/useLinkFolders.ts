@@ -15,69 +15,57 @@ export interface LinkFolder {
 export function useLinkFolders() {
   const [folders, setFolders] = useState<LinkFolder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const { userId, isDecoyMode } = useAuth();
+  const { userId, isDecoyMode, sessionToken } = useAuth();
 
   const fetchFolders = useCallback(async () => {
-    if (!userId || isDecoyMode) {
+    if (!userId || isDecoyMode || !sessionToken) {
       setFolders([]);
       setIsLoading(false);
       return;
     }
 
     try {
-      const { data, error } = await supabase
-        .from('link_folders')
-        .select('*')
-        .eq('user_id', userId)
-        .order('name', { ascending: true });
+      const { data, error } = await supabase.functions.invoke('vault-data', {
+        body: { 
+          action: 'get-link-folders',
+          sessionToken,
+          data: {}
+        }
+      });
 
       if (error) throw error;
-      setFolders(data || []);
+      if (!data.success) throw new Error(data.error);
+      
+      setFolders(data.data || []);
     } catch (error) {
       console.error('Error fetching link folders:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [userId, isDecoyMode]);
+  }, [userId, isDecoyMode, sessionToken]);
 
   useEffect(() => {
     fetchFolders();
   }, [fetchFolders]);
 
-  // Real-time updates
-  useEffect(() => {
-    if (!userId) return;
-
-    const channel = supabase
-      .channel('link-folders-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'link_folders' }, fetchFolders)
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [userId, fetchFolders]);
-
   const createFolder = async (name: string, color: string = '#6366f1', icon: string = 'folder') => {
-    if (!userId) return null;
+    if (!userId || !sessionToken) return null;
 
     try {
-      const { data, error } = await supabase
-        .from('link_folders')
-        .insert({
-          user_id: userId,
-          name,
-          color,
-          icon,
-        })
-        .select()
-        .single();
+      const { data, error } = await supabase.functions.invoke('vault-data', {
+        body: {
+          action: 'create-link-folder',
+          sessionToken,
+          data: { name, color, icon }
+        }
+      });
 
       if (error) throw error;
+      if (!data.success) throw new Error(data.error);
       
-      setFolders(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
+      setFolders(prev => [...prev, data.data].sort((a, b) => a.name.localeCompare(b.name)));
       toast.success('Ordner erstellt');
-      return data;
+      return data.data;
     } catch (error) {
       console.error('Error creating folder:', error);
       toast.error('Fehler beim Erstellen');
@@ -86,13 +74,19 @@ export function useLinkFolders() {
   };
 
   const updateFolder = async (id: string, updates: Partial<Pick<LinkFolder, 'name' | 'color' | 'icon'>>) => {
+    if (!sessionToken) return;
+    
     try {
-      const { error } = await supabase
-        .from('link_folders')
-        .update(updates)
-        .eq('id', id);
+      const { data, error } = await supabase.functions.invoke('vault-data', {
+        body: {
+          action: 'update-link-folder',
+          sessionToken,
+          data: { id, updates }
+        }
+      });
 
       if (error) throw error;
+      if (!data.success) throw new Error(data.error);
       
       setFolders(prev => prev.map(f => f.id === id ? { ...f, ...updates } : f));
       toast.success('Ordner aktualisiert');
@@ -103,13 +97,19 @@ export function useLinkFolders() {
   };
 
   const deleteFolder = async (id: string) => {
+    if (!sessionToken) return;
+    
     try {
-      const { error } = await supabase
-        .from('link_folders')
-        .delete()
-        .eq('id', id);
+      const { data, error } = await supabase.functions.invoke('vault-data', {
+        body: {
+          action: 'delete-link-folder',
+          sessionToken,
+          data: { id }
+        }
+      });
 
       if (error) throw error;
+      if (!data.success) throw new Error(data.error);
       
       setFolders(prev => prev.filter(f => f.id !== id));
       toast.success('Ordner gelöscht');

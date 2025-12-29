@@ -585,6 +585,314 @@ serve(async (req) => {
       );
     }
 
+    // ========== LINK CRUD ==========
+    if (action === 'create-link') {
+      const { url, title, folder_id, favicon_url, description, image_url } = requestData || {};
+      
+      const { data, error } = await supabase
+        .from('links')
+        .insert({
+          user_id: userId,
+          url,
+          title: title || url,
+          folder_id,
+          favicon_url,
+          description,
+          image_url
+        })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      return new Response(
+        JSON.stringify({ success: true, data }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'update-link') {
+      const { id, updates } = requestData || {};
+      
+      const { data, error } = await supabase
+        .from('links')
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .eq('user_id', userId)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      return new Response(
+        JSON.stringify({ success: true, data }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'delete-link') {
+      const { id, permanent } = requestData || {};
+      
+      if (permanent) {
+        const { error } = await supabase.from('links').delete().eq('id', id).eq('user_id', userId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('links').update({ deleted_at: new Date().toISOString() }).eq('id', id).eq('user_id', userId);
+        if (error) throw error;
+      }
+      
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // ========== TIKTOK CRUD ==========
+    if (action === 'create-tiktok') {
+      const { url, video_id, title, author_name, thumbnail_url, folder_id } = requestData || {};
+      
+      const { data, error } = await supabase
+        .from('tiktok_videos')
+        .insert({
+          user_id: userId,
+          url,
+          video_id,
+          title,
+          author_name,
+          thumbnail_url,
+          folder_id
+        })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      return new Response(
+        JSON.stringify({ success: true, data }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'update-tiktok') {
+      const { id, updates } = requestData || {};
+      
+      const { data, error } = await supabase
+        .from('tiktok_videos')
+        .update(updates)
+        .eq('id', id)
+        .eq('user_id', userId)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      return new Response(
+        JSON.stringify({ success: true, data }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'delete-tiktok') {
+      const { id, permanent } = requestData || {};
+      
+      if (permanent) {
+        const { error } = await supabase.from('tiktok_videos').delete().eq('id', id).eq('user_id', userId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('tiktok_videos').update({ deleted_at: new Date().toISOString() }).eq('id', id).eq('user_id', userId);
+        if (error) throw error;
+      }
+      
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // ========== NOTE FOLDERS CRUD ==========
+    if (action === 'create-note-folder') {
+      const { name, color, icon } = requestData || {};
+      
+      const { data, error } = await supabase
+        .from('note_folders')
+        .insert({ user_id: userId, name, color, icon })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      return new Response(
+        JSON.stringify({ success: true, data }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'update-note-folder') {
+      const { id, updates } = requestData || {};
+      
+      const { data, error } = await supabase
+        .from('note_folders')
+        .update(updates)
+        .eq('id', id)
+        .eq('user_id', userId)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      return new Response(
+        JSON.stringify({ success: true, data }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'delete-note-folder') {
+      const { id } = requestData || {};
+      
+      // First, remove folder reference from notes
+      await supabase.from('notes').update({ folder_id: null }).eq('folder_id', id).eq('user_id', userId);
+      
+      const { error } = await supabase.from('note_folders').delete().eq('id', id).eq('user_id', userId);
+      if (error) throw error;
+      
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // ========== LINK FOLDERS CRUD ==========
+    if (action === 'get-link-folders') {
+      const { data, error } = await supabase
+        .from('link_folders')
+        .select('*')
+        .eq('user_id', userId)
+        .order('name');
+      
+      if (error) throw error;
+      
+      return new Response(
+        JSON.stringify({ success: true, data: data || [] }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'create-link-folder') {
+      const { name, color, icon } = requestData || {};
+      
+      const { data, error } = await supabase
+        .from('link_folders')
+        .insert({ user_id: userId, name, color, icon })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      return new Response(
+        JSON.stringify({ success: true, data }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'update-link-folder') {
+      const { id, updates } = requestData || {};
+      
+      const { data, error } = await supabase
+        .from('link_folders')
+        .update(updates)
+        .eq('id', id)
+        .eq('user_id', userId)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      return new Response(
+        JSON.stringify({ success: true, data }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'delete-link-folder') {
+      const { id } = requestData || {};
+      
+      await supabase.from('links').update({ folder_id: null }).eq('folder_id', id).eq('user_id', userId);
+      
+      const { error } = await supabase.from('link_folders').delete().eq('id', id).eq('user_id', userId);
+      if (error) throw error;
+      
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // ========== TIKTOK FOLDERS CRUD ==========
+    if (action === 'get-tiktok-folders') {
+      const { data, error } = await supabase
+        .from('tiktok_folders')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at');
+      
+      if (error) throw error;
+      
+      return new Response(
+        JSON.stringify({ success: true, data: data || [] }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'create-tiktok-folder') {
+      const { name, icon, color } = requestData || {};
+      
+      const { data, error } = await supabase
+        .from('tiktok_folders')
+        .insert({ user_id: userId, name, icon, color })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      return new Response(
+        JSON.stringify({ success: true, data }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'update-tiktok-folder') {
+      const { id, updates } = requestData || {};
+      
+      const { data, error } = await supabase
+        .from('tiktok_folders')
+        .update(updates)
+        .eq('id', id)
+        .eq('user_id', userId)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      return new Response(
+        JSON.stringify({ success: true, data }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'delete-tiktok-folder') {
+      const { id } = requestData || {};
+      
+      await supabase.from('tiktok_videos').update({ folder_id: null }).eq('folder_id', id).eq('user_id', userId);
+      
+      const { error } = await supabase.from('tiktok_folders').delete().eq('id', id).eq('user_id', userId);
+      if (error) throw error;
+      
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     return new Response(
       JSON.stringify({ success: false, error: 'Ungültige Aktion' }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }

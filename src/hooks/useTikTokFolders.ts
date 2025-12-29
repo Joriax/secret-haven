@@ -15,69 +15,61 @@ export interface TikTokFolder {
 export function useTikTokFolders() {
   const [folders, setFolders] = useState<TikTokFolder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const { userId, isDecoyMode } = useAuth();
+  const { userId, isDecoyMode, sessionToken } = useAuth();
 
   const fetchFolders = useCallback(async () => {
-    if (!userId || isDecoyMode) {
+    if (!userId || isDecoyMode || !sessionToken) {
       setFolders([]);
       setIsLoading(false);
       return;
     }
 
     try {
-      const { data, error } = await supabase
-        .from('tiktok_folders')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: true });
+      const { data, error } = await supabase.functions.invoke('vault-data', {
+        body: { 
+          action: 'get-tiktok-folders',
+          sessionToken,
+          data: {}
+        }
+      });
 
       if (error) throw error;
-      setFolders((data as TikTokFolder[]) || []);
+      if (!data.success) throw new Error(data.error);
+      
+      setFolders((data.data as TikTokFolder[]) || []);
     } catch (error) {
       console.error('Error fetching TikTok folders:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [userId, isDecoyMode]);
+  }, [userId, isDecoyMode, sessionToken]);
 
   useEffect(() => {
     fetchFolders();
   }, [fetchFolders]);
 
-  // Real-time updates
-  useEffect(() => {
-    if (!userId) return;
-
-    const channel = supabase
-      .channel('tiktok-folders-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tiktok_folders' }, fetchFolders)
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [userId, fetchFolders]);
-
   const createFolder = async (name: string, icon?: string, color?: string) => {
-    if (!userId) return null;
+    if (!userId || !sessionToken) return null;
 
     try {
-      const { data, error } = await supabase
-        .from('tiktok_folders')
-        .insert({
-          user_id: userId,
-          name,
-          icon: icon || 'folder',
-          color: color || '#6366f1',
-        })
-        .select()
-        .single();
+      const { data, error } = await supabase.functions.invoke('vault-data', {
+        body: {
+          action: 'create-tiktok-folder',
+          sessionToken,
+          data: { 
+            name, 
+            icon: icon || 'folder', 
+            color: color || '#6366f1' 
+          }
+        }
+      });
 
       if (error) throw error;
+      if (!data.success) throw new Error(data.error);
       
-      setFolders(prev => [...prev, data as TikTokFolder]);
+      setFolders(prev => [...prev, data.data as TikTokFolder]);
       toast.success('Ordner erstellt');
-      return data;
+      return data.data;
     } catch (error) {
       console.error('Error creating folder:', error);
       toast.error('Fehler beim Erstellen');
@@ -86,13 +78,19 @@ export function useTikTokFolders() {
   };
 
   const updateFolder = async (id: string, updates: Partial<Pick<TikTokFolder, 'name' | 'icon' | 'color'>>) => {
+    if (!sessionToken) return;
+    
     try {
-      const { error } = await supabase
-        .from('tiktok_folders')
-        .update(updates)
-        .eq('id', id);
+      const { data, error } = await supabase.functions.invoke('vault-data', {
+        body: {
+          action: 'update-tiktok-folder',
+          sessionToken,
+          data: { id, updates }
+        }
+      });
 
       if (error) throw error;
+      if (!data.success) throw new Error(data.error);
       
       setFolders(prev => prev.map(f => f.id === id ? { ...f, ...updates } : f));
       toast.success('Ordner aktualisiert');
@@ -103,13 +101,19 @@ export function useTikTokFolders() {
   };
 
   const deleteFolder = async (id: string) => {
+    if (!sessionToken) return;
+    
     try {
-      const { error } = await supabase
-        .from('tiktok_folders')
-        .delete()
-        .eq('id', id);
+      const { data, error } = await supabase.functions.invoke('vault-data', {
+        body: {
+          action: 'delete-tiktok-folder',
+          sessionToken,
+          data: { id }
+        }
+      });
 
       if (error) throw error;
+      if (!data.success) throw new Error(data.error);
       
       setFolders(prev => prev.filter(f => f.id !== id));
       toast.success('Ordner gelöscht');

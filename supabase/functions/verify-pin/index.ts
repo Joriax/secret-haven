@@ -50,6 +50,45 @@ function getClientIP(req: Request): string {
          'unknown';
 }
 
+// IP Geolocation lookup using ip-api.com (free, no API key needed)
+interface GeoLocation {
+  country: string | null;
+  region: string | null;
+  city: string | null;
+}
+
+async function getGeoLocation(ip: string): Promise<GeoLocation> {
+  // Skip for localhost/private IPs
+  if (ip === 'unknown' || ip.startsWith('127.') || ip.startsWith('192.168.') || 
+      ip.startsWith('10.') || ip.startsWith('172.') || ip === '::1') {
+    return { country: null, region: null, city: null };
+  }
+  
+  try {
+    const response = await fetch(`http://ip-api.com/json/${ip}?fields=status,country,regionName,city`);
+    
+    if (!response.ok) {
+      console.log('Geolocation lookup failed:', response.status);
+      return { country: null, region: null, city: null };
+    }
+    
+    const data = await response.json();
+    
+    if (data.status === 'success') {
+      return {
+        country: data.country || null,
+        region: data.regionName || null,
+        city: data.city || null
+      };
+    }
+    
+    return { country: null, region: null, city: null };
+  } catch (error) {
+    console.error('Geolocation lookup error:', error);
+    return { country: null, region: null, city: null };
+  }
+}
+
 // Parse user agent to extract browser, OS, and device type
 function parseUserAgent(ua: string | null): { browser: string; os: string; deviceType: string } {
   if (!ua) return { browser: 'Unbekannt', os: 'Unbekannt', deviceType: 'Unbekannt' };
@@ -135,7 +174,7 @@ async function recordLoginAttempt(supabase: any, ipAddress: string, success: boo
   }
 }
 
-// Log security event with enhanced details
+// Log security event with enhanced details including geolocation
 async function logSecurityEvent(
   supabase: any, 
   userId: string, 
@@ -146,6 +185,7 @@ async function logSecurityEvent(
   const ipAddress = getClientIP(req);
   const userAgent = req.headers.get('user-agent');
   const { browser, os, deviceType } = parseUserAgent(userAgent);
+  const geo = await getGeoLocation(ipAddress);
   
   await supabase.from('security_logs').insert({
     user_id: userId,
@@ -155,7 +195,10 @@ async function logSecurityEvent(
     user_agent: userAgent,
     browser,
     os,
-    device_type: deviceType
+    device_type: deviceType,
+    country: geo.country,
+    region: geo.region,
+    city: geo.city
   });
 }
 
@@ -202,7 +245,10 @@ async function createSessionWithHistory(
     throw error;
   }
   
-  // Create session history entry
+  // Get geolocation data
+  const geo = await getGeoLocation(ipAddress);
+  
+  // Create session history entry with geolocation
   await supabase.from('session_history').insert({
     user_id: userId,
     ip_address: ipAddress,
@@ -210,6 +256,9 @@ async function createSessionWithHistory(
     browser,
     os,
     device_type: deviceType,
+    country: geo.country,
+    region: geo.region,
+    city: geo.city,
     is_active: true
   });
   
