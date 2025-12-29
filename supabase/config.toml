@@ -8,3 +8,9 @@ verify_jwt = false
 
 [functions.fetch-tiktok-metadata]
 verify_jwt = false
+
+[functions.vault-data]
+verify_jwt = false
+
+[functions.fetch-link-metadata]
+verify_jwt = false
