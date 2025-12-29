@@ -219,6 +219,27 @@ export type Database = {
           },
         ]
       }
+      login_attempts: {
+        Row: {
+          attempted_at: string | null
+          id: string
+          ip_address: string
+          success: boolean | null
+        }
+        Insert: {
+          attempted_at?: string | null
+          id?: string
+          ip_address: string
+          success?: boolean | null
+        }
+        Update: {
+          attempted_at?: string | null
+          id?: string
+          ip_address?: string
+          success?: boolean | null
+        }
+        Relationships: []
+      }
       note_attachments: {
         Row: {
           created_at: string | null
@@ -468,33 +489,107 @@ export type Database = {
       }
       security_logs: {
         Row: {
+          browser: string | null
+          city: string | null
+          country: string | null
           created_at: string | null
           details: Json | null
+          device_type: string | null
           event_type: string
           id: string
           ip_address: string | null
+          os: string | null
+          region: string | null
           user_agent: string | null
           user_id: string
         }
         Insert: {
+          browser?: string | null
+          city?: string | null
+          country?: string | null
           created_at?: string | null
           details?: Json | null
+          device_type?: string | null
           event_type: string
           id?: string
           ip_address?: string | null
+          os?: string | null
+          region?: string | null
           user_agent?: string | null
           user_id: string
         }
         Update: {
+          browser?: string | null
+          city?: string | null
+          country?: string | null
           created_at?: string | null
           details?: Json | null
+          device_type?: string | null
           event_type?: string
           id?: string
           ip_address?: string | null
+          os?: string | null
+          region?: string | null
           user_agent?: string | null
           user_id?: string
         }
         Relationships: []
+      }
+      session_history: {
+        Row: {
+          browser: string | null
+          city: string | null
+          country: string | null
+          device_type: string | null
+          id: string
+          ip_address: string | null
+          is_active: boolean | null
+          login_at: string | null
+          logout_at: string | null
+          os: string | null
+          region: string | null
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          browser?: string | null
+          city?: string | null
+          country?: string | null
+          device_type?: string | null
+          id?: string
+          ip_address?: string | null
+          is_active?: boolean | null
+          login_at?: string | null
+          logout_at?: string | null
+          os?: string | null
+          region?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          browser?: string | null
+          city?: string | null
+          country?: string | null
+          device_type?: string | null
+          id?: string
+          ip_address?: string | null
+          is_active?: boolean | null
+          login_at?: string | null
+          logout_at?: string | null
+          os?: string | null
+          region?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "session_history_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "vault_users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       shared_album_access: {
         Row: {
@@ -786,6 +881,9 @@ export type Database = {
           created_at: string | null
           decoy_pin_hash: string | null
           id: string
+          last_login_at: string | null
+          last_login_ip: string | null
+          login_count: number | null
           pin_hash: string
           recovery_key: string | null
           updated_at: string | null
@@ -795,6 +893,9 @@ export type Database = {
           created_at?: string | null
           decoy_pin_hash?: string | null
           id?: string
+          last_login_at?: string | null
+          last_login_ip?: string | null
+          login_count?: number | null
           pin_hash: string
           recovery_key?: string | null
           updated_at?: string | null
@@ -804,6 +905,9 @@ export type Database = {
           created_at?: string | null
           decoy_pin_hash?: string | null
           id?: string
+          last_login_at?: string | null
+          last_login_ip?: string | null
+          login_count?: number | null
           pin_hash?: string
           recovery_key?: string | null
           updated_at?: string | null
@@ -840,6 +944,7 @@ export type Database = {
     }
     Functions: {
       cleanup_expired_sessions: { Args: never; Returns: undefined }
+      cleanup_old_login_attempts: { Args: never; Returns: undefined }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
