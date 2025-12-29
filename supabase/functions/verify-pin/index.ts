@@ -3,10 +3,15 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-forwarded-for, x-real-ip',
 };
 
-// Simple hash function using Web Crypto API (compatible with Edge Functions)
+// Rate limiting configuration
+const RATE_LIMIT_MAX_ATTEMPTS = 5; // Max attempts per window
+const RATE_LIMIT_WINDOW_MINUTES = 15; // Window in minutes
+const LOCKOUT_DURATION_MINUTES = 30; // Lockout duration after exceeding limit
+
+// Simple hash function using Web Crypto API
 async function hashPin(pin: string, salt?: string): Promise<string> {
   const actualSalt = salt || crypto.randomUUID();
   const encoder = new TextEncoder();
@@ -31,14 +36,197 @@ function normalizeRecoveryKeyComparable(key: string): string {
   return normalizeRecoveryKey(key).replace(/-/g, '');
 }
 
-// Generate a secure random session token
 function generateSessionToken(): string {
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
   return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-// Validate session token and return user info
+// Extract IP address from request
+function getClientIP(req: Request): string {
+  return req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+         req.headers.get('x-real-ip') ||
+         req.headers.get('cf-connecting-ip') ||
+         'unknown';
+}
+
+// Parse user agent to extract browser, OS, and device type
+function parseUserAgent(ua: string | null): { browser: string; os: string; deviceType: string } {
+  if (!ua) return { browser: 'Unbekannt', os: 'Unbekannt', deviceType: 'Unbekannt' };
+  
+  let browser = 'Unbekannt';
+  let os = 'Unbekannt';
+  let deviceType = 'Desktop';
+  
+  // Detect browser
+  if (ua.includes('Firefox/')) browser = 'Firefox';
+  else if (ua.includes('Edg/')) browser = 'Edge';
+  else if (ua.includes('Chrome/')) browser = 'Chrome';
+  else if (ua.includes('Safari/') && !ua.includes('Chrome')) browser = 'Safari';
+  else if (ua.includes('Opera/') || ua.includes('OPR/')) browser = 'Opera';
+  
+  // Detect OS
+  if (ua.includes('Windows NT 10')) os = 'Windows 10/11';
+  else if (ua.includes('Windows NT')) os = 'Windows';
+  else if (ua.includes('Mac OS X')) os = 'macOS';
+  else if (ua.includes('iPhone')) { os = 'iOS'; deviceType = 'Mobile'; }
+  else if (ua.includes('iPad')) { os = 'iPadOS'; deviceType = 'Tablet'; }
+  else if (ua.includes('Android')) { 
+    os = 'Android'; 
+    deviceType = ua.includes('Mobile') ? 'Mobile' : 'Tablet';
+  }
+  else if (ua.includes('Linux')) os = 'Linux';
+  
+  return { browser, os, deviceType };
+}
+
+// Check rate limiting for an IP address
+async function checkRateLimit(supabase: any, ipAddress: string): Promise<{ allowed: boolean; remainingAttempts: number; lockedUntil?: Date }> {
+  const windowStart = new Date();
+  windowStart.setMinutes(windowStart.getMinutes() - RATE_LIMIT_WINDOW_MINUTES);
+  
+  // Get failed attempts in the window
+  const { data: attempts, error } = await supabase
+    .from('login_attempts')
+    .select('*')
+    .eq('ip_address', ipAddress)
+    .eq('success', false)
+    .gte('attempted_at', windowStart.toISOString())
+    .order('attempted_at', { ascending: false });
+  
+  if (error) {
+    console.error('Error checking rate limit:', error);
+    return { allowed: true, remainingAttempts: RATE_LIMIT_MAX_ATTEMPTS };
+  }
+  
+  const failedCount = attempts?.length || 0;
+  
+  if (failedCount >= RATE_LIMIT_MAX_ATTEMPTS) {
+    const lastAttempt = attempts[0];
+    const lockoutEnd = new Date(lastAttempt.attempted_at);
+    lockoutEnd.setMinutes(lockoutEnd.getMinutes() + LOCKOUT_DURATION_MINUTES);
+    
+    if (new Date() < lockoutEnd) {
+      return { 
+        allowed: false, 
+        remainingAttempts: 0,
+        lockedUntil: lockoutEnd
+      };
+    }
+  }
+  
+  return { 
+    allowed: true, 
+    remainingAttempts: Math.max(0, RATE_LIMIT_MAX_ATTEMPTS - failedCount)
+  };
+}
+
+// Record a login attempt
+async function recordLoginAttempt(supabase: any, ipAddress: string, success: boolean): Promise<void> {
+  await supabase.from('login_attempts').insert({
+    ip_address: ipAddress,
+    success,
+    attempted_at: new Date().toISOString()
+  });
+  
+  // Cleanup old attempts periodically (1 in 10 chance)
+  if (Math.random() < 0.1) {
+    await supabase.rpc('cleanup_old_login_attempts');
+  }
+}
+
+// Log security event with enhanced details
+async function logSecurityEvent(
+  supabase: any, 
+  userId: string, 
+  eventType: string, 
+  details: Record<string, any>,
+  req: Request
+): Promise<void> {
+  const ipAddress = getClientIP(req);
+  const userAgent = req.headers.get('user-agent');
+  const { browser, os, deviceType } = parseUserAgent(userAgent);
+  
+  await supabase.from('security_logs').insert({
+    user_id: userId,
+    event_type: eventType,
+    details,
+    ip_address: ipAddress,
+    user_agent: userAgent,
+    browser,
+    os,
+    device_type: deviceType
+  });
+}
+
+// Create session and log to history
+async function createSessionWithHistory(
+  supabase: any, 
+  userId: string, 
+  isDecoy: boolean,
+  req: Request
+): Promise<string> {
+  const sessionToken = generateSessionToken();
+  const expiresAt = new Date();
+  expiresAt.setHours(expiresAt.getHours() + 24);
+  
+  const ipAddress = getClientIP(req);
+  const userAgent = req.headers.get('user-agent');
+  const { browser, os, deviceType } = parseUserAgent(userAgent);
+  
+  // Cleanup old sessions for this user
+  await supabase
+    .from('vault_sessions')
+    .delete()
+    .eq('user_id', userId);
+  
+  // Mark old session history as inactive
+  await supabase
+    .from('session_history')
+    .update({ is_active: false, logout_at: new Date().toISOString() })
+    .eq('user_id', userId)
+    .eq('is_active', true);
+  
+  // Create new session
+  const { error } = await supabase
+    .from('vault_sessions')
+    .insert({
+      user_id: userId,
+      session_token: sessionToken,
+      is_decoy: isDecoy,
+      expires_at: expiresAt.toISOString()
+    });
+  
+  if (error) {
+    console.error('Error creating session:', error);
+    throw error;
+  }
+  
+  // Create session history entry
+  await supabase.from('session_history').insert({
+    user_id: userId,
+    ip_address: ipAddress,
+    user_agent: userAgent,
+    browser,
+    os,
+    device_type: deviceType,
+    is_active: true
+  });
+  
+  // Update user's last login info
+  await supabase
+    .from('vault_users')
+    .update({
+      last_login_at: new Date().toISOString(),
+      last_login_ip: ipAddress,
+      login_count: supabase.sql`COALESCE(login_count, 0) + 1`
+    })
+    .eq('id', userId);
+  
+  return sessionToken;
+}
+
+// Validate session token
 async function validateSession(supabase: any, sessionToken: string): Promise<{ userId: string; isDecoy: boolean } | null> {
   if (!sessionToken) return null;
   
@@ -58,42 +246,12 @@ async function validateSession(supabase: any, sessionToken: string): Promise<{ u
     return null;
   }
   
-  // Update last activity
   await supabase
     .from('vault_sessions')
     .update({ last_activity: new Date().toISOString() })
     .eq('session_token', sessionToken);
   
   return { userId: data.user_id, isDecoy: data.is_decoy };
-}
-
-// Create a new session for user
-async function createSession(supabase: any, userId: string, isDecoy: boolean): Promise<string> {
-  const sessionToken = generateSessionToken();
-  const expiresAt = new Date();
-  expiresAt.setHours(expiresAt.getHours() + 24); // 24 hour session
-  
-  // Cleanup old sessions for this user
-  await supabase
-    .from('vault_sessions')
-    .delete()
-    .eq('user_id', userId);
-  
-  const { error } = await supabase
-    .from('vault_sessions')
-    .insert({
-      user_id: userId,
-      session_token: sessionToken,
-      is_decoy: isDecoy,
-      expires_at: expiresAt.toISOString()
-    });
-  
-  if (error) {
-    console.error('Error creating session:', error);
-    throw error;
-  }
-  
-  return sessionToken;
 }
 
 // Check if user has admin role
@@ -109,7 +267,6 @@ async function isUserAdmin(supabase: any, userId: string): Promise<boolean> {
 }
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -120,26 +277,45 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const body = await req.json();
-    const { action, pin, newPin, recoveryKey, targetUserId, sessionToken } = body;
-    console.log(`PIN action requested: ${action}`);
+    const { action, pin, newPin, recoveryKey, targetUserId, sessionToken, role } = body;
+    const ipAddress = getClientIP(req);
+    
+    console.log(`PIN action requested: ${action} from IP: ${ipAddress}`);
 
-    // For actions that require authentication, validate the session token
+    // Validate session for authenticated actions
     let authenticatedUser: { userId: string; isDecoy: boolean } | null = null;
     if (sessionToken) {
       authenticatedUser = await validateSession(supabase, sessionToken);
     }
 
+    // ========== VERIFY PIN ==========
     if (action === 'verify') {
-      // Verify PIN
+      // Check rate limiting first
+      const rateLimitCheck = await checkRateLimit(supabase, ipAddress);
+      
+      if (!rateLimitCheck.allowed) {
+        const lockedUntilStr = rateLimitCheck.lockedUntil 
+          ? ` bis ${rateLimitCheck.lockedUntil.toLocaleTimeString('de-DE')}`
+          : '';
+        console.log(`Rate limited IP: ${ipAddress}`);
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: `Zu viele Fehlversuche. Bitte warten${lockedUntilStr}`,
+            rateLimited: true,
+            lockedUntil: rateLimitCheck.lockedUntil?.toISOString()
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 429 }
+        );
+      }
+
       if (!pin || pin.length !== 6) {
-        console.log('Invalid PIN format');
         return new Response(
           JSON.stringify({ success: false, error: 'PIN muss 6 Ziffern haben' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
         );
       }
 
-      // Get users from database
       const { data: users, error: fetchError } = await supabase
         .from('vault_users')
         .select('id, pin_hash, decoy_pin_hash');
@@ -149,9 +325,9 @@ serve(async (req) => {
         throw fetchError;
       }
 
-      // If no user exists, create default user with PIN 123456
+      // Create default user if none exists
       if (!users || users.length === 0) {
-        console.log('No user found, creating default user with PIN 123456');
+        console.log('No user found, creating default user');
         const defaultHash = await hashPin('123456');
 
         const { data: newUser, error: createError } = await supabase
@@ -160,34 +336,38 @@ serve(async (req) => {
           .select()
           .single();
 
-        if (createError) {
-          console.error('Error creating default user:', createError);
-          throw createError;
-        }
+        if (createError) throw createError;
 
         if (pin === '123456') {
-          console.log('Login successful with default PIN');
-          const token = await createSession(supabase, newUser.id, false);
+          await recordLoginAttempt(supabase, ipAddress, true);
+          await logSecurityEvent(supabase, newUser.id, 'login_success', { method: 'pin', isNewUser: true }, req);
+          const token = await createSessionWithHistory(supabase, newUser.id, false, req);
           return new Response(
             JSON.stringify({ success: true, userId: newUser.id, isDecoy: false, sessionToken: token }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
 
-        console.log('Wrong PIN for default user');
+        await recordLoginAttempt(supabase, ipAddress, false);
         return new Response(
-          JSON.stringify({ success: false, error: 'Falscher PIN' }),
+          JSON.stringify({ 
+            success: false, 
+            error: 'Falscher PIN',
+            remainingAttempts: rateLimitCheck.remainingAttempts - 1
+          }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      // Find matching user (decoy PIN has priority)
+      // Find matching user
       for (const user of users) {
+        // Check decoy PIN first
         if (user.decoy_pin_hash) {
           const isDecoy = await verifyPin(pin, user.decoy_pin_hash);
           if (isDecoy) {
-            console.log('Decoy PIN verification successful');
-            const token = await createSession(supabase, user.id, true);
+            await recordLoginAttempt(supabase, ipAddress, true);
+            await logSecurityEvent(supabase, user.id, 'decoy_login', { method: 'pin' }, req);
+            const token = await createSessionWithHistory(supabase, user.id, true, req);
             return new Response(
               JSON.stringify({ success: true, userId: user.id, isDecoy: true, sessionToken: token }),
               { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -197,8 +377,9 @@ serve(async (req) => {
 
         const isMain = await verifyPin(pin, user.pin_hash);
         if (isMain) {
-          console.log('PIN verification successful');
-          const token = await createSession(supabase, user.id, false);
+          await recordLoginAttempt(supabase, ipAddress, true);
+          await logSecurityEvent(supabase, user.id, 'login_success', { method: 'pin' }, req);
+          const token = await createSessionWithHistory(supabase, user.id, false, req);
           return new Response(
             JSON.stringify({ success: true, userId: user.id, isDecoy: false, sessionToken: token }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -206,33 +387,46 @@ serve(async (req) => {
         }
       }
 
-      console.log('PIN verification failed');
+      // Failed login
+      await recordLoginAttempt(supabase, ipAddress, false);
+      await logSecurityEvent(supabase, users[0].id, 'login_failed', { method: 'pin' }, req);
+      
       return new Response(
-        JSON.stringify({ success: false, error: 'Falscher PIN' }),
+        JSON.stringify({ 
+          success: false, 
+          error: 'Falscher PIN',
+          remainingAttempts: rateLimitCheck.remainingAttempts - 1
+        }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
+    // ========== VERIFY RECOVERY KEY ==========
     else if (action === 'verify-recovery') {
-      // Verify with recovery key
+      const rateLimitCheck = await checkRateLimit(supabase, ipAddress);
+      
+      if (!rateLimitCheck.allowed) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Zu viele Fehlversuche', rateLimited: true }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 429 }
+        );
+      }
+
       const normalized = normalizeRecoveryKeyComparable(recoveryKey || '');
       if (!normalized || normalized.length < 10) {
+        await recordLoginAttempt(supabase, ipAddress, false);
         return new Response(
           JSON.stringify({ success: false, error: 'Ungültiger Recovery-Key' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      // Compare normalized keys (avoid .single() and case/format issues)
       const { data: candidates, error: fetchError } = await supabase
         .from('vault_users')
         .select('id, recovery_key')
         .not('recovery_key', 'is', null);
 
-      if (fetchError) {
-        console.error('Database error:', fetchError);
-        throw fetchError;
-      }
+      if (fetchError) throw fetchError;
 
       const matched = (candidates || []).find((u: any) => {
         const stored = u.recovery_key as string | null;
@@ -240,23 +434,25 @@ serve(async (req) => {
       });
 
       if (!matched) {
-        console.log('Recovery key not found');
+        await recordLoginAttempt(supabase, ipAddress, false);
         return new Response(
           JSON.stringify({ success: false, error: 'Recovery-Key nicht gefunden' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      console.log('Recovery key verification successful');
-      const token = await createSession(supabase, matched.id, false);
+      await recordLoginAttempt(supabase, ipAddress, true);
+      await logSecurityEvent(supabase, matched.id, 'login_success', { method: 'recovery_key' }, req);
+      const token = await createSessionWithHistory(supabase, matched.id, false, req);
+      
       return new Response(
         JSON.stringify({ success: true, userId: matched.id, isDecoy: false, sessionToken: token }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
     
+    // ========== VALIDATE SESSION ==========
     else if (action === 'validate-session') {
-      // Validate an existing session token
       if (!sessionToken) {
         return new Response(
           JSON.stringify({ success: false, error: 'Kein Session-Token' }),
@@ -281,9 +477,27 @@ serve(async (req) => {
       );
     }
 
+    // ========== LOGOUT ==========
     else if (action === 'logout') {
-      // Invalidate session
       if (sessionToken) {
+        // Get user before deleting session
+        const { data: session } = await supabase
+          .from('vault_sessions')
+          .select('user_id')
+          .eq('session_token', sessionToken)
+          .single();
+        
+        if (session) {
+          await logSecurityEvent(supabase, session.user_id, 'logout', {}, req);
+          
+          // Mark session history as inactive
+          await supabase
+            .from('session_history')
+            .update({ is_active: false, logout_at: new Date().toISOString() })
+            .eq('user_id', session.user_id)
+            .eq('is_active', true);
+        }
+        
         await supabase
           .from('vault_sessions')
           .delete()
@@ -296,8 +510,8 @@ serve(async (req) => {
       );
     }
     
+    // ========== CHANGE PIN ==========
     else if (action === 'change') {
-      // Change PIN - REQUIRES valid session
       if (!authenticatedUser) {
         return new Response(
           JSON.stringify({ success: false, error: 'Nicht autorisiert' }),
@@ -312,7 +526,6 @@ serve(async (req) => {
         );
       }
 
-      // Verify current PIN first
       const { data: user, error: fetchError } = await supabase
         .from('vault_users')
         .select('id, pin_hash')
@@ -320,7 +533,6 @@ serve(async (req) => {
         .single();
 
       if (fetchError || !user) {
-        console.error('User not found:', fetchError);
         return new Response(
           JSON.stringify({ success: false, error: 'Benutzer nicht gefunden' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
@@ -329,34 +541,30 @@ serve(async (req) => {
 
       const isValid = await verifyPin(pin, user.pin_hash);
       if (!isValid) {
-        console.log('Current PIN verification failed');
+        await logSecurityEvent(supabase, authenticatedUser.userId, 'pin_change_failed', { reason: 'wrong_current_pin' }, req);
         return new Response(
           JSON.stringify({ success: false, error: 'Aktueller PIN ist falsch' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
         );
       }
 
-      // Hash new PIN and update
       const newHash = await hashPin(newPin);
       const { error: updateError } = await supabase
         .from('vault_users')
         .update({ pin_hash: newHash, updated_at: new Date().toISOString() })
         .eq('id', authenticatedUser.userId);
 
-      if (updateError) {
-        console.error('Error updating PIN:', updateError);
-        throw updateError;
-      }
+      if (updateError) throw updateError;
 
-      console.log('PIN changed successfully');
+      await logSecurityEvent(supabase, authenticatedUser.userId, 'pin_changed', {}, req);
       return new Response(
         JSON.stringify({ success: true }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
+    // ========== SET DECOY PIN ==========
     else if (action === 'set-decoy') {
-      // Set decoy PIN - REQUIRES valid session
       if (!authenticatedUser) {
         return new Response(
           JSON.stringify({ success: false, error: 'Nicht autorisiert' }),
@@ -371,7 +579,6 @@ serve(async (req) => {
         );
       }
 
-      // Verify current main PIN first
       const { data: user, error: fetchError } = await supabase
         .from('vault_users')
         .select('id, pin_hash')
@@ -393,27 +600,23 @@ serve(async (req) => {
         );
       }
 
-      // Hash decoy PIN and update
       const decoyHash = await hashPin(newPin);
       const { error: updateError } = await supabase
         .from('vault_users')
         .update({ decoy_pin_hash: decoyHash, updated_at: new Date().toISOString() })
         .eq('id', authenticatedUser.userId);
 
-      if (updateError) {
-        console.error('Error setting decoy PIN:', updateError);
-        throw updateError;
-      }
+      if (updateError) throw updateError;
 
-      console.log('Decoy PIN set successfully');
+      await logSecurityEvent(supabase, authenticatedUser.userId, 'decoy_pin_set', {}, req);
       return new Response(
         JSON.stringify({ success: true }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
+    // ========== CREATE USER (Admin) ==========
     else if (action === 'create-user') {
-      // Create new user (admin function) - REQUIRES valid session with admin role
       if (!authenticatedUser) {
         return new Response(
           JSON.stringify({ success: false, error: 'Nicht autorisiert' }),
@@ -436,14 +639,13 @@ serve(async (req) => {
         );
       }
 
-      // Check if PIN is already in use by any user (main PIN or decoy PIN)
+      // Check if PIN is already in use
       const { data: existingUsers } = await supabase
         .from('vault_users')
         .select('id, pin_hash, decoy_pin_hash');
 
       if (existingUsers) {
         for (const user of existingUsers) {
-          // Check main PIN
           const isMainPin = await verifyPin(pin, user.pin_hash);
           if (isMainPin) {
             return new Response(
@@ -451,7 +653,6 @@ serve(async (req) => {
               { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
             );
           }
-          // Check decoy PIN
           if (user.decoy_pin_hash) {
             const isDecoyPin = await verifyPin(pin, user.decoy_pin_hash);
             if (isDecoyPin) {
@@ -464,39 +665,27 @@ serve(async (req) => {
         }
       }
 
-      // Generate recovery key
       const generatedRecoveryKey = `${crypto.randomUUID().slice(0, 4)}-${crypto.randomUUID().slice(0, 4)}-${crypto.randomUUID().slice(0, 4)}-${crypto.randomUUID().slice(0, 4)}`.toUpperCase();
-      
-      // Hash the PIN
       const pinHash = await hashPin(pin);
       
       const { data: newUser, error: createError } = await supabase
         .from('vault_users')
-        .insert({ 
-          pin_hash: pinHash,
-          recovery_key: generatedRecoveryKey
-        })
+        .insert({ pin_hash: pinHash, recovery_key: generatedRecoveryKey })
         .select()
         .single();
 
-      if (createError) {
-        console.error('Error creating user:', createError);
-        throw createError;
-      }
+      if (createError) throw createError;
 
-      console.log('New user created:', newUser.id);
+      await logSecurityEvent(supabase, authenticatedUser.userId, 'user_created', { newUserId: newUser.id }, req);
+      
       return new Response(
-        JSON.stringify({ 
-          success: true, 
-          userId: newUser.id,
-          recoveryKey: generatedRecoveryKey
-        }),
+        JSON.stringify({ success: true, userId: newUser.id, recoveryKey: generatedRecoveryKey }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
+    // ========== ADMIN RESET PIN ==========
     else if (action === 'admin-reset-pin') {
-      // Admin resets user PIN - REQUIRES valid session with admin role
       if (!authenticatedUser) {
         return new Response(
           JSON.stringify({ success: false, error: 'Nicht autorisiert' }),
@@ -546,27 +735,23 @@ serve(async (req) => {
         }
       }
 
-      // Hash new PIN and update
       const newHash = await hashPin(newPin);
       const { error: updateError } = await supabase
         .from('vault_users')
         .update({ pin_hash: newHash, updated_at: new Date().toISOString() })
         .eq('id', targetUserId);
 
-      if (updateError) {
-        console.error('Error resetting PIN:', updateError);
-        throw updateError;
-      }
+      if (updateError) throw updateError;
 
-      console.log(`Admin ${authenticatedUser.userId} reset PIN for user ${targetUserId}`);
+      await logSecurityEvent(supabase, authenticatedUser.userId, 'admin_reset_pin', { targetUserId }, req);
       return new Response(
         JSON.stringify({ success: true }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
+    // ========== ADMIN DELETE USER ==========
     else if (action === 'admin-delete-user') {
-      // Admin deletes user and all associated data - REQUIRES valid session with admin role
       if (!authenticatedUser) {
         return new Response(
           JSON.stringify({ success: false, error: 'Nicht autorisiert' }),
@@ -589,7 +774,6 @@ serve(async (req) => {
         );
       }
 
-      // Prevent self-deletion
       if (targetUserId === authenticatedUser.userId) {
         return new Response(
           JSON.stringify({ success: false, error: 'Du kannst dich nicht selbst löschen' }),
@@ -597,102 +781,52 @@ serve(async (req) => {
         );
       }
 
-      console.log(`Admin ${authenticatedUser.userId} deleting user ${targetUserId}`);
-
-      // Delete all user data in order (respecting foreign keys)
       const deletionOrder = [
-        // First delete items with foreign keys to other tables
-        'note_attachments',
-        'note_versions',
-        'view_history',
-        'security_logs',
-        'vault_sessions',
-        // Then delete main data tables
-        'notes',
-        'photos',
-        'files',
-        'links',
-        'tiktok_videos',
-        'secret_texts',
-        // Delete shared album related data
-        'shared_album_items',
-        'shared_album_access',
-        'shared_albums',
-        // Delete folders/albums
-        'note_folders',
-        'link_folders',
-        'tiktok_folders',
-        'albums',
-        'file_albums',
-        // Delete tags
-        'tags',
-        // Delete user roles
-        'user_roles',
-        // Finally delete the user
-        'vault_users'
+        'note_attachments', 'note_versions', 'view_history', 'security_logs', 
+        'vault_sessions', 'session_history', 'login_attempts',
+        'notes', 'photos', 'files', 'links', 'tiktok_videos', 'secret_texts',
+        'shared_album_items', 'shared_album_access', 'shared_albums',
+        'note_folders', 'link_folders', 'tiktok_folders', 'albums', 'file_albums',
+        'tags', 'user_roles', 'vault_users'
       ];
 
       for (const table of deletionOrder) {
+        const column = table === 'vault_users' ? 'id' : 
+                      table === 'shared_albums' ? 'owner_id' : 
+                      table === 'login_attempts' ? 'ip_address' : 'user_id';
+        
+        if (table === 'login_attempts') continue; // Skip, not user-specific by ID
+        
         const { error } = await supabase
           .from(table)
           .delete()
-          .eq(table === 'vault_users' ? 'id' : (table === 'shared_albums' ? 'owner_id' : 'user_id'), targetUserId);
+          .eq(column, targetUserId);
         
-        if (error) {
-          console.error(`Error deleting from ${table}:`, error);
-          // Continue with other tables even if one fails
-        } else {
-          console.log(`Deleted data from ${table}`);
-        }
+        if (error) console.error(`Error deleting from ${table}:`, error);
       }
 
-      // Also delete storage files
+      // Delete storage files
       try {
-        // Delete photos from storage
-        const { data: photosList } = await supabase.storage
-          .from('photos')
-          .list(targetUserId);
-        if (photosList && photosList.length > 0) {
-          const photoPaths = photosList.map((f: any) => `${targetUserId}/${f.name}`);
-          await supabase.storage.from('photos').remove(photoPaths);
-          console.log('Deleted photos from storage');
-        }
-
-        // Delete files from storage
-        const { data: filesList } = await supabase.storage
-          .from('files')
-          .list(targetUserId);
-        if (filesList && filesList.length > 0) {
-          const filePaths = filesList.map((f: any) => `${targetUserId}/${f.name}`);
-          await supabase.storage.from('files').remove(filePaths);
-          console.log('Deleted files from storage');
-        }
-
-        // Delete note attachments from storage
-        const { data: attachmentsList } = await supabase.storage
-          .from('note-attachments')
-          .list(targetUserId);
-        if (attachmentsList && attachmentsList.length > 0) {
-          const attachmentPaths = attachmentsList.map((f: any) => `${targetUserId}/${f.name}`);
-          await supabase.storage.from('note-attachments').remove(attachmentPaths);
-          console.log('Deleted note attachments from storage');
+        for (const bucket of ['photos', 'files', 'note-attachments']) {
+          const { data: files } = await supabase.storage.from(bucket).list(targetUserId);
+          if (files?.length) {
+            const paths = files.map((f: any) => `${targetUserId}/${f.name}`);
+            await supabase.storage.from(bucket).remove(paths);
+          }
         }
       } catch (storageError) {
-        console.error('Error deleting storage files:', storageError);
-        // Continue even if storage deletion fails
+        console.error('Error deleting storage:', storageError);
       }
 
-      console.log(`User ${targetUserId} deleted successfully`);
+      await logSecurityEvent(supabase, authenticatedUser.userId, 'user_deleted', { deletedUserId: targetUserId }, req);
       return new Response(
         JSON.stringify({ success: true }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
+    // ========== ADMIN ASSIGN ROLE ==========
     else if (action === 'admin-assign-role') {
-      // Admin assigns role to user - REQUIRES valid session with admin role
-      const { role } = body;
-      
       if (!authenticatedUser) {
         return new Response(
           JSON.stringify({ success: false, error: 'Nicht autorisiert' }),
@@ -715,7 +849,6 @@ serve(async (req) => {
         );
       }
 
-      // Check if role already exists
       const { data: existingRole } = await supabase
         .from('user_roles')
         .select('id')
@@ -730,30 +863,21 @@ serve(async (req) => {
         );
       }
 
-      // Insert new role
       const { error: insertError } = await supabase
         .from('user_roles')
         .insert({ user_id: targetUserId, role });
 
-      if (insertError) {
-        console.error('Error assigning role:', insertError);
-        return new Response(
-          JSON.stringify({ success: false, error: 'Fehler beim Zuweisen der Rolle' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-        );
-      }
+      if (insertError) throw insertError;
 
-      console.log(`Admin ${authenticatedUser.userId} assigned role ${role} to user ${targetUserId}`);
+      await logSecurityEvent(supabase, authenticatedUser.userId, 'role_assigned', { targetUserId, role }, req);
       return new Response(
         JSON.stringify({ success: true }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
+    // ========== ADMIN REMOVE ROLE ==========
     else if (action === 'admin-remove-role') {
-      // Admin removes role from user - REQUIRES valid session with admin role
-      const { role } = body;
-      
       if (!authenticatedUser) {
         return new Response(
           JSON.stringify({ success: false, error: 'Nicht autorisiert' }),
@@ -776,7 +900,6 @@ serve(async (req) => {
         );
       }
 
-      // Prevent removing own admin role
       if (targetUserId === authenticatedUser.userId && role === 'admin') {
         return new Response(
           JSON.stringify({ success: false, error: 'Du kannst dir nicht selbst die Admin-Rolle entziehen' }),
@@ -784,30 +907,23 @@ serve(async (req) => {
         );
       }
 
-      // Delete role
       const { error: deleteError } = await supabase
         .from('user_roles')
         .delete()
         .eq('user_id', targetUserId)
         .eq('role', role);
 
-      if (deleteError) {
-        console.error('Error removing role:', deleteError);
-        return new Response(
-          JSON.stringify({ success: false, error: 'Fehler beim Entfernen der Rolle' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-        );
-      }
+      if (deleteError) throw deleteError;
 
-      console.log(`Admin ${authenticatedUser.userId} removed role ${role} from user ${targetUserId}`);
+      await logSecurityEvent(supabase, authenticatedUser.userId, 'role_removed', { targetUserId, role }, req);
       return new Response(
         JSON.stringify({ success: true }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
+    // ========== GET USER ROLES ==========
     else if (action === 'get-user-roles') {
-      // Get roles for authenticated user - REQUIRES valid session
       if (!authenticatedUser) {
         return new Response(
           JSON.stringify({ success: false, error: 'Nicht autorisiert' }),
@@ -820,13 +936,7 @@ serve(async (req) => {
         .select('*')
         .eq('user_id', authenticatedUser.userId);
 
-      if (error) {
-        console.error('Error fetching roles:', error);
-        return new Response(
-          JSON.stringify({ success: false, error: 'Fehler beim Laden der Rollen' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-        );
-      }
+      if (error) throw error;
 
       return new Response(
         JSON.stringify({ success: true, roles: roles || [] }),
@@ -834,8 +944,8 @@ serve(async (req) => {
       );
     }
 
+    // ========== ADMIN GET ALL ROLES ==========
     else if (action === 'admin-get-all-roles') {
-      // Get all roles (admin only) - REQUIRES valid session with admin role
       if (!authenticatedUser) {
         return new Response(
           JSON.stringify({ success: false, error: 'Nicht autorisiert' }),
@@ -856,16 +966,117 @@ serve(async (req) => {
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Error fetching roles:', error);
-        return new Response(
-          JSON.stringify({ success: false, error: 'Fehler beim Laden der Rollen' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-        );
-      }
+      if (error) throw error;
 
       return new Response(
         JSON.stringify({ success: true, roles: roles || [] }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // ========== GET SESSION HISTORY (Admin) ==========
+    else if (action === 'admin-get-session-history') {
+      if (!authenticatedUser) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Nicht autorisiert' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+        );
+      }
+
+      const isAdmin = await isUserAdmin(supabase, authenticatedUser.userId);
+      if (!isAdmin) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Keine Admin-Berechtigung' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+        );
+      }
+
+      const { data: sessions, error } = await supabase
+        .from('session_history')
+        .select('*')
+        .order('login_at', { ascending: false })
+        .limit(100);
+
+      if (error) throw error;
+
+      return new Response(
+        JSON.stringify({ success: true, sessions: sessions || [] }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // ========== GET SECURITY LOGS (Admin) ==========
+    else if (action === 'admin-get-security-logs') {
+      if (!authenticatedUser) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Nicht autorisiert' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+        );
+      }
+
+      const isAdmin = await isUserAdmin(supabase, authenticatedUser.userId);
+      if (!isAdmin) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Keine Admin-Berechtigung' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+        );
+      }
+
+      const { data: logs, error } = await supabase
+        .from('security_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(200);
+
+      if (error) throw error;
+
+      return new Response(
+        JSON.stringify({ success: true, logs: logs || [] }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // ========== TERMINATE USER SESSIONS (Admin) ==========
+    else if (action === 'admin-terminate-sessions') {
+      if (!authenticatedUser) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Nicht autorisiert' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+        );
+      }
+
+      const isAdmin = await isUserAdmin(supabase, authenticatedUser.userId);
+      if (!isAdmin) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Keine Admin-Berechtigung' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+        );
+      }
+
+      if (!targetUserId) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Ungültige Parameter' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
+      }
+
+      // Delete all sessions for the user
+      await supabase
+        .from('vault_sessions')
+        .delete()
+        .eq('user_id', targetUserId);
+
+      // Mark session history as inactive
+      await supabase
+        .from('session_history')
+        .update({ is_active: false, logout_at: new Date().toISOString() })
+        .eq('user_id', targetUserId)
+        .eq('is_active', true);
+
+      await logSecurityEvent(supabase, authenticatedUser.userId, 'sessions_terminated', { targetUserId }, req);
+      
+      return new Response(
+        JSON.stringify({ success: true }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
