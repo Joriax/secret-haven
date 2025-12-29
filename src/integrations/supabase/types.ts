@@ -580,6 +580,7 @@ export type Database = {
           description: string | null
           icon: string | null
           id: string
+          is_pinned: boolean | null
           name: string
           owner_id: string
           public_link_enabled: boolean | null
@@ -594,6 +595,7 @@ export type Database = {
           description?: string | null
           icon?: string | null
           id?: string
+          is_pinned?: boolean | null
           name: string
           owner_id: string
           public_link_enabled?: boolean | null
@@ -608,6 +610,7 @@ export type Database = {
           description?: string | null
           icon?: string | null
           id?: string
+          is_pinned?: boolean | null
           name?: string
           owner_id?: string
           public_link_enabled?: boolean | null

@@ -386,10 +386,6 @@ export default function Login() {
                 Mit Recovery-Key anmelden
               </button>
 
-              {/* Hint */}
-              <p className="text-center text-xs text-muted-foreground mt-6">
-                Standard-PIN: 123456
-              </p>
             </motion.div>
           ) : (
             <motion.div

@@ -22,6 +22,8 @@ import {
   Play,
   X,
   Settings2,
+  Pin,
+  PinOff,
 } from 'lucide-react';
 import { useSharedAlbums, SharedAlbum } from '@/hooks/useSharedAlbums';
 import { supabase } from '@/integrations/supabase/client';
@@ -82,6 +84,7 @@ export default function SharedAlbums() {
     removeUserAccess,
     getAlbumAccess,
     getAlbumItems,
+    togglePin,
   } = useSharedAlbums();
 
   const { userId } = useAuth();
@@ -326,9 +329,18 @@ export default function SharedAlbums() {
               <motion.div
                 key={album.id}
                 variants={itemVariants}
-                className="group relative bg-card border border-border rounded-xl p-5 hover:border-primary/30 hover:shadow-lg transition-all cursor-pointer"
+                className={cn(
+                  "group relative bg-card border rounded-xl p-5 hover:border-primary/30 hover:shadow-lg transition-all cursor-pointer",
+                  album.is_pinned ? "border-primary/40" : "border-border"
+                )}
                 onClick={() => window.location.href = `/shared-album/${album.id}`}
               >
+                {/* Pin indicator */}
+                {album.is_pinned && (
+                  <div className="absolute top-2 right-2">
+                    <Pin className="w-4 h-4 text-primary" />
+                  </div>
+                )}
                 {/* Header */}
                 <div className="flex items-start gap-4 mb-4">
                   <div
@@ -358,6 +370,25 @@ export default function SharedAlbums() {
                       <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openEditDialog(album); }}>
                         <Edit2 className="w-4 h-4 mr-2" />
                         Bearbeiten
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={async (e) => { 
+                        e.stopPropagation(); 
+                        const success = await togglePin(album.id);
+                        if (success) {
+                          toast.success(album.is_pinned ? 'Album losgelöst' : 'Album angepinnt');
+                        }
+                      }}>
+                        {album.is_pinned ? (
+                          <>
+                            <PinOff className="w-4 h-4 mr-2" />
+                            Loslösen
+                          </>
+                        ) : (
+                          <>
+                            <Pin className="w-4 h-4 mr-2" />
+                            Anpinnen
+                          </>
+                        )}
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openShareDialog(album); }}>
                         <Settings2 className="w-4 h-4 mr-2" />

@@ -16,6 +16,7 @@ export interface SharedAlbum {
   public_link_enabled: boolean;
   public_link_token: string | null;
   public_link_password: string | null;
+  is_pinned: boolean;
   created_at: string;
   updated_at: string;
   item_count?: number;
@@ -55,11 +56,12 @@ export function useSharedAlbums() {
     }
 
     try {
-      // Fetch albums I own
+      // Fetch albums I own - sorted by pinned first, then by created_at
       const { data: myAlbums, error: myError } = await supabase
         .from('shared_albums')
         .select('*')
         .eq('owner_id', userId)
+        .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false });
 
       if (myError) throw myError;
@@ -342,6 +344,41 @@ export function useSharedAlbums() {
     }
   };
 
+  const togglePin = async (albumId: string): Promise<boolean> => {
+    try {
+      const album = albums.find(a => a.id === albumId);
+      if (!album) return false;
+
+      const newPinnedState = !album.is_pinned;
+      
+      const { error } = await supabase
+        .from('shared_albums')
+        .update({ is_pinned: newPinnedState })
+        .eq('id', albumId);
+
+      if (error) throw error;
+
+      // Update local state and re-sort
+      setAlbums(prev => {
+        const updated = prev.map(a =>
+          a.id === albumId ? { ...a, is_pinned: newPinnedState } : a
+        );
+        // Sort: pinned first, then by created_at descending
+        return updated.sort((a, b) => {
+          if (a.is_pinned !== b.is_pinned) {
+            return a.is_pinned ? -1 : 1;
+          }
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        });
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Error toggling pin:', error);
+      return false;
+    }
+  };
+
   return {
     albums,
     sharedWithMe,
@@ -358,5 +395,6 @@ export function useSharedAlbums() {
     addItemToAlbum,
     removeItemFromAlbum,
     getAlbumItems,
+    togglePin,
   };
 }
