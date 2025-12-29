@@ -22,52 +22,41 @@ export interface Link {
 export function useLinks() {
   const [links, setLinks] = useState<Link[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const { userId, isDecoyMode } = useAuth();
+  const { userId, isDecoyMode, sessionToken } = useAuth();
 
   const fetchLinks = useCallback(async () => {
-    if (!userId || isDecoyMode) {
+    if (!userId || isDecoyMode || !sessionToken) {
       setLinks([]);
       setIsLoading(false);
       return;
     }
 
     try {
-      const { data, error } = await supabase
-        .from('links')
-        .select('*')
-        .eq('user_id', userId)
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false });
+      const { data, error } = await supabase.functions.invoke('vault-data', {
+        body: { 
+          action: 'get-links',
+          sessionToken,
+          data: {}
+        }
+      });
 
       if (error) throw error;
-      setLinks(data || []);
+      if (!data.success) throw new Error(data.error);
+      
+      setLinks(data.data || []);
     } catch (error) {
       console.error('Error fetching links:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [userId, isDecoyMode]);
+  }, [userId, isDecoyMode, sessionToken]);
 
   useEffect(() => {
     fetchLinks();
   }, [fetchLinks]);
 
-  // Real-time updates
-  useEffect(() => {
-    if (!userId) return;
-
-    const channel = supabase
-      .channel('links-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'links' }, fetchLinks)
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [userId, fetchLinks]);
-
   const createLink = async (url: string, title: string, folderId?: string, description?: string, imageUrl?: string) => {
-    if (!userId) return null;
+    if (!userId || !sessionToken) return null;
 
     try {
       // Try to get favicon
@@ -77,25 +66,27 @@ export function useLinks() {
         faviconUrl = `https://www.google.com/s2/favicons?domain=${urlObj.hostname}&sz=64`;
       } catch {}
 
-      const { data, error } = await supabase
-        .from('links')
-        .insert({
-          user_id: userId,
-          url,
-          title: title || url,
-          folder_id: folderId || null,
-          favicon_url: faviconUrl,
-          description: description || null,
-          image_url: imageUrl || null,
-        })
-        .select()
-        .single();
+      const { data, error } = await supabase.functions.invoke('vault-data', {
+        body: {
+          action: 'create-link',
+          sessionToken,
+          data: {
+            url,
+            title: title || url,
+            folder_id: folderId || null,
+            favicon_url: faviconUrl,
+            description: description || null,
+            image_url: imageUrl || null,
+          }
+        }
+      });
 
       if (error) throw error;
+      if (!data.success) throw new Error(data.error);
       
-      setLinks(prev => [data, ...prev]);
+      setLinks(prev => [data.data, ...prev]);
       toast.success('Link gespeichert');
-      return data;
+      return data.data;
     } catch (error) {
       console.error('Error creating link:', error);
       toast.error('Fehler beim Speichern');
@@ -104,13 +95,19 @@ export function useLinks() {
   };
 
   const updateLink = async (id: string, updates: Partial<Pick<Link, 'url' | 'title' | 'description' | 'folder_id' | 'is_favorite' | 'tags' | 'image_url'>>) => {
+    if (!sessionToken) return;
+    
     try {
-      const { error } = await supabase
-        .from('links')
-        .update(updates)
-        .eq('id', id);
+      const { data, error } = await supabase.functions.invoke('vault-data', {
+        body: {
+          action: 'update-link',
+          sessionToken,
+          data: { id, updates }
+        }
+      });
 
       if (error) throw error;
+      if (!data.success) throw new Error(data.error);
       
       setLinks(prev => prev.map(l => l.id === id ? { ...l, ...updates } : l));
       toast.success('Link aktualisiert');
@@ -121,13 +118,19 @@ export function useLinks() {
   };
 
   const deleteLink = async (id: string) => {
+    if (!sessionToken) return;
+    
     try {
-      const { error } = await supabase
-        .from('links')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('id', id);
+      const { data, error } = await supabase.functions.invoke('vault-data', {
+        body: {
+          action: 'delete-link',
+          sessionToken,
+          data: { id }
+        }
+      });
 
       if (error) throw error;
+      if (!data.success) throw new Error(data.error);
       
       setLinks(prev => prev.filter(l => l.id !== id));
       toast.success('Link gelöscht');

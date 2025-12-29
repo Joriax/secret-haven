@@ -20,11 +20,6 @@ export interface TikTokVideo {
 // Extract video ID from TikTok URL
 const extractVideoId = (url: string): string | null => {
   try {
-    // Handle various TikTok URL formats
-    // https://www.tiktok.com/@username/video/1234567890
-    // https://vm.tiktok.com/ABC123/
-    // https://www.tiktok.com/t/ABC123/
-    
     const patterns = [
       /tiktok\.com\/@[\w.]+\/video\/(\d+)/,
       /tiktok\.com\/.*\/video\/(\d+)/,
@@ -47,49 +42,38 @@ const extractVideoId = (url: string): string | null => {
 export function useTikTokVideos() {
   const [videos, setVideos] = useState<TikTokVideo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const { userId, isDecoyMode } = useAuth();
+  const { userId, isDecoyMode, sessionToken } = useAuth();
 
   const fetchVideos = useCallback(async () => {
-    if (!userId || isDecoyMode) {
+    if (!userId || isDecoyMode || !sessionToken) {
       setVideos([]);
       setIsLoading(false);
       return;
     }
 
     try {
-      const { data, error } = await supabase
-        .from('tiktok_videos')
-        .select('*')
-        .eq('user_id', userId)
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false });
+      const { data, error } = await supabase.functions.invoke('vault-data', {
+        body: { 
+          action: 'get-tiktoks',
+          sessionToken,
+          data: {}
+        }
+      });
 
       if (error) throw error;
-      setVideos((data as TikTokVideo[]) || []);
+      if (!data.success) throw new Error(data.error);
+      
+      setVideos((data.data as TikTokVideo[]) || []);
     } catch (error) {
       console.error('Error fetching TikTok videos:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [userId, isDecoyMode]);
+  }, [userId, isDecoyMode, sessionToken]);
 
   useEffect(() => {
     fetchVideos();
   }, [fetchVideos]);
-
-  // Real-time updates
-  useEffect(() => {
-    if (!userId) return;
-
-    const channel = supabase
-      .channel('tiktok-videos-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tiktok_videos' }, fetchVideos)
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [userId, fetchVideos]);
 
   const fetchMetadata = async (url: string) => {
     try {
@@ -110,34 +94,33 @@ export function useTikTokVideos() {
   };
 
   const addVideo = async (url: string, folderId?: string | null) => {
-    if (!userId) return null;
+    if (!userId || !sessionToken) return null;
 
     try {
-      // Fetch metadata from TikTok (includes video_id for shortened URLs)
       const metadata = await fetchMetadata(url);
-      
-      // Use video_id from metadata if available, otherwise try to extract from URL
       const videoId = metadata?.video_id || extractVideoId(url);
       
-      const { data, error } = await supabase
-        .from('tiktok_videos')
-        .insert({
-          user_id: userId,
-          url,
-          video_id: videoId,
-          title: metadata?.title || '',
-          author_name: metadata?.author_name || null,
-          thumbnail_url: metadata?.thumbnail_url || null,
-          folder_id: folderId || null,
-        })
-        .select()
-        .single();
+      const { data, error } = await supabase.functions.invoke('vault-data', {
+        body: {
+          action: 'create-tiktok',
+          sessionToken,
+          data: {
+            url,
+            video_id: videoId,
+            title: metadata?.title || '',
+            author_name: metadata?.author_name || null,
+            thumbnail_url: metadata?.thumbnail_url || null,
+            folder_id: folderId || null,
+          }
+        }
+      });
 
       if (error) throw error;
+      if (!data.success) throw new Error(data.error);
       
-      setVideos(prev => [data as TikTokVideo, ...prev]);
+      setVideos(prev => [data.data as TikTokVideo, ...prev]);
       toast.success('TikTok Video gespeichert');
-      return data;
+      return data.data;
     } catch (error) {
       console.error('Error adding TikTok video:', error);
       toast.error('Fehler beim Speichern');
@@ -146,13 +129,19 @@ export function useTikTokVideos() {
   };
 
   const moveToFolder = async (videoId: string, folderId: string | null) => {
+    if (!sessionToken) return;
+    
     try {
-      const { error } = await supabase
-        .from('tiktok_videos')
-        .update({ folder_id: folderId })
-        .eq('id', videoId);
+      const { data, error } = await supabase.functions.invoke('vault-data', {
+        body: {
+          action: 'update-tiktok',
+          sessionToken,
+          data: { id: videoId, updates: { folder_id: folderId } }
+        }
+      });
 
       if (error) throw error;
+      if (!data.success) throw new Error(data.error);
       
       setVideos(prev => prev.map(v => 
         v.id === videoId ? { ...v, folder_id: folderId } : v
@@ -165,13 +154,19 @@ export function useTikTokVideos() {
   };
 
   const deleteVideo = async (id: string) => {
+    if (!sessionToken) return;
+    
     try {
-      const { error } = await supabase
-        .from('tiktok_videos')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('id', id);
+      const { data, error } = await supabase.functions.invoke('vault-data', {
+        body: {
+          action: 'delete-tiktok',
+          sessionToken,
+          data: { id }
+        }
+      });
 
       if (error) throw error;
+      if (!data.success) throw new Error(data.error);
       
       setVideos(prev => prev.filter(v => v.id !== id));
       toast.success('Video gelöscht');
@@ -183,15 +178,19 @@ export function useTikTokVideos() {
 
   const toggleFavorite = async (id: string) => {
     const video = videos.find(v => v.id === id);
-    if (!video) return;
+    if (!video || !sessionToken) return;
 
     try {
-      const { error } = await supabase
-        .from('tiktok_videos')
-        .update({ is_favorite: !video.is_favorite })
-        .eq('id', id);
+      const { data, error } = await supabase.functions.invoke('vault-data', {
+        body: {
+          action: 'update-tiktok',
+          sessionToken,
+          data: { id, updates: { is_favorite: !video.is_favorite } }
+        }
+      });
 
       if (error) throw error;
+      if (!data.success) throw new Error(data.error);
       
       setVideos(prev => prev.map(v => 
         v.id === id ? { ...v, is_favorite: !v.is_favorite } : v
