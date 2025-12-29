@@ -31,6 +31,83 @@ function normalizeRecoveryKeyComparable(key: string): string {
   return normalizeRecoveryKey(key).replace(/-/g, '');
 }
 
+// Generate a secure random session token
+function generateSessionToken(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Validate session token and return user info
+async function validateSession(supabase: any, sessionToken: string): Promise<{ userId: string; isDecoy: boolean } | null> {
+  if (!sessionToken) return null;
+  
+  const { data, error } = await supabase
+    .from('vault_sessions')
+    .select('user_id, is_decoy, expires_at')
+    .eq('session_token', sessionToken)
+    .single();
+  
+  if (error || !data) {
+    console.log('Session validation failed:', error?.message);
+    return null;
+  }
+  
+  if (new Date(data.expires_at) < new Date()) {
+    console.log('Session expired');
+    return null;
+  }
+  
+  // Update last activity
+  await supabase
+    .from('vault_sessions')
+    .update({ last_activity: new Date().toISOString() })
+    .eq('session_token', sessionToken);
+  
+  return { userId: data.user_id, isDecoy: data.is_decoy };
+}
+
+// Create a new session for user
+async function createSession(supabase: any, userId: string, isDecoy: boolean): Promise<string> {
+  const sessionToken = generateSessionToken();
+  const expiresAt = new Date();
+  expiresAt.setHours(expiresAt.getHours() + 24); // 24 hour session
+  
+  // Cleanup old sessions for this user
+  await supabase
+    .from('vault_sessions')
+    .delete()
+    .eq('user_id', userId);
+  
+  const { error } = await supabase
+    .from('vault_sessions')
+    .insert({
+      user_id: userId,
+      session_token: sessionToken,
+      is_decoy: isDecoy,
+      expires_at: expiresAt.toISOString()
+    });
+  
+  if (error) {
+    console.error('Error creating session:', error);
+    throw error;
+  }
+  
+  return sessionToken;
+}
+
+// Check if user has admin role
+async function isUserAdmin(supabase: any, userId: string): Promise<boolean> {
+  const { data } = await supabase
+    .from('user_roles')
+    .select('role')
+    .eq('user_id', userId)
+    .eq('role', 'admin')
+    .single();
+  
+  return !!data;
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -43,8 +120,14 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const body = await req.json();
-    const { action, pin, newPin, userId, recoveryKey, targetUserId, adminUserId } = body;
+    const { action, pin, newPin, recoveryKey, targetUserId, sessionToken } = body;
     console.log(`PIN action requested: ${action}`);
+
+    // For actions that require authentication, validate the session token
+    let authenticatedUser: { userId: string; isDecoy: boolean } | null = null;
+    if (sessionToken) {
+      authenticatedUser = await validateSession(supabase, sessionToken);
+    }
 
     if (action === 'verify') {
       // Verify PIN
@@ -84,8 +167,9 @@ serve(async (req) => {
 
         if (pin === '123456') {
           console.log('Login successful with default PIN');
+          const token = await createSession(supabase, newUser.id, false);
           return new Response(
-            JSON.stringify({ success: true, userId: newUser.id, isDecoy: false }),
+            JSON.stringify({ success: true, userId: newUser.id, isDecoy: false, sessionToken: token }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
@@ -103,8 +187,9 @@ serve(async (req) => {
           const isDecoy = await verifyPin(pin, user.decoy_pin_hash);
           if (isDecoy) {
             console.log('Decoy PIN verification successful');
+            const token = await createSession(supabase, user.id, true);
             return new Response(
-              JSON.stringify({ success: true, userId: user.id, isDecoy: true }),
+              JSON.stringify({ success: true, userId: user.id, isDecoy: true, sessionToken: token }),
               { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             );
           }
@@ -113,8 +198,9 @@ serve(async (req) => {
         const isMain = await verifyPin(pin, user.pin_hash);
         if (isMain) {
           console.log('PIN verification successful');
+          const token = await createSession(supabase, user.id, false);
           return new Response(
-            JSON.stringify({ success: true, userId: user.id, isDecoy: false }),
+            JSON.stringify({ success: true, userId: user.id, isDecoy: false, sessionToken: token }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
@@ -148,7 +234,7 @@ serve(async (req) => {
         throw fetchError;
       }
 
-      const matched = (candidates || []).find((u) => {
+      const matched = (candidates || []).find((u: any) => {
         const stored = u.recovery_key as string | null;
         return stored ? normalizeRecoveryKeyComparable(stored) === normalized : false;
       });
@@ -162,15 +248,57 @@ serve(async (req) => {
       }
 
       console.log('Recovery key verification successful');
+      const token = await createSession(supabase, matched.id, false);
       return new Response(
-        JSON.stringify({ success: true, userId: matched.id, isDecoy: false }),
+        JSON.stringify({ success: true, userId: matched.id, isDecoy: false, sessionToken: token }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    else if (action === 'validate-session') {
+      // Validate an existing session token
+      if (!sessionToken) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Kein Session-Token' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+        );
+      }
+
+      if (authenticatedUser) {
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            userId: authenticatedUser.userId, 
+            isDecoy: authenticatedUser.isDecoy 
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ success: false, error: 'Ungültige Session' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+      );
+    }
+
+    else if (action === 'logout') {
+      // Invalidate session
+      if (sessionToken) {
+        await supabase
+          .from('vault_sessions')
+          .delete()
+          .eq('session_token', sessionToken);
+      }
+      
+      return new Response(
+        JSON.stringify({ success: true }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
     
     else if (action === 'change') {
-      // Change PIN
-      if (!userId) {
+      // Change PIN - REQUIRES valid session
+      if (!authenticatedUser) {
         return new Response(
           JSON.stringify({ success: false, error: 'Nicht autorisiert' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
@@ -188,7 +316,7 @@ serve(async (req) => {
       const { data: user, error: fetchError } = await supabase
         .from('vault_users')
         .select('id, pin_hash')
-        .eq('id', userId)
+        .eq('id', authenticatedUser.userId)
         .single();
 
       if (fetchError || !user) {
@@ -213,7 +341,7 @@ serve(async (req) => {
       const { error: updateError } = await supabase
         .from('vault_users')
         .update({ pin_hash: newHash, updated_at: new Date().toISOString() })
-        .eq('id', userId);
+        .eq('id', authenticatedUser.userId);
 
       if (updateError) {
         console.error('Error updating PIN:', updateError);
@@ -228,8 +356,8 @@ serve(async (req) => {
     }
 
     else if (action === 'set-decoy') {
-      // Set decoy PIN
-      if (!userId) {
+      // Set decoy PIN - REQUIRES valid session
+      if (!authenticatedUser) {
         return new Response(
           JSON.stringify({ success: false, error: 'Nicht autorisiert' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
@@ -247,7 +375,7 @@ serve(async (req) => {
       const { data: user, error: fetchError } = await supabase
         .from('vault_users')
         .select('id, pin_hash')
-        .eq('id', userId)
+        .eq('id', authenticatedUser.userId)
         .single();
 
       if (fetchError || !user) {
@@ -270,7 +398,7 @@ serve(async (req) => {
       const { error: updateError } = await supabase
         .from('vault_users')
         .update({ decoy_pin_hash: decoyHash, updated_at: new Date().toISOString() })
-        .eq('id', userId);
+        .eq('id', authenticatedUser.userId);
 
       if (updateError) {
         console.error('Error setting decoy PIN:', updateError);
@@ -285,7 +413,22 @@ serve(async (req) => {
     }
 
     else if (action === 'create-user') {
-      // Create new user (admin function)
+      // Create new user (admin function) - REQUIRES valid session with admin role
+      if (!authenticatedUser) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Nicht autorisiert' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+        );
+      }
+
+      const isAdmin = await isUserAdmin(supabase, authenticatedUser.userId);
+      if (!isAdmin) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Keine Admin-Berechtigung' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+        );
+      }
+
       if (!pin || pin.length !== 6) {
         return new Response(
           JSON.stringify({ success: false, error: 'PIN muss 6 Ziffern haben' }),
@@ -322,7 +465,7 @@ serve(async (req) => {
       }
 
       // Generate recovery key
-      const recoveryKey = `${crypto.randomUUID().slice(0, 4)}-${crypto.randomUUID().slice(0, 4)}-${crypto.randomUUID().slice(0, 4)}-${crypto.randomUUID().slice(0, 4)}`.toUpperCase();
+      const generatedRecoveryKey = `${crypto.randomUUID().slice(0, 4)}-${crypto.randomUUID().slice(0, 4)}-${crypto.randomUUID().slice(0, 4)}-${crypto.randomUUID().slice(0, 4)}`.toUpperCase();
       
       // Hash the PIN
       const pinHash = await hashPin(pin);
@@ -331,7 +474,7 @@ serve(async (req) => {
         .from('vault_users')
         .insert({ 
           pin_hash: pinHash,
-          recovery_key: recoveryKey
+          recovery_key: generatedRecoveryKey
         })
         .select()
         .single();
@@ -346,33 +489,33 @@ serve(async (req) => {
         JSON.stringify({ 
           success: true, 
           userId: newUser.id,
-          recoveryKey
+          recoveryKey: generatedRecoveryKey
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     else if (action === 'admin-reset-pin') {
-      // Admin resets user PIN - uses targetUserId and adminUserId from initial body parse
+      // Admin resets user PIN - REQUIRES valid session with admin role
+      if (!authenticatedUser) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Nicht autorisiert' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+        );
+      }
+
+      const isAdmin = await isUserAdmin(supabase, authenticatedUser.userId);
+      if (!isAdmin) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Keine Admin-Berechtigung' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+        );
+      }
+
       if (!targetUserId || !newPin || newPin.length !== 6) {
         return new Response(
           JSON.stringify({ success: false, error: 'Ungültige Parameter' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-        );
-      }
-
-      // Verify admin has admin role
-      const { data: adminRole } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', adminUserId)
-        .eq('role', 'admin')
-        .single();
-
-      if (!adminRole) {
-        return new Response(
-          JSON.stringify({ success: false, error: 'Keine Admin-Berechtigung' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
         );
       }
 
@@ -415,7 +558,7 @@ serve(async (req) => {
         throw updateError;
       }
 
-      console.log(`Admin ${adminUserId} reset PIN for user ${targetUserId}`);
+      console.log(`Admin ${authenticatedUser.userId} reset PIN for user ${targetUserId}`);
       return new Response(
         JSON.stringify({ success: true }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -423,8 +566,23 @@ serve(async (req) => {
     }
 
     else if (action === 'admin-delete-user') {
-      // Admin deletes user and all associated data - uses targetUserId and adminUserId from initial body parse
-      if (!targetUserId || !adminUserId) {
+      // Admin deletes user and all associated data - REQUIRES valid session with admin role
+      if (!authenticatedUser) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Nicht autorisiert' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+        );
+      }
+
+      const isAdmin = await isUserAdmin(supabase, authenticatedUser.userId);
+      if (!isAdmin) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Keine Admin-Berechtigung' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+        );
+      }
+
+      if (!targetUserId) {
         return new Response(
           JSON.stringify({ success: false, error: 'Ungültige Parameter' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
@@ -432,29 +590,14 @@ serve(async (req) => {
       }
 
       // Prevent self-deletion
-      if (targetUserId === adminUserId) {
+      if (targetUserId === authenticatedUser.userId) {
         return new Response(
           JSON.stringify({ success: false, error: 'Du kannst dich nicht selbst löschen' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
         );
       }
 
-      // Verify admin has admin role
-      const { data: adminRole } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', adminUserId)
-        .eq('role', 'admin')
-        .single();
-
-      if (!adminRole) {
-        return new Response(
-          JSON.stringify({ success: false, error: 'Keine Admin-Berechtigung' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
-        );
-      }
-
-      console.log(`Admin ${adminUserId} deleting user ${targetUserId}`);
+      console.log(`Admin ${authenticatedUser.userId} deleting user ${targetUserId}`);
 
       // Delete all user data in order (respecting foreign keys)
       const deletionOrder = [
@@ -463,6 +606,7 @@ serve(async (req) => {
         'note_versions',
         'view_history',
         'security_logs',
+        'vault_sessions',
         // Then delete main data tables
         'notes',
         'photos',
@@ -470,6 +614,10 @@ serve(async (req) => {
         'links',
         'tiktok_videos',
         'secret_texts',
+        // Delete shared album related data
+        'shared_album_items',
+        'shared_album_access',
+        'shared_albums',
         // Delete folders/albums
         'note_folders',
         'link_folders',
@@ -488,7 +636,7 @@ serve(async (req) => {
         const { error } = await supabase
           .from(table)
           .delete()
-          .eq(table === 'vault_users' ? 'id' : 'user_id', targetUserId);
+          .eq(table === 'vault_users' ? 'id' : (table === 'shared_albums' ? 'owner_id' : 'user_id'), targetUserId);
         
         if (error) {
           console.error(`Error deleting from ${table}:`, error);
@@ -505,7 +653,7 @@ serve(async (req) => {
           .from('photos')
           .list(targetUserId);
         if (photosList && photosList.length > 0) {
-          const photoPaths = photosList.map(f => `${targetUserId}/${f.name}`);
+          const photoPaths = photosList.map((f: any) => `${targetUserId}/${f.name}`);
           await supabase.storage.from('photos').remove(photoPaths);
           console.log('Deleted photos from storage');
         }
@@ -515,7 +663,7 @@ serve(async (req) => {
           .from('files')
           .list(targetUserId);
         if (filesList && filesList.length > 0) {
-          const filePaths = filesList.map(f => `${targetUserId}/${f.name}`);
+          const filePaths = filesList.map((f: any) => `${targetUserId}/${f.name}`);
           await supabase.storage.from('files').remove(filePaths);
           console.log('Deleted files from storage');
         }
@@ -525,7 +673,7 @@ serve(async (req) => {
           .from('note-attachments')
           .list(targetUserId);
         if (attachmentsList && attachmentsList.length > 0) {
-          const attachmentPaths = attachmentsList.map(f => `${targetUserId}/${f.name}`);
+          const attachmentPaths = attachmentsList.map((f: any) => `${targetUserId}/${f.name}`);
           await supabase.storage.from('note-attachments').remove(attachmentPaths);
           console.log('Deleted note attachments from storage');
         }
@@ -542,27 +690,28 @@ serve(async (req) => {
     }
 
     else if (action === 'admin-assign-role') {
-      // Admin assigns role to user
+      // Admin assigns role to user - REQUIRES valid session with admin role
       const { role } = body;
-      if (!targetUserId || !adminUserId || !role) {
+      
+      if (!authenticatedUser) {
         return new Response(
-          JSON.stringify({ success: false, error: 'Ungültige Parameter' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+          JSON.stringify({ success: false, error: 'Nicht autorisiert' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
         );
       }
 
-      // Verify admin has admin role
-      const { data: adminRole } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', adminUserId)
-        .eq('role', 'admin')
-        .single();
-
-      if (!adminRole) {
+      const isAdmin = await isUserAdmin(supabase, authenticatedUser.userId);
+      if (!isAdmin) {
         return new Response(
           JSON.stringify({ success: false, error: 'Keine Admin-Berechtigung' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+        );
+      }
+
+      if (!targetUserId || !role) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Ungültige Parameter' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
         );
       }
 
@@ -594,7 +743,7 @@ serve(async (req) => {
         );
       }
 
-      console.log(`Admin ${adminUserId} assigned role ${role} to user ${targetUserId}`);
+      console.log(`Admin ${authenticatedUser.userId} assigned role ${role} to user ${targetUserId}`);
       return new Response(
         JSON.stringify({ success: true }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -602,32 +751,33 @@ serve(async (req) => {
     }
 
     else if (action === 'admin-remove-role') {
-      // Admin removes role from user
+      // Admin removes role from user - REQUIRES valid session with admin role
       const { role } = body;
-      if (!targetUserId || !adminUserId || !role) {
+      
+      if (!authenticatedUser) {
         return new Response(
-          JSON.stringify({ success: false, error: 'Ungültige Parameter' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+          JSON.stringify({ success: false, error: 'Nicht autorisiert' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
         );
       }
 
-      // Verify admin has admin role
-      const { data: adminRole } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', adminUserId)
-        .eq('role', 'admin')
-        .single();
-
-      if (!adminRole) {
+      const isAdmin = await isUserAdmin(supabase, authenticatedUser.userId);
+      if (!isAdmin) {
         return new Response(
           JSON.stringify({ success: false, error: 'Keine Admin-Berechtigung' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
         );
       }
 
+      if (!targetUserId || !role) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Ungültige Parameter' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
+      }
+
       // Prevent removing own admin role
-      if (targetUserId === adminUserId && role === 'admin') {
+      if (targetUserId === authenticatedUser.userId && role === 'admin') {
         return new Response(
           JSON.stringify({ success: false, error: 'Du kannst dir nicht selbst die Admin-Rolle entziehen' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
@@ -649,9 +799,73 @@ serve(async (req) => {
         );
       }
 
-      console.log(`Admin ${adminUserId} removed role ${role} from user ${targetUserId}`);
+      console.log(`Admin ${authenticatedUser.userId} removed role ${role} from user ${targetUserId}`);
       return new Response(
         JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    else if (action === 'get-user-roles') {
+      // Get roles for authenticated user - REQUIRES valid session
+      if (!authenticatedUser) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Nicht autorisiert' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+        );
+      }
+
+      const { data: roles, error } = await supabase
+        .from('user_roles')
+        .select('*')
+        .eq('user_id', authenticatedUser.userId);
+
+      if (error) {
+        console.error('Error fetching roles:', error);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Fehler beim Laden der Rollen' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, roles: roles || [] }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    else if (action === 'admin-get-all-roles') {
+      // Get all roles (admin only) - REQUIRES valid session with admin role
+      if (!authenticatedUser) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Nicht autorisiert' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+        );
+      }
+
+      const isAdmin = await isUserAdmin(supabase, authenticatedUser.userId);
+      if (!isAdmin) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Keine Admin-Berechtigung' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+        );
+      }
+
+      const { data: roles, error } = await supabase
+        .from('user_roles')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching roles:', error);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Fehler beim Laden der Rollen' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, roles: roles || [] }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

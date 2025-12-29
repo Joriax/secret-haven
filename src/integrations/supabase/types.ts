@@ -742,6 +742,44 @@ export type Database = {
         }
         Relationships: []
       }
+      vault_sessions: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          is_decoy: boolean
+          last_activity: string
+          session_token: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          id?: string
+          is_decoy?: boolean
+          last_activity?: string
+          session_token: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          is_decoy?: boolean
+          last_activity?: string
+          session_token?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vault_sessions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "vault_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vault_users: {
         Row: {
           admin_notes: string | null
@@ -801,6 +839,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      cleanup_expired_sessions: { Args: never; Returns: undefined }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -809,6 +848,13 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
+      validate_session_token: {
+        Args: { token: string }
+        Returns: {
+          is_decoy: boolean
+          user_id: string
+        }[]
+      }
     }
     Enums: {
       app_role: "admin" | "user"

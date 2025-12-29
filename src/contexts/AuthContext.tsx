@@ -6,7 +6,8 @@ interface AuthContextType {
   isAuthLoading: boolean;
   userId: string | null;
   isDecoyMode: boolean;
-  login: (userId: string, isDecoy?: boolean) => void;
+  sessionToken: string | null;
+  login: (userId: string, isDecoy: boolean, sessionToken: string) => void;
   logout: () => void;
   extendSession: () => void;
   sessionExpiresAt: Date | null;
@@ -44,41 +45,74 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const [isDecoyMode, setIsDecoyMode] = useState(false);
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [sessionExpiresAt, setSessionExpiresAt] = useState<Date | null>(null);
 
+  // Validate session with server on mount
   useEffect(() => {
-    // Check for existing session
-    const storedUserId = sessionStorage.getItem('vault_user_id');
-    const sessionExpiry = sessionStorage.getItem('vault_session_expiry');
-    const storedDecoyMode = sessionStorage.getItem('vault_decoy_mode');
-    
-    if (storedUserId && sessionExpiry) {
-      const expiry = new Date(sessionExpiry);
-      if (expiry > new Date()) {
-        setIsAuthenticated(true);
-        setUserId(storedUserId);
-        setIsDecoyMode(storedDecoyMode === 'true');
-        setSessionExpiresAt(expiry);
-      } else {
+    const validateSession = async () => {
+      const storedToken = sessionStorage.getItem('vault_session_token');
+      const storedUserId = sessionStorage.getItem('vault_user_id');
+      
+      if (!storedToken || !storedUserId) {
+        setIsAuthLoading(false);
+        return;
+      }
+
+      try {
+        // Validate the session token with the server
+        const response = await supabase.functions.invoke('verify-pin', {
+          body: { action: 'validate-session', sessionToken: storedToken }
+        });
+
+        const data = response.data;
+        
+        if (data?.success && data?.userId) {
+          // Session is valid
+          const expiry = new Date();
+          expiry.setHours(expiry.getHours() + 24);
+          
+          setIsAuthenticated(true);
+          setUserId(data.userId);
+          setIsDecoyMode(data.isDecoy || false);
+          setSessionToken(storedToken);
+          setSessionExpiresAt(expiry);
+        } else {
+          // Session is invalid, clear stored data
+          sessionStorage.removeItem('vault_user_id');
+          sessionStorage.removeItem('vault_session_token');
+          sessionStorage.removeItem('vault_session_expiry');
+          sessionStorage.removeItem('vault_decoy_mode');
+        }
+      } catch (error) {
+        console.error('Session validation error:', error);
+        // Clear on error
         sessionStorage.removeItem('vault_user_id');
+        sessionStorage.removeItem('vault_session_token');
         sessionStorage.removeItem('vault_session_expiry');
         sessionStorage.removeItem('vault_decoy_mode');
+      } finally {
+        setIsAuthLoading(false);
       }
-    }
-    setIsAuthLoading(false);
+    };
+
+    validateSession();
   }, []);
 
-  const login = useCallback((newUserId: string, isDecoy: boolean = false) => {
+  const login = useCallback((newUserId: string, isDecoy: boolean, newSessionToken: string) => {
     const expiry = new Date();
     expiry.setHours(expiry.getHours() + 24);
     
+    // Store session token (server-validated) along with user info
     sessionStorage.setItem('vault_user_id', newUserId);
+    sessionStorage.setItem('vault_session_token', newSessionToken);
     sessionStorage.setItem('vault_session_expiry', expiry.toISOString());
     sessionStorage.setItem('vault_decoy_mode', isDecoy.toString());
     
     setIsAuthenticated(true);
     setUserId(newUserId);
     setIsDecoyMode(isDecoy);
+    setSessionToken(newSessionToken);
     setSessionExpiresAt(expiry);
     
     // Log security event
@@ -95,22 +129,51 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setSessionExpiresAt(expiry);
   }, [userId]);
 
-  const logout = useCallback(() => {
-    if (userId) {
-      logSecurityEvent(userId, 'logout', {});
+  const logout = useCallback(async () => {
+    const currentToken = sessionToken;
+    const currentUserId = userId;
+    
+    // Log security event before clearing state
+    if (currentUserId) {
+      logSecurityEvent(currentUserId, 'logout', {});
     }
     
+    // Invalidate session on server
+    if (currentToken) {
+      try {
+        await supabase.functions.invoke('verify-pin', {
+          body: { action: 'logout', sessionToken: currentToken }
+        });
+      } catch (error) {
+        console.error('Error invalidating session:', error);
+      }
+    }
+    
+    // Clear local state
     sessionStorage.removeItem('vault_user_id');
+    sessionStorage.removeItem('vault_session_token');
     sessionStorage.removeItem('vault_session_expiry');
     sessionStorage.removeItem('vault_decoy_mode');
+    
     setIsAuthenticated(false);
     setUserId(null);
     setIsDecoyMode(false);
+    setSessionToken(null);
     setSessionExpiresAt(null);
-  }, [userId]);
+  }, [sessionToken, userId]);
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, isAuthLoading, userId, isDecoyMode, login, logout, extendSession, sessionExpiresAt }}>
+    <AuthContext.Provider value={{ 
+      isAuthenticated, 
+      isAuthLoading, 
+      userId, 
+      isDecoyMode, 
+      sessionToken,
+      login, 
+      logout, 
+      extendSession, 
+      sessionExpiresAt 
+    }}>
       {children}
     </AuthContext.Provider>
   );
