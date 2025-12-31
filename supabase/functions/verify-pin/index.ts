@@ -262,13 +262,19 @@ async function createSessionWithHistory(
     is_active: true
   });
   
-  // Update user's last login info
+  // Update user's last login info - first get current count
+  const { data: currentUser } = await supabase
+    .from('vault_users')
+    .select('login_count')
+    .eq('id', userId)
+    .single();
+  
   await supabase
     .from('vault_users')
     .update({
       last_login_at: new Date().toISOString(),
       last_login_ip: ipAddress,
-      login_count: supabase.sql`COALESCE(login_count, 0) + 1`
+      login_count: (currentUser?.login_count || 0) + 1
     })
     .eq('id', userId);
   
