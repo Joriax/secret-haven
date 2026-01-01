@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Shield, 
@@ -7,7 +7,6 @@ import {
   AlertTriangle, 
   Smartphone, 
   Key,
-  Trash2,
   RefreshCw,
   Clock,
   MapPin,
@@ -20,14 +19,33 @@ import {
   Activity,
   Users,
   XCircle,
-  CheckCircle,
-  ChevronRight
+  ChevronRight,
+  TrendingUp,
+  BarChart3,
+  Map
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  PieChart,
+  Pie,
+  Cell,
+  AreaChart,
+  Area
+} from 'recharts';
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 
 interface SecurityLog {
   id: string;
@@ -93,6 +111,8 @@ const filterEventTypes: Record<FilterType, string[]> = {
   admin: ['user_created', 'user_deleted', 'role_assigned', 'role_removed', 'admin_reset_pin', 'sessions_terminated'],
 };
 
+const CHART_COLORS = ['#22c55e', '#ef4444', '#3b82f6', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16'];
+
 export default function SecurityLogs() {
   const [logs, setLogs] = useState<SecurityLog[]>([]);
   const [sessions, setSessions] = useState<SessionHistoryItem[]>([]);
@@ -139,6 +159,112 @@ export default function SecurityLogs() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Calculate statistics
+  const statistics = useMemo(() => {
+    // Login trends - last 14 days
+    const now = new Date();
+    const loginTrend = Array.from({ length: 14 }, (_, i) => {
+      const date = new Date(now);
+      date.setDate(date.getDate() - (13 - i));
+      const dateStr = date.toISOString().split('T')[0];
+      const dayLogs = logs.filter(l => l.created_at.startsWith(dateStr));
+      
+      return {
+        date: date.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric' }),
+        success: dayLogs.filter(l => l.event_type === 'login_success').length,
+        failed: dayLogs.filter(l => l.event_type === 'login_failed').length,
+        total: dayLogs.length
+      };
+    });
+
+    // Country stats
+    const countryMap: Record<string, number> = {};
+    logs.forEach(log => {
+      if (log.country) {
+        countryMap[log.country] = (countryMap[log.country] || 0) + 1;
+      }
+    });
+    const countryStats = Object.entries(countryMap)
+      .map(([country, count]) => ({ country, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8);
+
+    // City stats
+    const cityMap: Record<string, { count: number; country: string }> = {};
+    logs.forEach(log => {
+      if (log.city) {
+        const key = log.city;
+        if (cityMap[key]) {
+          cityMap[key].count++;
+        } else {
+          cityMap[key] = { count: 1, country: log.country || '' };
+        }
+      }
+    });
+    const cityStats = Object.entries(cityMap)
+      .map(([city, data]) => ({ city, count: data.count, country: data.country }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    // Event type distribution
+    const eventMap: Record<string, number> = {};
+    logs.forEach(log => {
+      eventMap[log.event_type] = (eventMap[log.event_type] || 0) + 1;
+    });
+    const eventStats = Object.entries(eventMap)
+      .map(([type, count]) => ({
+        type,
+        label: eventTypeConfig[type]?.label || type,
+        count,
+        color: eventTypeConfig[type]?.color || 'text-muted-foreground'
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    // Browser stats
+    const browserMap: Record<string, number> = {};
+    logs.forEach(log => {
+      if (log.browser) {
+        browserMap[log.browser] = (browserMap[log.browser] || 0) + 1;
+      }
+    });
+    const browserStats = Object.entries(browserMap)
+      .map(([browser, count]) => ({ browser, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+    // Device type stats
+    const deviceMap: Record<string, number> = {};
+    logs.forEach(log => {
+      const device = log.device_type || 'Desktop';
+      deviceMap[device] = (deviceMap[device] || 0) + 1;
+    });
+    const deviceStats = Object.entries(deviceMap)
+      .map(([device, count]) => ({ device, count }))
+      .sort((a, b) => b.count - a.count);
+
+    // Hourly activity (last 7 days)
+    const hourlyMap: Record<number, number> = {};
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    logs.filter(l => new Date(l.created_at) >= sevenDaysAgo).forEach(log => {
+      const hour = new Date(log.created_at).getHours();
+      hourlyMap[hour] = (hourlyMap[hour] || 0) + 1;
+    });
+    const hourlyStats = Array.from({ length: 24 }, (_, hour) => ({
+      hour: `${hour.toString().padStart(2, '0')}:00`,
+      count: hourlyMap[hour] || 0
+    }));
+
+    return {
+      loginTrend,
+      countryStats,
+      cityStats,
+      eventStats,
+      browserStats,
+      deviceStats,
+      hourlyStats
+    };
+  }, [logs]);
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return '-';
@@ -214,6 +340,13 @@ export default function SecurityLogs() {
     securityEvents: logs.filter(l => ['pin_changed', 'decoy_pin_set', 'recovery_key_generated'].includes(l.event_type)).length,
   };
 
+  const chartConfig = {
+    success: { label: 'Erfolgreich', color: '#22c55e' },
+    failed: { label: 'Fehlgeschlagen', color: '#ef4444' },
+    total: { label: 'Gesamt', color: '#3b82f6' },
+    count: { label: 'Anzahl', color: 'hsl(var(--primary))' }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -228,7 +361,7 @@ export default function SecurityLogs() {
           </div>
           <div>
             <h1 className="text-2xl md:text-3xl font-bold text-foreground">Sicherheit</h1>
-            <p className="text-muted-foreground text-sm">Protokolle & Sessions</p>
+            <p className="text-muted-foreground text-sm">Protokolle, Sessions & Statistiken</p>
           </div>
         </div>
 
@@ -266,8 +399,12 @@ export default function SecurityLogs() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="logs" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 mb-4">
+      <Tabs defaultValue="stats" className="w-full">
+        <TabsList className="grid w-full grid-cols-3 mb-4">
+          <TabsTrigger value="stats" className="flex items-center gap-2">
+            <BarChart3 className="w-4 h-4" />
+            Statistiken
+          </TabsTrigger>
           <TabsTrigger value="logs" className="flex items-center gap-2">
             <Activity className="w-4 h-4" />
             Protokolle ({filteredLogs.length})
@@ -277,6 +414,304 @@ export default function SecurityLogs() {
             Sessions ({sessions.length})
           </TabsTrigger>
         </TabsList>
+
+        {/* Statistics Tab */}
+        <TabsContent value="stats" className="space-y-6">
+          {/* Login Trend Chart */}
+          <div className="glass-card p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                <TrendingUp className="w-5 h-5 text-blue-400" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-foreground">Login-Trend</h3>
+                <p className="text-xs text-muted-foreground">Letzte 14 Tage</p>
+              </div>
+            </div>
+            <ChartContainer config={chartConfig} className="h-[250px] w-full">
+              <AreaChart data={statistics.loginTrend}>
+                <defs>
+                  <linearGradient id="successGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
+                  </linearGradient>
+                  <linearGradient id="failedGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                <XAxis 
+                  dataKey="date" 
+                  stroke="hsl(var(--muted-foreground))" 
+                  fontSize={11}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <YAxis 
+                  stroke="hsl(var(--muted-foreground))" 
+                  fontSize={11}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <Area 
+                  type="monotone" 
+                  dataKey="success" 
+                  stroke="#22c55e" 
+                  strokeWidth={2}
+                  fill="url(#successGradient)" 
+                  name="Erfolgreich"
+                />
+                <Area 
+                  type="monotone" 
+                  dataKey="failed" 
+                  stroke="#ef4444" 
+                  strokeWidth={2}
+                  fill="url(#failedGradient)" 
+                  name="Fehlgeschlagen"
+                />
+              </AreaChart>
+            </ChartContainer>
+          </div>
+
+          {/* Location Stats */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Country Heatmap */}
+            <div className="glass-card p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
+                  <Globe className="w-5 h-5 text-green-400" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground">Logins nach Land</h3>
+                  <p className="text-xs text-muted-foreground">Geografische Verteilung</p>
+                </div>
+              </div>
+              {statistics.countryStats.length > 0 ? (
+                <div className="space-y-3">
+                  {statistics.countryStats.map((stat, index) => {
+                    const maxCount = Math.max(...statistics.countryStats.map(s => s.count));
+                    const percentage = (stat.count / maxCount) * 100;
+                    return (
+                      <div key={stat.country} className="space-y-1">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-foreground flex items-center gap-2">
+                            <span className="text-lg">{getCountryFlag(stat.country)}</span>
+                            {stat.country}
+                          </span>
+                          <span className="text-muted-foreground font-medium">{stat.count}</span>
+                        </div>
+                        <div className="h-2 bg-muted/30 rounded-full overflow-hidden">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${percentage}%` }}
+                            transition={{ duration: 0.5, delay: index * 0.1 }}
+                            className="h-full rounded-full"
+                            style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Globe className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                  <p>Keine Standortdaten verfügbar</p>
+                </div>
+              )}
+            </div>
+
+            {/* City Heatmap */}
+            <div className="glass-card p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                  <Map className="w-5 h-5 text-purple-400" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground">Logins nach Stadt</h3>
+                  <p className="text-xs text-muted-foreground">Top 10 Standorte</p>
+                </div>
+              </div>
+              {statistics.cityStats.length > 0 ? (
+                <div className="space-y-3">
+                  {statistics.cityStats.map((stat, index) => {
+                    const maxCount = Math.max(...statistics.cityStats.map(s => s.count));
+                    const percentage = (stat.count / maxCount) * 100;
+                    return (
+                      <div key={stat.city} className="space-y-1">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-foreground flex items-center gap-2">
+                            <MapPin className="w-3 h-3 text-muted-foreground" />
+                            {stat.city}
+                            {stat.country && (
+                              <span className="text-xs text-muted-foreground">({stat.country})</span>
+                            )}
+                          </span>
+                          <span className="text-muted-foreground font-medium">{stat.count}</span>
+                        </div>
+                        <div className="h-2 bg-muted/30 rounded-full overflow-hidden">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${percentage}%` }}
+                            transition={{ duration: 0.5, delay: index * 0.1 }}
+                            className="h-full rounded-full"
+                            style={{ backgroundColor: CHART_COLORS[(index + 2) % CHART_COLORS.length] }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <MapPin className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                  <p>Keine Stadtdaten verfügbar</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Hourly Activity & Device Stats */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Hourly Activity */}
+            <div className="glass-card p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                  <Clock className="w-5 h-5 text-orange-400" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground">Aktivität nach Uhrzeit</h3>
+                  <p className="text-xs text-muted-foreground">Letzte 7 Tage</p>
+                </div>
+              </div>
+              <ChartContainer config={chartConfig} className="h-[200px] w-full">
+                <BarChart data={statistics.hourlyStats}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                  <XAxis 
+                    dataKey="hour" 
+                    stroke="hsl(var(--muted-foreground))" 
+                    fontSize={10}
+                    tickLine={false}
+                    axisLine={false}
+                    interval={3}
+                  />
+                  <YAxis 
+                    stroke="hsl(var(--muted-foreground))" 
+                    fontSize={10}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Bar 
+                    dataKey="count" 
+                    fill="hsl(var(--primary))" 
+                    radius={[4, 4, 0, 0]}
+                    name="Aktivitäten"
+                  />
+                </BarChart>
+              </ChartContainer>
+            </div>
+
+            {/* Device & Browser Stats */}
+            <div className="glass-card p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                  <Monitor className="w-5 h-5 text-cyan-400" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground">Geräte & Browser</h3>
+                  <p className="text-xs text-muted-foreground">Verteilung</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                {/* Devices */}
+                <div>
+                  <h4 className="text-xs text-muted-foreground mb-3">Gerätetypen</h4>
+                  <div className="space-y-2">
+                    {statistics.deviceStats.map((stat, index) => {
+                      const DeviceIcon = getDeviceIcon(stat.device);
+                      return (
+                        <div key={stat.device} className="flex items-center gap-2 text-sm">
+                          <DeviceIcon className="w-4 h-4 text-muted-foreground" />
+                          <span className="text-foreground flex-1">{stat.device}</span>
+                          <span 
+                            className="px-2 py-0.5 rounded-full text-xs font-medium"
+                            style={{ 
+                              backgroundColor: `${CHART_COLORS[index % CHART_COLORS.length]}20`,
+                              color: CHART_COLORS[index % CHART_COLORS.length]
+                            }}
+                          >
+                            {stat.count}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                {/* Browsers */}
+                <div>
+                  <h4 className="text-xs text-muted-foreground mb-3">Browser</h4>
+                  <div className="space-y-2">
+                    {statistics.browserStats.map((stat, index) => (
+                      <div key={stat.browser} className="flex items-center gap-2 text-sm">
+                        <Globe className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-foreground flex-1 truncate">{stat.browser}</span>
+                        <span 
+                          className="px-2 py-0.5 rounded-full text-xs font-medium"
+                          style={{ 
+                            backgroundColor: `${CHART_COLORS[(index + 3) % CHART_COLORS.length]}20`,
+                            color: CHART_COLORS[(index + 3) % CHART_COLORS.length]
+                          }}
+                        >
+                          {stat.count}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Event Type Distribution */}
+          <div className="glass-card p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
+                <Activity className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-foreground">Ereignistypen</h3>
+                <p className="text-xs text-muted-foreground">Verteilung aller Protokolleinträge</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              {statistics.eventStats.map((stat, index) => {
+                const config = eventTypeConfig[stat.type];
+                const Icon = config?.icon || Shield;
+                return (
+                  <motion.div
+                    key={stat.type}
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: index * 0.05 }}
+                    className={cn(
+                      "p-3 rounded-xl border border-border/30",
+                      config?.bgColor || "bg-muted/30"
+                    )}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <Icon className={cn("w-4 h-4", config?.color || "text-muted-foreground")} />
+                      <span className="text-2xl font-bold text-foreground">{stat.count}</span>
+                    </div>
+                    <span className="text-xs text-muted-foreground line-clamp-1">{stat.label}</span>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </div>
+        </TabsContent>
 
         {/* Logs Tab */}
         <TabsContent value="logs" className="space-y-4">
@@ -584,4 +1019,53 @@ export default function SecurityLogs() {
       </Tabs>
     </motion.div>
   );
+}
+
+// Helper function to get country flag emoji
+function getCountryFlag(countryName: string): string {
+  const countryToCode: Record<string, string> = {
+    'Germany': 'DE',
+    'Deutschland': 'DE',
+    'United States': 'US',
+    'USA': 'US',
+    'United Kingdom': 'GB',
+    'France': 'FR',
+    'Italy': 'IT',
+    'Spain': 'ES',
+    'Netherlands': 'NL',
+    'Belgium': 'BE',
+    'Austria': 'AT',
+    'Switzerland': 'CH',
+    'Poland': 'PL',
+    'Czech Republic': 'CZ',
+    'Sweden': 'SE',
+    'Norway': 'NO',
+    'Denmark': 'DK',
+    'Finland': 'FI',
+    'Portugal': 'PT',
+    'Ireland': 'IE',
+    'Canada': 'CA',
+    'Australia': 'AU',
+    'Japan': 'JP',
+    'China': 'CN',
+    'India': 'IN',
+    'Brazil': 'BR',
+    'Russia': 'RU',
+    'South Korea': 'KR',
+    'Mexico': 'MX',
+    'Argentina': 'AR',
+  };
+  
+  const code = countryToCode[countryName] || countryName.slice(0, 2).toUpperCase();
+  
+  // Convert country code to flag emoji
+  const codePoints = [...code.toUpperCase()].map(
+    char => 127397 + char.charCodeAt(0)
+  );
+  
+  try {
+    return String.fromCodePoint(...codePoints);
+  } catch {
+    return '🌍';
+  }
 }
