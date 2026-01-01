@@ -22,8 +22,23 @@ import {
   ChevronRight,
   TrendingUp,
   BarChart3,
-  Map
+  Map,
+  Download,
+  FileText,
+  Calendar as CalendarIcon
 } from 'lucide-react';
+import { format, subDays, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
+import { de } from 'date-fns/locale';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
@@ -120,7 +135,189 @@ export default function SecurityLogs() {
   const [filter, setFilter] = useState<FilterType>('all');
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
+  const [dateRange, setDateRange] = useState<{ from: Date | undefined; to: Date | undefined }>({
+    from: subDays(new Date(), 30),
+    to: new Date()
+  });
+  const [quickRange, setQuickRange] = useState('30d');
   const { userId, sessionToken } = useAuth();
+
+  const handleQuickRange = (value: string) => {
+    setQuickRange(value);
+    const now = new Date();
+    switch (value) {
+      case '24h':
+        setDateRange({ from: subDays(now, 1), to: now });
+        break;
+      case '7d':
+        setDateRange({ from: subDays(now, 7), to: now });
+        break;
+      case '30d':
+        setDateRange({ from: subDays(now, 30), to: now });
+        break;
+      case '90d':
+        setDateRange({ from: subDays(now, 90), to: now });
+        break;
+      case 'all':
+        setDateRange({ from: undefined, to: undefined });
+        break;
+    }
+  };
+
+  // Filter logs by date range
+  const dateFilteredLogs = useMemo(() => {
+    if (!dateRange.from && !dateRange.to) return logs;
+    return logs.filter(log => {
+      const logDate = new Date(log.created_at);
+      if (dateRange.from && dateRange.to) {
+        return isWithinInterval(logDate, {
+          start: startOfDay(dateRange.from),
+          end: endOfDay(dateRange.to)
+        });
+      }
+      return true;
+    });
+  }, [logs, dateRange]);
+
+  // Export to CSV
+  const exportToCSV = () => {
+    const headers = ['Datum', 'Uhrzeit', 'Event', 'IP-Adresse', 'Land', 'Stadt', 'Region', 'Gerät', 'Browser', 'OS'];
+    const exportLogs = filter === 'all' ? dateFilteredLogs : dateFilteredLogs.filter(log => filterEventTypes[filter].includes(log.event_type));
+    
+    const rows = exportLogs.map(log => [
+      format(new Date(log.created_at), 'dd.MM.yyyy'),
+      format(new Date(log.created_at), 'HH:mm:ss'),
+      eventTypeConfig[log.event_type]?.label || log.event_type,
+      log.ip_address || '',
+      log.country || '',
+      log.city || '',
+      log.region || '',
+      log.device_type || '',
+      log.browser || '',
+      log.os || ''
+    ]);
+    
+    const csvContent = [headers, ...rows]
+      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+    
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `security-logs-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Export to PDF (opens print dialog)
+  const exportToPDF = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const dateRangeText = dateRange.from && dateRange.to 
+      ? `${format(dateRange.from, 'dd.MM.yyyy', { locale: de })} - ${format(dateRange.to, 'dd.MM.yyyy', { locale: de })}`
+      : 'Alle Zeiträume';
+
+    const exportLogs = filter === 'all' ? dateFilteredLogs : dateFilteredLogs.filter(log => filterEventTypes[filter].includes(log.event_type));
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Security Logs Export</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 40px; color: #333; }
+          h1 { color: #1a1a1a; border-bottom: 2px solid #3b82f6; padding-bottom: 10px; }
+          h2 { color: #374151; margin-top: 30px; }
+          .meta { color: #6b7280; margin-bottom: 30px; }
+          .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 30px; }
+          .stat-card { background: #f3f4f6; padding: 15px; border-radius: 8px; text-align: center; }
+          .stat-value { font-size: 24px; font-weight: bold; }
+          .stat-value.success { color: #22c55e; }
+          .stat-value.failed { color: #ef4444; }
+          .stat-value.sessions { color: #3b82f6; }
+          .stat-value.security { color: #8b5cf6; }
+          .stat-label { color: #6b7280; font-size: 12px; margin-top: 5px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 11px; }
+          th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #e5e7eb; }
+          th { background: #f9fafb; font-weight: 600; color: #374151; }
+          tr:nth-child(even) { background: #fafafa; }
+          .badge { padding: 2px 8px; border-radius: 4px; font-size: 10px; display: inline-block; }
+          .badge.success { background: #dcfce7; color: #166534; }
+          .badge.failed { background: #fee2e2; color: #991b1b; }
+          .badge.warning { background: #fef3c7; color: #92400e; }
+          .badge.info { background: #dbeafe; color: #1e40af; }
+          @media print { body { margin: 20px; } }
+        </style>
+      </head>
+      <body>
+        <h1>🔐 Security Logs Report</h1>
+        <div class="meta">
+          <p><strong>Zeitraum:</strong> ${dateRangeText}</p>
+          <p><strong>Filter:</strong> ${filterOptions.find(f => f.value === filter)?.label || 'Alle'}</p>
+          <p><strong>Erstellt am:</strong> ${format(new Date(), 'dd.MM.yyyy HH:mm', { locale: de })}</p>
+          <p><strong>Anzahl Events:</strong> ${exportLogs.length}</p>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-value success">${exportLogs.filter(l => l.event_type === 'login_success').length}</div>
+            <div class="stat-label">Erfolgreiche Logins</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value failed">${exportLogs.filter(l => l.event_type === 'login_failed').length}</div>
+            <div class="stat-label">Fehlgeschlagene Logins</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value sessions">${sessions.filter(s => s.is_active).length}</div>
+            <div class="stat-label">Aktive Sessions</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value security">${exportLogs.filter(l => ['pin_changed', 'decoy_pin_set', 'recovery_key_generated'].includes(l.event_type)).length}</div>
+            <div class="stat-label">Sicherheits-Events</div>
+          </div>
+        </div>
+
+        <h2>📋 Event Log</h2>
+        <table>
+          <tr>
+            <th>Datum</th>
+            <th>Uhrzeit</th>
+            <th>Event</th>
+            <th>IP-Adresse</th>
+            <th>Standort</th>
+            <th>Gerät</th>
+            <th>Browser</th>
+          </tr>
+          ${exportLogs.slice(0, 200).map(log => {
+            const badgeClass = log.event_type === 'login_success' ? 'success' : 
+                              log.event_type === 'login_failed' ? 'failed' : 
+                              log.event_type === 'decoy_login' ? 'warning' : 'info';
+            return `
+              <tr>
+                <td>${format(new Date(log.created_at), 'dd.MM.yyyy')}</td>
+                <td>${format(new Date(log.created_at), 'HH:mm:ss')}</td>
+                <td><span class="badge ${badgeClass}">${eventTypeConfig[log.event_type]?.label || log.event_type}</span></td>
+                <td>${log.ip_address || '-'}</td>
+                <td>${log.city ? `${log.city}, ${log.country}` : (log.country || '-')}</td>
+                <td>${log.device_type || '-'}</td>
+                <td>${log.browser || '-'}</td>
+              </tr>
+            `;
+          }).join('')}
+        </table>
+        ${exportLogs.length > 200 ? `<p style="color: #6b7280; margin-top: 10px; text-align: center;">... und ${exportLogs.length - 200} weitere Einträge</p>` : ''}
+
+        <script>window.onload = () => window.print();</script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+  };
 
   const fetchData = useCallback(async () => {
     if (!userId || !sessionToken) return;
@@ -316,8 +513,8 @@ export default function SecurityLogs() {
   };
 
   const filteredLogs = filter === 'all' 
-    ? logs 
-    : logs.filter(log => filterEventTypes[filter].includes(log.event_type));
+    ? dateFilteredLogs 
+    : dateFilteredLogs.filter(log => filterEventTypes[filter].includes(log.event_type));
 
   // Group logs by date
   const groupedLogs = filteredLogs.reduce((acc, log) => {
@@ -354,24 +551,90 @@ export default function SecurityLogs() {
       className="space-y-6"
     >
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center shrink-0">
-            <Shield className="w-6 h-6 text-primary-foreground" />
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center shrink-0">
+              <Shield className="w-6 h-6 text-primary-foreground" />
+            </div>
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold text-foreground">Sicherheit</h1>
+              <p className="text-muted-foreground text-sm">
+                {filteredLogs.length} Events 
+                {dateRange.from && dateRange.to && ` (${format(dateRange.from, 'dd.MM', { locale: de })} - ${format(dateRange.to, 'dd.MM.yy', { locale: de })})`}
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-foreground">Sicherheit</h1>
-            <p className="text-muted-foreground text-sm">Protokolle, Sessions & Statistiken</p>
-          </div>
+
+          <button
+            onClick={fetchData}
+            disabled={loading}
+            className="p-3 rounded-xl bg-muted/30 hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 self-start sm:self-auto"
+          >
+            <RefreshCw className={cn("w-5 h-5", loading && "animate-spin")} />
+          </button>
         </div>
 
-        <button
-          onClick={fetchData}
-          disabled={loading}
-          className="p-3 rounded-xl bg-muted/30 hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-        >
-          <RefreshCw className={cn("w-5 h-5", loading && "animate-spin")} />
-        </button>
+        {/* Export & Date Range Controls */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Quick Range Select */}
+          <Select value={quickRange} onValueChange={handleQuickRange}>
+            <SelectTrigger className="w-28 h-9 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="24h">24 Stunden</SelectItem>
+              <SelectItem value="7d">7 Tage</SelectItem>
+              <SelectItem value="30d">30 Tage</SelectItem>
+              <SelectItem value="90d">90 Tage</SelectItem>
+              <SelectItem value="all">Alle</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Date Range Picker */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className={cn("justify-start text-left font-normal", !dateRange.from && "text-muted-foreground")}>
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {dateRange.from ? (
+                  dateRange.to ? (
+                    <>
+                      {format(dateRange.from, "dd.MM.yy", { locale: de })} - {format(dateRange.to, "dd.MM.yy", { locale: de })}
+                    </>
+                  ) : (
+                    format(dateRange.from, "dd.MM.yyyy", { locale: de })
+                  )
+                ) : (
+                  "Zeitraum"
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="range"
+                selected={{ from: dateRange.from, to: dateRange.to }}
+                onSelect={(range) => {
+                  setDateRange({ from: range?.from, to: range?.to });
+                  setQuickRange('custom');
+                }}
+                numberOfMonths={2}
+                locale={de}
+              />
+            </PopoverContent>
+          </Popover>
+
+          <div className="flex-1" />
+
+          {/* Export Buttons */}
+          <Button variant="outline" size="sm" onClick={exportToCSV} className="gap-2">
+            <Download className="h-4 w-4" />
+            CSV
+          </Button>
+          <Button variant="outline" size="sm" onClick={exportToPDF} className="gap-2">
+            <FileText className="h-4 w-4" />
+            PDF
+          </Button>
+        </div>
       </div>
 
       {/* Stats Overview */}
