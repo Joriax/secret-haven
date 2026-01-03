@@ -893,6 +893,334 @@ serve(async (req) => {
       );
     }
 
+    // ========== FILE ALBUMS CRUD ==========
+    if (action === 'create-file-album') {
+      const { name, color, icon } = requestData || {};
+      
+      const { data, error } = await supabase
+        .from('file_albums')
+        .insert({ user_id: userId, name, color: color || '#6366f1', icon: icon || 'folder' })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      return new Response(
+        JSON.stringify({ success: true, data }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'update-file-album') {
+      const { id, updates } = requestData || {};
+      
+      const { data, error } = await supabase
+        .from('file_albums')
+        .update(updates)
+        .eq('id', id)
+        .eq('user_id', userId)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      return new Response(
+        JSON.stringify({ success: true, data }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'delete-file-album') {
+      const { id } = requestData || {};
+      
+      // First unlink files from this album
+      await supabase.from('files').update({ album_id: null }).eq('album_id', id);
+      
+      const { error } = await supabase.from('file_albums').delete().eq('id', id).eq('user_id', userId);
+      if (error) throw error;
+      
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'toggle-file-album-pin') {
+      const { id, is_pinned } = requestData || {};
+      
+      const { error } = await supabase
+        .from('file_albums')
+        .update({ is_pinned })
+        .eq('id', id)
+        .eq('user_id', userId);
+      
+      if (error) throw error;
+      
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // ========== SHARED ALBUMS CRUD ==========
+    if (action === 'get-shared-albums') {
+      // Fetch albums I own
+      const { data: myAlbums, error: myError } = await supabase
+        .from('shared_albums')
+        .select('*')
+        .eq('owner_id', userId)
+        .order('is_pinned', { ascending: false })
+        .order('created_at', { ascending: false });
+
+      if (myError) throw myError;
+
+      // Fetch albums shared with me
+      const { data: accessData, error: accessError } = await supabase
+        .from('shared_album_access')
+        .select('shared_album_id')
+        .eq('user_id', userId);
+
+      if (accessError) throw accessError;
+
+      let sharedAlbums: any[] = [];
+      if (accessData && accessData.length > 0) {
+        const albumIds = accessData.map((a: any) => a.shared_album_id);
+        const { data, error } = await supabase
+          .from('shared_albums')
+          .select('*')
+          .in('id', albumIds);
+
+        if (!error && data) {
+          sharedAlbums = data;
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, data: { albums: myAlbums || [], sharedWithMe: sharedAlbums } }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'create-shared-album') {
+      const { name, content_type, color, description } = requestData || {};
+      
+      const { data, error } = await supabase
+        .from('shared_albums')
+        .insert({
+          owner_id: userId,
+          name,
+          content_type: content_type || 'mixed',
+          color: color || '#6366f1',
+          description: description || null,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return new Response(
+        JSON.stringify({ success: true, data }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'update-shared-album') {
+      const { id, updates } = requestData || {};
+      
+      const { error } = await supabase
+        .from('shared_albums')
+        .update(updates)
+        .eq('id', id)
+        .eq('owner_id', userId);
+
+      if (error) throw error;
+
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'delete-shared-album') {
+      const { id } = requestData || {};
+      
+      const { error } = await supabase
+        .from('shared_albums')
+        .delete()
+        .eq('id', id)
+        .eq('owner_id', userId);
+
+      if (error) throw error;
+
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'generate-public-link') {
+      const { id } = requestData || {};
+      const token = crypto.randomUUID().replace(/-/g, '').slice(0, 16);
+
+      const { error } = await supabase
+        .from('shared_albums')
+        .update({ public_link_enabled: true, public_link_token: token })
+        .eq('id', id)
+        .eq('owner_id', userId);
+
+      if (error) throw error;
+
+      return new Response(
+        JSON.stringify({ success: true, data: { token } }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'disable-public-link') {
+      const { id } = requestData || {};
+
+      const { error } = await supabase
+        .from('shared_albums')
+        .update({ public_link_enabled: false, public_link_token: null })
+        .eq('id', id)
+        .eq('owner_id', userId);
+
+      if (error) throw error;
+
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'share-album-with-user') {
+      const { album_id, target_user_id, permission } = requestData || {};
+
+      const { error } = await supabase
+        .from('shared_album_access')
+        .upsert({
+          shared_album_id: album_id,
+          user_id: target_user_id,
+          permission: permission || 'view',
+        });
+
+      if (error) throw error;
+
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'remove-album-user-access') {
+      const { album_id, target_user_id } = requestData || {};
+
+      const { error } = await supabase
+        .from('shared_album_access')
+        .delete()
+        .eq('shared_album_id', album_id)
+        .eq('user_id', target_user_id);
+
+      if (error) throw error;
+
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'get-album-access') {
+      const { album_id } = requestData || {};
+
+      const { data, error } = await supabase
+        .from('shared_album_access')
+        .select('*')
+        .eq('shared_album_id', album_id);
+
+      if (error) throw error;
+
+      return new Response(
+        JSON.stringify({ success: true, data: data || [] }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'add-item-to-shared-album') {
+      const { album_id, item_type, item_id } = requestData || {};
+      
+      const insertData: Record<string, string> = {
+        shared_album_id: album_id,
+        added_by: userId,
+      };
+      insertData[`${item_type}_id`] = item_id;
+
+      const { error } = await supabase
+        .from('shared_album_items')
+        .insert(insertData);
+
+      if (error) throw error;
+
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'remove-item-from-shared-album') {
+      const { album_id, item_type, item_id } = requestData || {};
+
+      let query = supabase
+        .from('shared_album_items')
+        .delete()
+        .eq('shared_album_id', album_id);
+
+      // Add the specific item_type filter
+      query = query.eq(`${item_type}_id`, item_id);
+
+      const { error } = await query;
+
+      if (error) throw error;
+
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'get-shared-album-items') {
+      const { album_id } = requestData || {};
+
+      const { data, error } = await supabase
+        .from('shared_album_items')
+        .select('*')
+        .eq('shared_album_id', album_id)
+        .order('added_at', { ascending: false });
+
+      if (error) throw error;
+
+      return new Response(
+        JSON.stringify({ success: true, data: data || [] }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'toggle-shared-album-pin') {
+      const { id, is_pinned } = requestData || {};
+
+      const { error } = await supabase
+        .from('shared_albums')
+        .update({ is_pinned })
+        .eq('id', id)
+        .eq('owner_id', userId);
+
+      if (error) throw error;
+
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     return new Response(
       JSON.stringify({ success: false, error: 'Ungültige Aktion' }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
