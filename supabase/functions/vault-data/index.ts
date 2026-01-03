@@ -1221,6 +1221,117 @@ serve(async (req) => {
       );
     }
 
+    // ========== BREAK TRACKER ==========
+    if (action === 'get-break-entries') {
+      const { data, error } = await supabase
+        .from('break_entries')
+        .select('*')
+        .eq('user_id', userId)
+        .order('break_date', { ascending: false });
+
+      if (error) throw error;
+
+      return new Response(
+        JSON.stringify({ success: true, data: data || [] }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'add-break-entry') {
+      const { break_date, notes } = requestData || {};
+
+      const { data, error } = await supabase
+        .from('break_entries')
+        .insert({
+          user_id: userId,
+          break_date,
+          notes
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return new Response(
+        JSON.stringify({ success: true, data }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'delete-break-entry') {
+      const { id } = requestData || {};
+
+      const { error } = await supabase
+        .from('break_entries')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', userId);
+
+      if (error) throw error;
+
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'get-break-settings') {
+      const { data, error } = await supabase
+        .from('break_settings')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      if (error && error.code !== 'PGRST116') throw error;
+
+      // Create default settings if none exist
+      if (!data) {
+        const { data: newData, error: insertError } = await supabase
+          .from('break_settings')
+          .insert({
+            user_id: userId,
+            reminder_enabled: true,
+            reminder_time: '12:00:00'
+          })
+          .select()
+          .single();
+
+        if (insertError) throw insertError;
+
+        return new Response(
+          JSON.stringify({ success: true, data: newData }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, data }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'update-break-settings') {
+      const { reminder_enabled, reminder_time } = requestData || {};
+
+      const { data, error } = await supabase
+        .from('break_settings')
+        .upsert({
+          user_id: userId,
+          reminder_enabled,
+          reminder_time,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id' })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return new Response(
+        JSON.stringify({ success: true, data }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     return new Response(
       JSON.stringify({ success: false, error: 'Ungültige Aktion' }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
