@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { useVaultData } from './useVaultData';
 
 export interface FileAlbum {
   id: string;
@@ -18,6 +18,7 @@ export function useFileAlbums() {
   const [albums, setAlbums] = useState<FileAlbum[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { userId, isDecoyMode } = useAuth();
+  const { callVaultData, getFileAlbums } = useVaultData();
 
   const fetchAlbums = useCallback(async () => {
     if (!userId || isDecoyMode) {
@@ -27,21 +28,16 @@ export function useFileAlbums() {
     }
 
     try {
-      const { data, error } = await supabase
-        .from('file_albums')
-        .select('*')
-        .eq('user_id', userId)
-        .order('is_pinned', { ascending: false })
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setAlbums(data || []);
+      const result = await getFileAlbums();
+      if (result?.success) {
+        setAlbums(result.data || []);
+      }
     } catch (error) {
       console.error('Error fetching file albums:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [userId, isDecoyMode]);
+  }, [userId, isDecoyMode, getFileAlbums]);
 
   useEffect(() => {
     fetchAlbums();
@@ -51,22 +47,18 @@ export function useFileAlbums() {
     if (!userId) return null;
 
     try {
-      const { data, error } = await supabase
-        .from('file_albums')
-        .insert({
-          user_id: userId,
-          name: name.trim(),
-          color: color || '#6366f1',
-          icon: icon || 'folder',
-        })
-        .select()
-        .single();
+      const result = await callVaultData('create-file-album', {
+        name: name.trim(),
+        color: color || '#6366f1',
+        icon: icon || 'folder',
+      });
 
-      if (error) throw error;
-
-      setAlbums(prev => [{ ...data, count: 0 }, ...prev]);
-      toast.success('Album erstellt');
-      return data;
+      if (result?.success && result.data) {
+        setAlbums(prev => [{ ...result.data, count: 0 }, ...prev]);
+        toast.success('Album erstellt');
+        return result.data;
+      }
+      return null;
     } catch (error) {
       console.error('Error creating album:', error);
       toast.error('Fehler beim Erstellen');
@@ -78,22 +70,14 @@ export function useFileAlbums() {
     if (!userId) return false;
 
     try {
-      // First unlink files from this album
-      await supabase
-        .from('files')
-        .update({ album_id: null })
-        .eq('album_id', albumId);
+      const result = await callVaultData('delete-file-album', { id: albumId });
 
-      const { error } = await supabase
-        .from('file_albums')
-        .delete()
-        .eq('id', albumId);
-
-      if (error) throw error;
-
-      setAlbums(prev => prev.filter(a => a.id !== albumId));
-      toast.success('Album gelöscht');
-      return true;
+      if (result?.success) {
+        setAlbums(prev => prev.filter(a => a.id !== albumId));
+        toast.success('Album gelöscht');
+        return true;
+      }
+      return false;
     } catch (error) {
       console.error('Error deleting album:', error);
       toast.error('Fehler beim Löschen');
@@ -107,25 +91,25 @@ export function useFileAlbums() {
 
     try {
       const newPinned = !album.is_pinned;
-      const { error } = await supabase
-        .from('file_albums')
-        .update({ is_pinned: newPinned })
-        .eq('id', albumId);
-
-      if (error) throw error;
-
-      setAlbums(prev => {
-        const updated = prev.map(a => 
-          a.id === albumId ? { ...a, is_pinned: newPinned } : a
-        );
-        // Re-sort: pinned first
-        return updated.sort((a, b) => {
-          if (a.is_pinned !== b.is_pinned) return b.is_pinned ? 1 : -1;
-          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-        });
+      const result = await callVaultData('toggle-file-album-pin', { 
+        id: albumId, 
+        is_pinned: newPinned 
       });
-      
-      toast.success(newPinned ? 'Angepinnt' : 'Losgelöst');
+
+      if (result?.success) {
+        setAlbums(prev => {
+          const updated = prev.map(a => 
+            a.id === albumId ? { ...a, is_pinned: newPinned } : a
+          );
+          // Re-sort: pinned first
+          return updated.sort((a, b) => {
+            if (a.is_pinned !== b.is_pinned) return b.is_pinned ? 1 : -1;
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+          });
+        });
+        
+        toast.success(newPinned ? 'Angepinnt' : 'Losgelöst');
+      }
     } catch (error) {
       console.error('Error toggling pin:', error);
     }
@@ -133,17 +117,17 @@ export function useFileAlbums() {
 
   const renameAlbum = async (albumId: string, newName: string) => {
     try {
-      const { error } = await supabase
-        .from('file_albums')
-        .update({ name: newName.trim() })
-        .eq('id', albumId);
+      const result = await callVaultData('update-file-album', { 
+        id: albumId, 
+        updates: { name: newName.trim() } 
+      });
 
-      if (error) throw error;
-
-      setAlbums(prev => prev.map(a => 
-        a.id === albumId ? { ...a, name: newName.trim() } : a
-      ));
-      toast.success('Umbenannt');
+      if (result?.success) {
+        setAlbums(prev => prev.map(a => 
+          a.id === albumId ? { ...a, name: newName.trim() } : a
+        ));
+        toast.success('Umbenannt');
+      }
     } catch (error) {
       console.error('Error renaming album:', error);
       toast.error('Fehler beim Umbenennen');
@@ -152,17 +136,17 @@ export function useFileAlbums() {
 
   const updateAlbum = async (albumId: string, updates: { name?: string; color?: string; icon?: string }) => {
     try {
-      const { error } = await supabase
-        .from('file_albums')
-        .update(updates)
-        .eq('id', albumId);
+      const result = await callVaultData('update-file-album', { 
+        id: albumId, 
+        updates 
+      });
 
-      if (error) throw error;
-
-      setAlbums(prev => prev.map(a => 
-        a.id === albumId ? { ...a, ...updates } : a
-      ));
-      toast.success('Album aktualisiert');
+      if (result?.success) {
+        setAlbums(prev => prev.map(a => 
+          a.id === albumId ? { ...a, ...updates } : a
+        ));
+        toast.success('Album aktualisiert');
+      }
     } catch (error) {
       console.error('Error updating album:', error);
       toast.error('Fehler beim Aktualisieren');
