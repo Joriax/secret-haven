@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { format, isToday, isFuture, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths } from 'date-fns';
+import { format, isToday, isFuture, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { 
   Calendar as CalendarIcon, 
@@ -10,9 +10,6 @@ import {
   ChevronLeft, 
   ChevronRight,
   Check,
-  Bell,
-  BellOff,
-  Clock,
   Trash2,
   Coffee,
   TrendingUp,
@@ -22,29 +19,21 @@ import {
 import { PageHeader } from '@/components/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-} from '@/components/ui/dialog';
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { Progress } from '@/components/ui/progress';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useBreakTracker } from '@/hooks/useBreakTracker';
 import { cn } from '@/lib/utils';
+import { Achievements } from '@/components/break-tracker/Achievements';
+import { YearHeatmap } from '@/components/break-tracker/YearHeatmap';
+import { NotificationSettings } from '@/components/break-tracker/NotificationSettings';
 
 const BreakTracker: React.FC = () => {
   const { 
@@ -60,10 +49,8 @@ const BreakTracker: React.FC = () => {
   } = useBreakTracker();
   
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [noteText, setNoteText] = useState('');
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [reminderTime, setReminderTime] = useState(settings?.reminder_time || '12:00');
+  const [activeTab, setActiveTab] = useState('calendar');
 
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
@@ -75,43 +62,6 @@ const BreakTracker: React.FC = () => {
 
   const handleMarkToday = async () => {
     await addEntry(new Date());
-  };
-
-  const handleDateClick = (date: Date) => {
-    if (isFuture(date)) return;
-    
-    if (hasEntryForDate(date)) {
-      setSelectedDate(date);
-    } else {
-      setSelectedDate(date);
-      setNoteText('');
-    }
-  };
-
-  const handleAddEntry = async () => {
-    if (selectedDate) {
-      await addEntry(selectedDate, noteText || undefined);
-      setSelectedDate(null);
-      setNoteText('');
-    }
-  };
-
-  const handleRemoveEntry = async () => {
-    if (selectedDate) {
-      const entry = getEntryForDate(selectedDate);
-      if (entry) {
-        await removeEntry(entry.id);
-        setSelectedDate(null);
-      }
-    }
-  };
-
-  const handleSaveSettings = async () => {
-    await updateSettings({
-      reminder_enabled: settings?.reminder_enabled ?? true,
-      reminder_time: reminderTime
-    });
-    setSettingsOpen(false);
   };
 
   const todayHasEntry = hasEntryForDate(new Date());
@@ -155,6 +105,7 @@ const BreakTracker: React.FC = () => {
         subtitle="Verfolge deine täglichen Pausen und baue Streaks auf"
         icon={<Coffee className="w-5 h-5 text-primary" />}
       />
+
       {/* Quick Action Bar */}
       <motion.div 
         initial={{ opacity: 0, y: -10 }}
@@ -185,66 +136,10 @@ const BreakTracker: React.FC = () => {
           </Button>
         </div>
 
-        <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-          <DialogTrigger asChild>
-            <Button variant="outline" className="gap-2">
-              {settings?.reminder_enabled ? (
-                <Bell className="h-4 w-4" />
-              ) : (
-                <BellOff className="h-4 w-4" />
-              )}
-              Erinnerung
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Erinnerungseinstellungen</DialogTitle>
-              <DialogDescription>
-                Lass dich täglich an deine Pause erinnern
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-6 py-4">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Tägliche Erinnerung</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Erhalte eine Benachrichtigung zur Pausenzeit
-                  </p>
-                </div>
-                <Switch
-                  checked={settings?.reminder_enabled ?? true}
-                  onCheckedChange={(checked) => 
-                    updateSettings({ reminder_enabled: checked })
-                  }
-                />
-              </div>
-              
-              {settings?.reminder_enabled && (
-                <div className="space-y-2">
-                  <Label htmlFor="reminder-time" className="flex items-center gap-2">
-                    <Clock className="h-4 w-4" />
-                    Uhrzeit
-                  </Label>
-                  <Input
-                    id="reminder-time"
-                    type="time"
-                    value={reminderTime}
-                    onChange={(e) => setReminderTime(e.target.value)}
-                    className="w-32"
-                  />
-                </div>
-              )}
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setSettingsOpen(false)}>
-                Abbrechen
-              </Button>
-              <Button onClick={handleSaveSettings}>
-                Speichern
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <NotificationSettings 
+          settings={settings} 
+          onUpdateSettings={updateSettings} 
+        />
       </motion.div>
 
       {/* Stats Cards */}
@@ -333,197 +228,234 @@ const BreakTracker: React.FC = () => {
         </motion.div>
       </motion.div>
 
-      {/* Calendar */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-      >
-        <Card>
-          <CardHeader className="pb-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <CalendarIcon className="h-5 w-5 text-primary" />
-                <CardTitle>
-                  {format(currentMonth, 'MMMM yyyy', { locale: de })}
-                </CardTitle>
-              </div>
-              <div className="flex gap-2">
-                <Button 
-                  variant="outline" 
-                  size="icon"
-                  onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => setCurrentMonth(new Date())}
-                >
-                  Heute
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="icon"
-                  onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-            <CardDescription>
-              Klicke auf einen Tag um eine Pause einzutragen oder zu entfernen
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {/* Weekday headers */}
-            <div className="grid grid-cols-7 gap-1 mb-2">
-              {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map(day => (
-                <div key={day} className="text-center text-sm font-medium text-muted-foreground p-2">
-                  {day}
+      {/* Tabs for Calendar/Heatmap/Achievements */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList className="grid w-full max-w-md grid-cols-3">
+          <TabsTrigger value="calendar" className="gap-2">
+            <CalendarIcon className="h-4 w-4" />
+            Kalender
+          </TabsTrigger>
+          <TabsTrigger value="heatmap" className="gap-2">
+            <TrendingUp className="h-4 w-4" />
+            Jahresübersicht
+          </TabsTrigger>
+          <TabsTrigger value="achievements" className="gap-2">
+            <Trophy className="h-4 w-4" />
+            Achievements
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="calendar" className="space-y-4">
+          {/* Calendar */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+          >
+            <Card>
+              <CardHeader className="pb-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CalendarIcon className="h-5 w-5 text-primary" />
+                    <CardTitle>
+                      {format(currentMonth, 'MMMM yyyy', { locale: de })}
+                    </CardTitle>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="icon"
+                      onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setCurrentMonth(new Date())}
+                    >
+                      Heute
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="icon"
+                      onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
-              ))}
-            </div>
+                <CardDescription>
+                  Klicke auf einen Tag um eine Pause einzutragen oder zu entfernen
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {/* Weekday headers */}
+                <div className="grid grid-cols-7 gap-1 mb-2">
+                  {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map(day => (
+                    <div key={day} className="text-center text-sm font-medium text-muted-foreground p-2">
+                      {day}
+                    </div>
+                  ))}
+                </div>
 
-            {/* Calendar grid */}
-            <div className="grid grid-cols-7 gap-1">
-              {/* Padding for start of month */}
-              {[...Array(paddingDays)].map((_, i) => (
-                <div key={`pad-${i}`} className="aspect-square" />
-              ))}
+                {/* Calendar grid */}
+                <div className="grid grid-cols-7 gap-1">
+                  {/* Padding for start of month */}
+                  {[...Array(paddingDays)].map((_, i) => (
+                    <div key={`pad-${i}`} className="aspect-square" />
+                  ))}
 
-              {/* Days */}
-              {daysInMonth.map(day => {
-                const hasEntry = hasEntryForDate(day);
-                const isCurrentDay = isToday(day);
-                const isFutureDay = isFuture(day);
-                const entry = getEntryForDate(day);
+                  {/* Days */}
+                  {daysInMonth.map(day => {
+                    const hasEntry = hasEntryForDate(day);
+                    const isCurrentDay = isToday(day);
+                    const isFutureDay = isFuture(day);
+                    const entry = getEntryForDate(day);
 
-                return (
-                  <Popover key={day.toISOString()}>
-                    <PopoverTrigger asChild>
-                      <button
-                        onClick={() => handleDateClick(day)}
-                        disabled={isFutureDay}
-                        className={cn(
-                          "aspect-square rounded-lg flex flex-col items-center justify-center text-sm transition-all relative",
-                          "hover:bg-accent hover:text-accent-foreground",
-                          isFutureDay && "opacity-30 cursor-not-allowed",
-                          isCurrentDay && !hasEntry && "ring-2 ring-primary ring-offset-2 ring-offset-background",
-                          hasEntry && "bg-green-500 text-white hover:bg-green-600",
-                          !hasEntry && !isFutureDay && "bg-muted/50"
-                        )}
-                      >
-                        <span className="font-medium">{format(day, 'd')}</span>
-                        {hasEntry && (
-                          <Check className="h-3 w-3 mt-0.5" />
-                        )}
-                      </button>
-                    </PopoverTrigger>
-                    {!isFutureDay && (
-                      <PopoverContent className="w-64 p-3" align="center">
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium">
-                              {format(day, 'EEEE, d. MMMM', { locale: de })}
-                            </span>
-                            {hasEntry && (
-                              <Badge variant="secondary" className="bg-green-500/10 text-green-600">
-                                <Check className="h-3 w-3 mr-1" />
-                                Erledigt
-                              </Badge>
+                    return (
+                      <Popover key={day.toISOString()}>
+                        <PopoverTrigger asChild>
+                          <button
+                            disabled={isFutureDay}
+                            className={cn(
+                              "aspect-square rounded-lg flex flex-col items-center justify-center text-sm transition-all relative",
+                              "hover:bg-accent hover:text-accent-foreground",
+                              isFutureDay && "opacity-30 cursor-not-allowed",
+                              isCurrentDay && !hasEntry && "ring-2 ring-primary ring-offset-2 ring-offset-background",
+                              hasEntry && "bg-green-500 text-white hover:bg-green-600",
+                              !hasEntry && !isFutureDay && "bg-muted/50"
                             )}
-                          </div>
-                          
-                          {hasEntry ? (
-                            <>
-                              {entry?.notes && (
-                                <p className="text-sm text-muted-foreground bg-muted/50 p-2 rounded">
-                                  {entry.notes}
-                                </p>
+                          >
+                            <span className="font-medium">{format(day, 'd')}</span>
+                            {hasEntry && (
+                              <Check className="h-3 w-3 mt-0.5" />
+                            )}
+                          </button>
+                        </PopoverTrigger>
+                        {!isFutureDay && (
+                          <PopoverContent className="w-64 p-3" align="center">
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between">
+                                <span className="font-medium">
+                                  {format(day, 'EEEE, d. MMMM', { locale: de })}
+                                </span>
+                                {hasEntry && (
+                                  <Badge variant="secondary" className="bg-green-500/10 text-green-600">
+                                    <Check className="h-3 w-3 mr-1" />
+                                    Erledigt
+                                  </Badge>
+                                )}
+                              </div>
+                              
+                              {hasEntry ? (
+                                <>
+                                  {entry?.notes && (
+                                    <p className="text-sm text-muted-foreground bg-muted/50 p-2 rounded">
+                                      {entry.notes}
+                                    </p>
+                                  )}
+                                  <Button 
+                                    variant="destructive" 
+                                    size="sm" 
+                                    className="w-full"
+                                    onClick={() => {
+                                      if (entry) removeEntry(entry.id);
+                                    }}
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Eintrag löschen
+                                  </Button>
+                                </>
+                              ) : (
+                                <>
+                                  <Textarea
+                                    placeholder="Optionale Notiz..."
+                                    value={noteText}
+                                    onChange={(e) => setNoteText(e.target.value)}
+                                    className="text-sm min-h-[60px]"
+                                  />
+                                  <Button 
+                                    size="sm" 
+                                    className="w-full"
+                                    onClick={async () => {
+                                      await addEntry(day, noteText || undefined);
+                                      setNoteText('');
+                                    }}
+                                  >
+                                    <Coffee className="h-4 w-4 mr-2" />
+                                    Pause eintragen
+                                  </Button>
+                                </>
                               )}
-                              <Button 
-                                variant="destructive" 
-                                size="sm" 
-                                className="w-full"
-                                onClick={() => {
-                                  if (entry) removeEntry(entry.id);
-                                }}
-                              >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Eintrag löschen
-                              </Button>
-                            </>
-                          ) : (
-                            <>
-                              <Textarea
-                                placeholder="Optionale Notiz..."
-                                value={noteText}
-                                onChange={(e) => setNoteText(e.target.value)}
-                                className="text-sm min-h-[60px]"
-                              />
-                              <Button 
-                                size="sm" 
-                                className="w-full"
-                                onClick={async () => {
-                                  await addEntry(day, noteText || undefined);
-                                  setNoteText('');
-                                }}
-                              >
-                                <Coffee className="h-4 w-4 mr-2" />
-                                Pause eintragen
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      </PopoverContent>
-                    )}
-                  </Popover>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
+                            </div>
+                          </PopoverContent>
+                        )}
+                      </Popover>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
 
-      {/* Monthly Summary */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-      >
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Award className="h-5 w-5 text-primary" />
-              Monatsübersicht
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-              <div className="p-4 bg-muted/50 rounded-lg">
-                <p className="text-3xl font-bold text-primary">{stats.thisMonth}</p>
-                <p className="text-sm text-muted-foreground">Pausen diesen Monat</p>
-              </div>
-              <div className="p-4 bg-muted/50 rounded-lg">
-                <p className="text-3xl font-bold text-primary">{stats.totalBreaks}</p>
-                <p className="text-sm text-muted-foreground">Pausen insgesamt</p>
-              </div>
-              <div className="p-4 bg-muted/50 rounded-lg">
-                <p className="text-3xl font-bold text-primary">{stats.thisWeek}</p>
-                <p className="text-sm text-muted-foreground">Diese Woche</p>
-              </div>
-              <div className="p-4 bg-muted/50 rounded-lg">
-                <p className="text-3xl font-bold text-primary">
-                  {Math.round((stats.thisMonth / daysInMonth.filter(d => !isFuture(d)).length) * 100)}%
-                </p>
-                <p className="text-sm text-muted-foreground">Erfolgsrate Monat</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
+          {/* Monthly Summary */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+          >
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Award className="h-5 w-5 text-primary" />
+                  Monatsübersicht
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                  <div className="p-4 bg-muted/50 rounded-lg">
+                    <p className="text-3xl font-bold text-primary">{stats.thisMonth}</p>
+                    <p className="text-sm text-muted-foreground">Pausen diesen Monat</p>
+                  </div>
+                  <div className="p-4 bg-muted/50 rounded-lg">
+                    <p className="text-3xl font-bold text-primary">{stats.totalBreaks}</p>
+                    <p className="text-sm text-muted-foreground">Pausen insgesamt</p>
+                  </div>
+                  <div className="p-4 bg-muted/50 rounded-lg">
+                    <p className="text-3xl font-bold text-primary">{stats.thisWeek}</p>
+                    <p className="text-sm text-muted-foreground">Diese Woche</p>
+                  </div>
+                  <div className="p-4 bg-muted/50 rounded-lg">
+                    <p className="text-3xl font-bold text-primary">
+                      {Math.round((stats.thisMonth / daysInMonth.filter(d => !isFuture(d)).length) * 100)}%
+                    </p>
+                    <p className="text-sm text-muted-foreground">Erfolgsrate Monat</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        </TabsContent>
+
+        <TabsContent value="heatmap">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <YearHeatmap entries={entries} />
+          </motion.div>
+        </TabsContent>
+
+        <TabsContent value="achievements">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <Achievements stats={stats} />
+          </motion.div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
