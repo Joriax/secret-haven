@@ -99,11 +99,9 @@ export function ShareToAlbumDialog({
     setSelectedAlbum(album);
     setShowShareOptions(true);
 
-    const { data: users } = await supabase
-      .from('vault_users')
-      .select('id')
-      .neq('id', album.owner_id);
-    setAvailableUsers(users || []);
+    // Note: User enumeration is not supported - users must be added via user ID directly
+    // The vault_users table has RLS that prevents listing other users
+    setAvailableUsers([]);
 
     const access = await getAlbumAccess(album.id);
     setAlbumAccess(access);
