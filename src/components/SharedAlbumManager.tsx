@@ -127,11 +127,9 @@ export function SharedAlbumManager({
   };
 
   const loadAvailableUsers = async () => {
-    const { data } = await supabase
-      .from('vault_users')
-      .select('id, created_at')
-      .order('created_at', { ascending: false });
-    setAvailableUsers(data || []);
+    // Note: User enumeration is not supported - users must be added via user ID directly
+    // The vault_users table has RLS that prevents listing other users
+    setAvailableUsers([]);
   };
 
   const handleCreate = async () => {
