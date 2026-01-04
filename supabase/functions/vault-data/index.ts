@@ -1332,6 +1332,187 @@ serve(async (req) => {
       );
     }
 
+    // ========== ADMIN OPERATIONS ==========
+    // Check if user is admin for admin operations
+    const isUserAdmin = async (checkUserId: string): Promise<boolean> => {
+      const { data } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', checkUserId)
+        .eq('role', 'admin')
+        .single();
+      return !!data;
+    };
+
+    if (action === 'get-admin-stats') {
+      // Verify admin role
+      const isAdmin = await isUserAdmin(userId);
+      if (!isAdmin) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Keine Admin-Berechtigung' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+        );
+      }
+
+      // Fetch all users
+      const { data: usersData, error: usersError } = await supabase
+        .from('vault_users')
+        .select('id, created_at, recovery_key, admin_notes, last_login_at, login_count, last_login_ip')
+        .order('created_at', { ascending: false });
+
+      if (usersError) throw usersError;
+
+      // Fetch active sessions
+      const { data: sessionsData } = await supabase
+        .from('session_history')
+        .select('*')
+        .order('login_at', { ascending: false })
+        .limit(100);
+
+      // Fetch all roles
+      const { data: rolesData } = await supabase
+        .from('user_roles')
+        .select('user_id, role');
+
+      // Fetch counts
+      const [
+        { count: notesCount },
+        { count: photosCount },
+        { count: filesCount },
+        { count: linksCount },
+        { count: tiktokCount },
+        { count: secretCount },
+        { count: albumsCount },
+        { count: fileAlbumsCount },
+        { count: activeSessionsCount },
+        { count: securityLogsCount },
+      ] = await Promise.all([
+        supabase.from('notes').select('*', { count: 'exact', head: true }),
+        supabase.from('photos').select('*', { count: 'exact', head: true }),
+        supabase.from('files').select('*', { count: 'exact', head: true }),
+        supabase.from('links').select('*', { count: 'exact', head: true }),
+        supabase.from('tiktok_videos').select('*', { count: 'exact', head: true }),
+        supabase.from('secret_texts').select('*', { count: 'exact', head: true }),
+        supabase.from('albums').select('*', { count: 'exact', head: true }),
+        supabase.from('file_albums').select('*', { count: 'exact', head: true }),
+        supabase.from('vault_sessions').select('*', { count: 'exact', head: true }),
+        supabase.from('security_logs').select('*', { count: 'exact', head: true }),
+      ]);
+
+      // Get today's login stats
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const { count: todayLoginsCount } = await supabase
+        .from('security_logs')
+        .select('*', { count: 'exact', head: true })
+        .eq('event_type', 'login_success')
+        .gte('created_at', today.toISOString());
+
+      const { count: failedLoginsCount } = await supabase
+        .from('security_logs')
+        .select('*', { count: 'exact', head: true })
+        .eq('event_type', 'login_failed')
+        .gte('created_at', today.toISOString());
+
+      // Fetch per-user stats
+      const userStats: Record<string, any> = {};
+      if (usersData && usersData.length > 0) {
+        for (const user of usersData) {
+          const [
+            { count: userNotes },
+            { count: userPhotos },
+            { count: userFiles },
+            { count: userLinks },
+            { count: userTiktok },
+            { count: userSecret },
+          ] = await Promise.all([
+            supabase.from('notes').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
+            supabase.from('photos').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
+            supabase.from('files').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
+            supabase.from('links').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
+            supabase.from('tiktok_videos').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
+            supabase.from('secret_texts').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
+          ]);
+
+          userStats[user.id] = {
+            notes: userNotes || 0,
+            photos: userPhotos || 0,
+            files: userFiles || 0,
+            links: userLinks || 0,
+            tiktokVideos: userTiktok || 0,
+            secretTexts: userSecret || 0,
+          };
+        }
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          data: {
+            users: usersData || [],
+            sessions: sessionsData || [],
+            roles: rolesData || [],
+            userStats,
+            dataCounts: {
+              users: usersData?.length || 0,
+              notes: notesCount || 0,
+              photos: photosCount || 0,
+              files: filesCount || 0,
+              links: linksCount || 0,
+              tiktokVideos: tiktokCount || 0,
+              secretTexts: secretCount || 0,
+              albums: albumsCount || 0,
+              fileAlbums: fileAlbumsCount || 0,
+              activeSessions: activeSessionsCount || 0,
+              securityLogs: securityLogsCount || 0,
+            },
+            systemStatus: {
+              activeUsers: (sessionsData || []).filter((s: any) => s.is_active).length,
+              todayLogins: todayLoginsCount || 0,
+              failedLogins: failedLoginsCount || 0,
+            },
+          }
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'admin-export-data') {
+      // Verify admin role
+      const isAdmin = await isUserAdmin(userId);
+      if (!isAdmin) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Keine Admin-Berechtigung' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+        );
+      }
+
+      // Fetch all data for export
+      const [notes, photos, files, links, tiktoks] = await Promise.all([
+        supabase.from('notes').select('*'),
+        supabase.from('photos').select('*'),
+        supabase.from('files').select('*'),
+        supabase.from('links').select('*'),
+        supabase.from('tiktok_videos').select('*'),
+      ]);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          data: {
+            exportedAt: new Date().toISOString(),
+            notes: notes.data || [],
+            photos: photos.data || [],
+            files: files.data || [],
+            links: links.data || [],
+            tiktoks: tiktoks.data || [],
+          }
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     return new Response(
       JSON.stringify({ success: false, error: 'Ungültige Aktion' }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
