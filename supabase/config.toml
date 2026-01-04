@@ -14,3 +14,6 @@ verify_jwt = false
 
 [functions.fetch-link-metadata]
 verify_jwt = false
+
+[functions.verify-shared-album]
+verify_jwt = false

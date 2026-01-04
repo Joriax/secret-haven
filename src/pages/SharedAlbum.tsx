@@ -26,7 +26,6 @@ import {
   Film,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -41,9 +40,6 @@ interface SharedAlbumData {
   description: string | null;
   color: string;
   content_type: string;
-  owner_id: string;
-  public_link_enabled: boolean;
-  public_link_password: string | null;
 }
 
 interface AlbumItem {
@@ -68,15 +64,8 @@ const itemVariants = {
   visible: { opacity: 1, y: 0 },
 };
 
-// Helper to get photo URL from Supabase Storage
-const getPhotoUrl = (filename: string): string => {
-  const { data } = supabase.storage.from('photos').getPublicUrl(filename);
-  return data.publicUrl;
-};
-
 export default function SharedAlbum() {
   const { token } = useParams<{ token: string }>();
-  const { userId, isAuthenticated } = useAuth();
   const [album, setAlbum] = useState<SharedAlbumData | null>(null);
   const [items, setItems] = useState<AlbumItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -89,95 +78,91 @@ export default function SharedAlbum() {
   const [needsPassword, setNeedsPassword] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordError, setPasswordError] = useState(false);
-  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [rateLimitError, setRateLimitError] = useState<string | null>(null);
 
   useEffect(() => {
     if (token) {
-      fetchAlbum();
+      verifyAndFetchAlbum();
     }
   }, [token]);
 
-  const fetchAlbum = async (skipPasswordCheck = false) => {
-    try {
-      // Fetch album by public token
-      const { data: albumData, error: albumError } = await supabase
-        .from('shared_albums')
-        .select('*')
-        .eq('public_link_token', token)
-        .eq('public_link_enabled', true)
-        .single();
+  const verifyAndFetchAlbum = async (password?: string) => {
+    setIsLoading(true);
+    setError(null);
+    setPasswordError(false);
+    setRateLimitError(null);
 
-      if (albumError || !albumData) {
-        setError('Album nicht gefunden oder nicht öffentlich');
+    try {
+      // Use edge function for server-side verification
+      const { data: result, error: funcError } = await supabase.functions.invoke('verify-shared-album', {
+        body: { 
+          action: 'verify-password', 
+          token, 
+          password 
+        }
+      });
+
+      if (funcError) throw funcError;
+
+      if (!result.success) {
+        if (result.error === 'Incorrect password') {
+          setPasswordError(true);
+          setNeedsPassword(true);
+          setIsLoading(false);
+          return;
+        }
+        if (result.error?.includes('Too many attempts')) {
+          setRateLimitError(result.error);
+          setNeedsPassword(true);
+          setIsLoading(false);
+          return;
+        }
+        setError(result.error || 'Album nicht gefunden');
         setIsLoading(false);
         return;
       }
 
-      setAlbum(albumData as SharedAlbumData);
-      
-      // Check if password is required
-      if (albumData.public_link_password && !skipPasswordCheck && !isUnlocked) {
+      // Check if password is needed
+      if (result.needsPassword) {
         setNeedsPassword(true);
         setIsLoading(false);
         return;
       }
 
-      // Fetch album items
-      const { data: itemsData, error: itemsError } = await supabase
-        .from('shared_album_items')
-        .select('*')
-        .eq('shared_album_id', albumData.id)
-        .order('added_at', { ascending: false });
+      // Album verified, set album data
+      setAlbum(result.album);
+      setNeedsPassword(false);
 
-      if (itemsError) throw itemsError;
-
-      // Fetch actual item data based on type
-      const enrichedItems: AlbumItem[] = [];
-
-      for (const item of itemsData || []) {
-        if (item.photo_id) {
-          const { data } = await supabase.from('photos').select('*').eq('id', item.photo_id).single();
-          if (data) enrichedItems.push({ id: item.id, type: 'photo', data, added_at: item.added_at });
-        }
-        if (item.note_id) {
-          const { data } = await supabase.from('notes').select('id, title, content, created_at, updated_at').eq('id', item.note_id).single();
-          if (data) enrichedItems.push({ id: item.id, type: 'note', data, added_at: item.added_at });
-        }
-        if (item.file_id) {
-          const { data } = await supabase.from('files').select('*').eq('id', item.file_id).single();
-          if (data) enrichedItems.push({ id: item.id, type: 'file', data, added_at: item.added_at });
-        }
-        if (item.link_id) {
-          const { data } = await supabase.from('links').select('*').eq('id', item.link_id).single();
-          if (data) enrichedItems.push({ id: item.id, type: 'link', data, added_at: item.added_at });
-        }
-        if (item.tiktok_id) {
-          const { data } = await supabase.from('tiktok_videos').select('*').eq('id', item.tiktok_id).single();
-          if (data) enrichedItems.push({ id: item.id, type: 'tiktok', data, added_at: item.added_at });
-        }
-      }
-
-      setItems(enrichedItems);
+      // Fetch album content
+      await fetchAlbumContent();
     } catch (err) {
-      console.error('Error fetching shared album:', err);
+      console.error('Error verifying album:', err);
       setError('Fehler beim Laden des Albums');
+      setIsLoading(false);
+    }
+  };
+
+  const fetchAlbumContent = async () => {
+    try {
+      const { data: result, error: funcError } = await supabase.functions.invoke('verify-shared-album', {
+        body: { action: 'get-album-content', token }
+      });
+
+      if (funcError) throw funcError;
+
+      if (result.success) {
+        setItems(result.items || []);
+      }
+    } catch (err) {
+      console.error('Error fetching album content:', err);
     } finally {
       setIsLoading(false);
     }
   };
 
   const handlePasswordSubmit = () => {
-    if (!album) return;
-    
-    if (passwordInput === album.public_link_password) {
-      setIsUnlocked(true);
-      setNeedsPassword(false);
-      setPasswordError(false);
-      setIsLoading(true);
-      fetchAlbum(true);
-    } else {
-      setPasswordError(true);
-    }
+    if (!passwordInput.trim()) return;
+    verifyAndFetchAlbum(passwordInput);
   };
 
   const getTypeIcon = (type: string) => {
@@ -331,6 +316,9 @@ export default function SharedAlbum() {
               {passwordError && (
                 <p className="text-destructive text-sm mt-2">Falsches Passwort</p>
               )}
+              {rateLimitError && (
+                <p className="text-destructive text-sm mt-2">{rateLimitError}</p>
+              )}
             </div>
             <Button onClick={handlePasswordSubmit} className="w-full" size="lg">
               Album öffnen
@@ -475,9 +463,9 @@ export default function SharedAlbum() {
                     className="aspect-square bg-muted cursor-pointer relative overflow-hidden"
                     onClick={() => setLightboxIndex(photoItems.findIndex(p => p.id === item.id))}
                   >
-                    {item.data.filename ? (
+                    {(item.data.url || item.data.filename) ? (
                       <img 
-                        src={getPhotoUrl(item.data.filename)} 
+                        src={item.data.url || ''} 
                         alt={item.data.caption || 'Foto'} 
                         className="w-full h-full object-cover"
                         loading="lazy"
@@ -651,7 +639,7 @@ export default function SharedAlbum() {
                 {item.type === 'photo' && item.data.filename ? (
                   <div className="w-12 h-12 rounded-xl flex-shrink-0 overflow-hidden bg-muted">
                     <img 
-                      src={getPhotoUrl(item.data.filename)} 
+                      src={item.data.url || ''} 
                       alt={item.data.caption || 'Foto'} 
                       className="w-full h-full object-cover"
                       loading="lazy"
@@ -743,9 +731,9 @@ export default function SharedAlbum() {
             )}
 
             <div className="max-w-4xl max-h-[80vh] p-4" onClick={(e) => e.stopPropagation()}>
-              {photoItems[lightboxIndex].data.filename ? (
+              {photoItems[lightboxIndex].data.url ? (
                 <img 
-                  src={getPhotoUrl(photoItems[lightboxIndex].data.filename)} 
+                  src={photoItems[lightboxIndex].data.url} 
                   alt={photoItems[lightboxIndex].data.caption || 'Foto'} 
                   className="max-w-full max-h-[70vh] object-contain rounded-xl mx-auto"
                 />

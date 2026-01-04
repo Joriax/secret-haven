@@ -209,12 +209,20 @@ export default function SharedAlbums() {
       toast.success('Link erstellt und kopiert!');
       setTimeout(() => setCopiedLink(false), 2000);
       
-      // Update password if set
+      // Update password if set using edge function
       if (password.trim()) {
-        await supabase
-          .from('shared_albums')
-          .update({ public_link_password: password.trim() })
-          .eq('id', sharingAlbum.id);
+        if (password.trim().length < 4) {
+          toast.error('Passwort muss mindestens 4 Zeichen haben');
+          return;
+        }
+        await supabase.functions.invoke('verify-shared-album', {
+          body: { 
+            action: 'set-password', 
+            sessionToken: sessionStorage.getItem('vault_session_token'),
+            albumId: sharingAlbum.id,
+            newPassword: password.trim()
+          }
+        });
       }
     }
   };
@@ -251,13 +259,32 @@ export default function SharedAlbums() {
 
   const handleSavePassword = async () => {
     if (!sharingAlbum) return;
-    const { error } = await supabase
-      .from('shared_albums')
-      .update({ public_link_password: password.trim() || null })
-      .eq('id', sharingAlbum.id);
     
-    if (!error) {
+    // Validate password length if provided
+    if (password.trim() && password.trim().length < 4) {
+      toast.error('Passwort muss mindestens 4 Zeichen haben');
+      return;
+    }
+
+    try {
+      // Use edge function for server-side password hashing
+      const { data, error } = await supabase.functions.invoke('verify-shared-album', {
+        body: { 
+          action: 'set-password', 
+          sessionToken: sessionStorage.getItem('vault_session_token'),
+          albumId: sharingAlbum.id,
+          newPassword: password.trim() || null
+        }
+      });
+
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error);
+      
       toast.success(password.trim() ? 'Passwort gesetzt' : 'Passwort entfernt');
+      setPassword('');
+    } catch (err) {
+      console.error('Error setting password:', err);
+      toast.error('Fehler beim Setzen des Passworts');
     }
   };
 

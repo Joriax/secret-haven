@@ -6,6 +6,51 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Input validation constants
+const MAX_TITLE_LENGTH = 200;
+const MAX_CONTENT_LENGTH = 1024 * 1024; // 1MB
+const MAX_URL_LENGTH = 2000;
+const MAX_FILENAME_LENGTH = 255;
+
+// Input validation helpers
+function validateTitle(title: string | undefined): string {
+  if (!title || typeof title !== 'string') return 'Neue Notiz';
+  const trimmed = title.trim().substring(0, MAX_TITLE_LENGTH);
+  return trimmed || 'Neue Notiz';
+}
+
+function validateContent(content: string | undefined | null): string | null {
+  if (!content || typeof content !== 'string') return null;
+  return content.substring(0, MAX_CONTENT_LENGTH);
+}
+
+function validateUrl(url: string | undefined): string | null {
+  if (!url || typeof url !== 'string') return null;
+  const trimmed = url.trim().substring(0, MAX_URL_LENGTH);
+  // Basic URL validation
+  try {
+    new URL(trimmed);
+    return trimmed;
+  } catch {
+    return null;
+  }
+}
+
+function validateFolderName(name: string | undefined): string | null {
+  if (!name || typeof name !== 'string') return null;
+  const trimmed = name.trim().substring(0, MAX_TITLE_LENGTH);
+  return trimmed || null;
+}
+
+function validateFilename(filename: string | undefined): string | null {
+  if (!filename || typeof filename !== 'string') return null;
+  // Remove potentially dangerous characters
+  const sanitized = filename.trim()
+    .substring(0, MAX_FILENAME_LENGTH)
+    .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_');
+  return sanitized || null;
+}
+
 // Validate session token
 async function validateSession(supabase: any, sessionToken: string): Promise<{ userId: string; isDecoy: boolean } | null> {
   if (!sessionToken) return null;
@@ -91,16 +136,20 @@ serve(async (req) => {
     if (action === 'create-note') {
       const { title, content, folder_id, is_secure, secure_content, tags } = requestData || {};
       
+      // Validate inputs
+      const validatedTitle = validateTitle(title);
+      const validatedContent = validateContent(content);
+      
       const { data, error } = await supabase
         .from('notes')
         .insert({
           user_id: userId,
-          title: title || 'Neue Notiz',
-          content,
+          title: validatedTitle,
+          content: validatedContent,
           folder_id,
           is_secure,
-          secure_content,
-          tags
+          secure_content: is_secure ? validateContent(secure_content) : null,
+          tags: Array.isArray(tags) ? tags.slice(0, 20) : []
         })
         .select()
         .single();
@@ -116,9 +165,19 @@ serve(async (req) => {
     if (action === 'update-note') {
       const { id, updates } = requestData || {};
       
+      // Validate updates
+      const validatedUpdates: any = { updated_at: new Date().toISOString() };
+      if (updates?.title !== undefined) validatedUpdates.title = validateTitle(updates.title);
+      if (updates?.content !== undefined) validatedUpdates.content = validateContent(updates.content);
+      if (updates?.folder_id !== undefined) validatedUpdates.folder_id = updates.folder_id;
+      if (updates?.is_favorite !== undefined) validatedUpdates.is_favorite = Boolean(updates.is_favorite);
+      if (updates?.is_secure !== undefined) validatedUpdates.is_secure = Boolean(updates.is_secure);
+      if (updates?.secure_content !== undefined) validatedUpdates.secure_content = validateContent(updates.secure_content);
+      if (updates?.tags !== undefined) validatedUpdates.tags = Array.isArray(updates.tags) ? updates.tags.slice(0, 20) : [];
+      
       const { data, error } = await supabase
         .from('notes')
-        .update({ ...updates, updated_at: new Date().toISOString() })
+        .update(validatedUpdates)
         .eq('id', id)
         .eq('user_id', userId)
         .select()
