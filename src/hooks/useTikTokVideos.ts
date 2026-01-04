@@ -76,9 +76,11 @@ export function useTikTokVideos() {
   }, [fetchVideos]);
 
   const fetchMetadata = async (url: string) => {
+    if (!sessionToken) return null;
+    
     try {
       const { data, error } = await supabase.functions.invoke('fetch-tiktok-metadata', {
-        body: { url },
+        body: { url, sessionToken },
       });
       
       if (error) {

@@ -31,6 +31,7 @@ import {
 import { useLinks, Link } from '@/hooks/useLinks';
 import { useLinkFolders, LinkFolder } from '@/hooks/useLinkFolders';
 import { useViewHistory } from '@/hooks/useViewHistory';
+import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import {
   Link2,
@@ -77,6 +78,7 @@ export default function Links() {
   const { links, isLoading, createLink, updateLink, deleteLink, toggleFavorite, moveToFolder } = useLinks();
   const { folders, createFolder, updateFolder, deleteFolder } = useLinkFolders();
   const { recordView } = useViewHistory();
+  const { sessionToken } = useAuth();
 
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -115,12 +117,12 @@ export default function Links() {
 
   // Fetch metadata when URL changes
   const fetchMetadata = async (url: string) => {
-    if (!url.trim()) return;
+    if (!url.trim() || !sessionToken) return;
     
     setIsFetchingMeta(true);
     try {
       const { data, error } = await supabase.functions.invoke('fetch-link-metadata', {
-        body: { url },
+        body: { url, sessionToken },
       });
 
       if (error) throw error;
