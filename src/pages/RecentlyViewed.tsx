@@ -9,7 +9,6 @@ import {
   Lock,
   Clock
 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useViewHistory } from '@/hooks/useViewHistory';
@@ -26,7 +25,7 @@ interface ViewedItem {
 export default function RecentlyViewed() {
   const [items, setItems] = useState<ViewedItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const { userId, isDecoyMode } = useAuth();
+  const { userId, isDecoyMode, supabaseClient: supabase } = useAuth();
   const { history } = useViewHistory();
   const navigate = useNavigate();
 

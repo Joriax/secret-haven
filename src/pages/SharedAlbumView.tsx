@@ -25,7 +25,6 @@ import {
   SkipForward,
   SkipBack,
 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -76,7 +75,7 @@ const itemVariants = {
 export default function SharedAlbumView() {
   const { albumId } = useParams<{ albumId: string }>();
   const navigate = useNavigate();
-  const { userId, isAuthenticated, isAuthLoading } = useAuth();
+  const { userId, isAuthenticated, isAuthLoading, supabaseClient: supabase } = useAuth();
   
   const [album, setAlbum] = useState<SharedAlbumData | null>(null);
   const [items, setItems] = useState<AlbumItem[]>([]);

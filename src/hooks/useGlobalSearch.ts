@@ -1,5 +1,4 @@
 import { useState, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
 export interface SearchResult {
@@ -13,7 +12,7 @@ export interface SearchResult {
 export const useGlobalSearch = () => {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
-  const { userId, isDecoyMode } = useAuth();
+  const { userId, isDecoyMode, supabaseClient: supabase } = useAuth();
 
   const search = useCallback(async (query: string) => {
     if (!userId || !query.trim() || isDecoyMode) {

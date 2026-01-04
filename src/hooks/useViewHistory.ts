@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
 export interface ViewHistoryItem {
@@ -12,7 +11,7 @@ export interface ViewHistoryItem {
 export const useViewHistory = () => {
   const [history, setHistory] = useState<ViewHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const { userId, isDecoyMode } = useAuth();
+  const { userId, isDecoyMode, supabaseClient: supabase } = useAuth();
 
   const fetchHistory = useCallback(async () => {
     if (!userId || isDecoyMode) {

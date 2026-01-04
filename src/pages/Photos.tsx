@@ -43,7 +43,6 @@ import {
   Palette,
   Share2,
 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTags } from '@/hooks/useTags';
 import { useViewHistory } from '@/hooks/useViewHistory';
@@ -134,7 +133,7 @@ export default function Photos() {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const touchStartX = useRef<number | null>(null);
-  const { userId, isDecoyMode } = useAuth();
+  const { userId, isDecoyMode, supabaseClient: supabase } = useAuth();
   const location = useLocation();
   const { tags } = useTags();
   const { logEvent } = useSecurityLogs();

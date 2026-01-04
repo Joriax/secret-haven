@@ -39,7 +39,6 @@ import {
   Layers,
   Package
 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTags } from '@/hooks/useTags';
 import { useViewHistory } from '@/hooks/useViewHistory';
@@ -132,7 +131,7 @@ export default function Files() {
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const touchStartX = useRef<number | null>(null);
-  const { userId, isDecoyMode } = useAuth();
+  const { userId, isDecoyMode, supabaseClient: supabase } = useAuth();
   const location = useLocation();
   const { tags } = useTags();
   const { recordView } = useViewHistory();
