@@ -1,8 +1,52 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+// Blocked hosts to prevent SSRF attacks
+const isBlockedHost = (hostname: string): boolean => {
+  const blockedPatterns = [
+    'localhost',
+    '127.0.0.1',
+    '0.0.0.0',
+    '169.254.169.254', // AWS metadata
+    'metadata.google.internal', // GCP metadata
+  ];
+
+  // Check exact matches
+  if (blockedPatterns.includes(hostname.toLowerCase())) {
+    return true;
+  }
+
+  // Check private IP ranges
+  const privateIpPatterns = [
+    /^10\./,
+    /^172\.(1[6-9]|2[0-9]|3[01])\./,
+    /^192\.168\./,
+    /^169\.254\./,
+    /^fc00:/i, // IPv6 private
+    /^fe80:/i, // IPv6 link-local
+  ];
+
+  return privateIpPatterns.some(pattern => pattern.test(hostname));
+};
+
+// Validate session token
+const validateSession = async (supabaseUrl: string, supabaseServiceKey: string, sessionToken: string): Promise<boolean> => {
+  if (!sessionToken) return false;
+  
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  const { data, error } = await supabase
+    .from('vault_sessions')
+    .select('user_id')
+    .eq('session_token', sessionToken)
+    .gt('expires_at', new Date().toISOString())
+    .single();
+  
+  return !error && data !== null;
 };
 
 serve(async (req) => {
@@ -11,7 +55,7 @@ serve(async (req) => {
   }
 
   try {
-    const { url } = await req.json();
+    const { url, sessionToken } = await req.json();
 
     if (!url) {
       return new Response(
@@ -20,10 +64,50 @@ serve(async (req) => {
       );
     }
 
+    // Validate session (require authentication)
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+    const isValidSession = await validateSession(supabaseUrl, supabaseServiceKey, sessionToken);
+    if (!isValidSession) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized - valid session required' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Ensure URL has protocol
     let formattedUrl = url.trim();
     if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
       formattedUrl = `https://${formattedUrl}`;
+    }
+
+    // Parse and validate URL
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(formattedUrl);
+    } catch {
+      return new Response(
+        JSON.stringify({ error: 'Invalid URL format' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Block internal/private hosts (SSRF protection)
+    if (isBlockedHost(parsedUrl.hostname)) {
+      console.log('Blocked SSRF attempt to:', parsedUrl.hostname);
+      return new Response(
+        JSON.stringify({ error: 'Invalid or blocked hostname' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Only allow http/https protocols
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+      return new Response(
+        JSON.stringify({ error: 'Only HTTP/HTTPS protocols allowed' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     console.log('Fetching metadata for:', formattedUrl);
@@ -83,35 +167,34 @@ serve(async (req) => {
     let image = getMetaContent('image');
     if (image && !image.startsWith('http')) {
       // Make relative URLs absolute
-      const urlObj = new URL(formattedUrl);
       image = image.startsWith('/') 
-        ? `${urlObj.origin}${image}`
-        : `${urlObj.origin}/${image}`;
+        ? `${parsedUrl.origin}${image}`
+        : `${parsedUrl.origin}/${image}`;
     }
 
     // Get favicon
-    const urlObj = new URL(formattedUrl);
-    const faviconUrl = `https://www.google.com/s2/favicons?domain=${urlObj.hostname}&sz=64`;
+    const faviconUrl = `https://www.google.com/s2/favicons?domain=${parsedUrl.hostname}&sz=64`;
 
     const metadata = {
-      title: title || urlObj.hostname,
+      title: title || parsedUrl.hostname,
       description: description || null,
       image: image || null,
       favicon: faviconUrl,
       url: formattedUrl,
     };
 
-    console.log('Metadata extracted:', metadata);
+    console.log('Metadata extracted successfully');
 
     return new Response(
       JSON.stringify(metadata),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error fetching metadata:', error);
     
-    // Return basic data on error
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const isAbortError = error instanceof Error && error.name === 'AbortError';
+    const errorMessage = isAbortError ? 'Request timeout' : 'Failed to fetch metadata';
+    
     return new Response(
       JSON.stringify({ 
         title: null, 
