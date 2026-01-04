@@ -140,129 +140,45 @@ export default function Admin() {
     try {
       setIsLoading(true);
 
-      // Fetch all users with extended info
-      const { data: usersData, error: usersError } = await supabase
-        .from('vault_users')
-        .select('id, created_at, recovery_key, admin_notes, last_login_at, login_count, last_login_ip')
-        .order('created_at', { ascending: false });
-
-      if (usersError) throw usersError;
-      setUsers(usersData as VaultUser[] || []);
-
-      // Fetch active sessions
-      const { data: sessionsData } = await supabase
-        .from('session_history')
-        .select('*')
-        .order('login_at', { ascending: false })
-        .limit(100);
-      
-      setSessions(sessionsData || []);
-
-      // Fetch counts
-      const [
-        { count: notesCount },
-        { count: photosCount },
-        { count: filesCount },
-        { count: linksCount },
-        { count: tiktokCount },
-        { count: secretCount },
-        { count: albumsCount },
-        { count: fileAlbumsCount },
-        { count: activeSessionsCount },
-        { count: securityLogsCount },
-      ] = await Promise.all([
-        supabase.from('notes').select('*', { count: 'exact', head: true }),
-        supabase.from('photos').select('*', { count: 'exact', head: true }),
-        supabase.from('files').select('*', { count: 'exact', head: true }),
-        supabase.from('links').select('*', { count: 'exact', head: true }),
-        supabase.from('tiktok_videos').select('*', { count: 'exact', head: true }),
-        supabase.from('secret_texts').select('*', { count: 'exact', head: true }),
-        supabase.from('albums').select('*', { count: 'exact', head: true }),
-        supabase.from('file_albums').select('*', { count: 'exact', head: true }),
-        supabase.from('vault_sessions').select('*', { count: 'exact', head: true }),
-        supabase.from('security_logs').select('*', { count: 'exact', head: true }),
-      ]);
-
-      setDataCounts({
-        users: usersData?.length || 0,
-        notes: notesCount || 0,
-        photos: photosCount || 0,
-        files: filesCount || 0,
-        links: linksCount || 0,
-        tiktokVideos: tiktokCount || 0,
-        secretTexts: secretCount || 0,
-        albums: albumsCount || 0,
-        fileAlbums: fileAlbumsCount || 0,
-        activeSessions: activeSessionsCount || 0,
-        securityLogs: securityLogsCount || 0,
+      // Use edge function for all admin data - validates admin role server-side
+      const { data: response, error } = await supabase.functions.invoke('vault-data', {
+        body: { action: 'get-admin-stats', sessionToken }
       });
 
-      // Calculate system status
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      const { count: todayLoginsCount } = await supabase
-        .from('security_logs')
-        .select('*', { count: 'exact', head: true })
-        .eq('event_type', 'login_success')
-        .gte('created_at', today.toISOString());
+      if (error) throw error;
+      if (!response?.success) throw new Error(response?.error || 'Fehler beim Laden');
 
-      const { count: failedLoginsCount } = await supabase
-        .from('security_logs')
-        .select('*', { count: 'exact', head: true })
-        .eq('event_type', 'login_failed')
-        .gte('created_at', today.toISOString());
+      const { users, sessions, roles: fetchedRoles, userStats: stats, dataCounts: counts, systemStatus: status } = response.data;
 
+      setUsers(users || []);
+      setSessions(sessions || []);
+      setUserStats(stats || {});
+      setDataCounts(counts || {
+        users: 0, notes: 0, photos: 0, files: 0, links: 0,
+        tiktokVideos: 0, secretTexts: 0, albums: 0, fileAlbums: 0,
+        activeSessions: 0, securityLogs: 0,
+      });
       setSystemStatus({
-        databaseSize: `${((notesCount || 0) + (photosCount || 0) + (filesCount || 0) + (linksCount || 0) + (tiktokCount || 0)) * 0.5} KB`,
+        databaseSize: `${((counts?.notes || 0) + (counts?.photos || 0) + (counts?.files || 0) + (counts?.links || 0) + (counts?.tiktokVideos || 0)) * 0.5} KB`,
         storageUsed: 'Berechnung...',
-        activeUsers: (sessionsData || []).filter(s => s.is_active).length,
-        todayLogins: todayLoginsCount || 0,
-        failedLogins: failedLoginsCount || 0,
+        activeUsers: status?.activeUsers || 0,
+        todayLogins: status?.todayLogins || 0,
+        failedLogins: status?.failedLogins || 0,
         lastBackup: null,
       });
 
-      // Fetch per-user stats
-      if (usersData && usersData.length > 0) {
-        const statsPromises = usersData.map(async (user) => {
-          const [
-            { count: userNotes },
-            { count: userPhotos },
-            { count: userFiles },
-            { count: userLinks },
-            { count: userTiktok },
-            { count: userSecret },
-          ] = await Promise.all([
-            supabase.from('notes').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
-            supabase.from('photos').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
-            supabase.from('files').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
-            supabase.from('links').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
-            supabase.from('tiktok_videos').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
-            supabase.from('secret_texts').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
-          ]);
-
-          return {
-            id: user.id,
-            stats: {
-              notes: userNotes || 0, photos: userPhotos || 0, files: userFiles || 0,
-              links: userLinks || 0, tiktokVideos: userTiktok || 0, secretTexts: userSecret || 0,
-            }
-          };
-        });
-
-        const allStats = await Promise.all(statsPromises);
-        const statsMap: Record<string, UserStats> = {};
-        allStats.forEach(({ id, stats }) => { statsMap[id] = stats; });
-        setUserStats(statsMap);
+      // Update roles in the context by fetching them
+      if (fetchedRoles) {
+        await fetchRoles();
       }
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching admin data:', error);
-      toast.error('Fehler beim Laden der Daten');
+      toast.error(error?.message || 'Fehler beim Laden der Daten');
     } finally {
       setIsLoading(false);
     }
-  }, [userId, sessionToken]);
+  }, [userId, sessionToken, fetchRoles]);
 
   useEffect(() => {
     if (isAdmin) { fetchData(); }
@@ -411,23 +327,15 @@ export default function Admin() {
   const handleExportData = async () => {
     setIsExporting(true);
     try {
-      // Fetch all data for export
-      const [notes, photos, files, links, tiktoks] = await Promise.all([
-        supabase.from('notes').select('*'),
-        supabase.from('photos').select('*'),
-        supabase.from('files').select('*'),
-        supabase.from('links').select('*'),
-        supabase.from('tiktok_videos').select('*'),
-      ]);
+      // Use edge function for export - validates admin role server-side
+      const { data: response, error } = await supabase.functions.invoke('vault-data', {
+        body: { action: 'admin-export-data', sessionToken }
+      });
 
-      const exportData = {
-        exportedAt: new Date().toISOString(),
-        notes: notes.data || [],
-        photos: photos.data || [],
-        files: files.data || [],
-        links: links.data || [],
-        tiktoks: tiktoks.data || [],
-      };
+      if (error) throw error;
+      if (!response?.success) throw new Error(response?.error || 'Fehler beim Export');
+
+      const exportData = response.data;
 
       const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -439,7 +347,7 @@ export default function Admin() {
 
       toast.success('Backup erstellt und heruntergeladen');
     } catch (error: any) {
-      toast.error('Fehler beim Erstellen des Backups');
+      toast.error(error?.message || 'Fehler beim Erstellen des Backups');
     } finally {
       setIsExporting(false);
     }
