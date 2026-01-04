@@ -36,7 +36,6 @@ import {
   Share2
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTags, Tag as TagType } from '@/hooks/useTags';
 import { useNoteFolders } from '@/hooks/useNoteFolders';
@@ -113,7 +112,7 @@ export default function Notes() {
   const [autoSaveTimeout, setAutoSaveTimeout] = useState<NodeJS.Timeout | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const { userId, isDecoyMode } = useAuth();
+  const { userId, isDecoyMode, supabaseClient: supabase } = useAuth();
   const { tags, createTag } = useTags();
   const { folders, createFolder, updateFolder, deleteFolder } = useNoteFolders();
   const { recordView } = useViewHistory();

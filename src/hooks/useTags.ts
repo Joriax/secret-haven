@@ -1,5 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 
 export interface Tag {
@@ -12,7 +11,8 @@ export interface Tag {
 export const useTags = () => {
   const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
-  const { userId } = useAuth();
+  const { userId, supabaseClient: supabase } = useAuth();
+  const channelRef = useRef<any>(null);
 
   const fetchTags = useCallback(async () => {
     if (!userId) return;
@@ -41,15 +41,25 @@ export const useTags = () => {
   useEffect(() => {
     if (!userId) return;
 
+    // Cleanup previous channel if exists
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+    }
+
     const channel = supabase
       .channel('tags-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tags' }, fetchTags)
       .subscribe();
 
+    channelRef.current = channel;
+
     return () => {
-      supabase.removeChannel(channel);
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
     };
-  }, [userId, fetchTags]);
+  }, [userId, fetchTags, supabase]);
 
   const createTag = async (name: string, color: string = '#6366f1') => {
     if (!userId) return null;

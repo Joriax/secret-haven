@@ -13,7 +13,6 @@ import {
   Play
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
 import { MultiSelectBar } from '@/components/MultiSelect';
@@ -37,7 +36,7 @@ export default function Trash() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<TrashItem | null>(null);
   const [emptyTrashDialogOpen, setEmptyTrashDialogOpen] = useState(false);
-  const { userId, isDecoyMode } = useAuth();
+  const { userId, isDecoyMode, supabaseClient: supabase } = useAuth();
 
   // Auto-cleanup expired items (client-side backup for cron job)
   const cleanupExpiredItems = useCallback(async () => {

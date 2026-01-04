@@ -8,7 +8,6 @@ import {
   Loader2,
   Heart
 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -25,7 +24,7 @@ export default function Favorites() {
   const [items, setItems] = useState<FavoriteItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'note' | 'photo' | 'file'>('all');
-  const { userId, isDecoyMode } = useAuth();
+  const { userId, isDecoyMode, supabaseClient: supabase } = useAuth();
   const navigate = useNavigate();
 
   const fetchFavorites = useCallback(async () => {

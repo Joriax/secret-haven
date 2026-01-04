@@ -1,5 +1,4 @@
 import { useState, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
@@ -19,7 +18,7 @@ export function useNoteAttachments(noteId: string | null) {
   const [attachments, setAttachments] = useState<NoteAttachment[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const { userId } = useAuth();
+  const { userId, supabaseClient: supabase } = useAuth();
 
   const fetchAttachments = useCallback(async () => {
     if (!noteId || !userId) {

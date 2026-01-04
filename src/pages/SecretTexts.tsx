@@ -13,7 +13,6 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
 import { encryptText, decryptText } from '@/lib/encryption';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -41,7 +40,7 @@ export default function SecretTexts() {
   const [searchQuery, setSearchQuery] = useState('');
   const [editTitle, setEditTitle] = useState('');
   const [editContent, setEditContent] = useState('');
-  const { userId, isDecoyMode } = useAuth();
+  const { userId, isDecoyMode, supabaseClient: supabase } = useAuth();
   const { logEvent } = useSecurityLogs();
   const { recordView } = useViewHistory();
 

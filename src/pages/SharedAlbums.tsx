@@ -26,7 +26,6 @@ import {
   PinOff,
 } from 'lucide-react';
 import { useSharedAlbums, SharedAlbum } from '@/hooks/useSharedAlbums';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -87,7 +86,7 @@ export default function SharedAlbums() {
     togglePin,
   } = useSharedAlbums();
 
-  const { userId } = useAuth();
+  const { userId, supabaseClient: supabase } = useAuth();
 
   // Dialog states
   const [isCreateOpen, setIsCreateOpen] = useState(false);

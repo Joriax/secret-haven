@@ -11,7 +11,6 @@ import {
   X,
   Search,
 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -42,11 +41,6 @@ interface ContentItem {
   thumbnail?: string;
 }
 
-const getPhotoSignedUrl = async (filename: string): Promise<string> => {
-  const { data } = await supabase.storage.from('photos').createSignedUrl(filename, 3600);
-  return data?.signedUrl || '';
-};
-
 export function AddContentToAlbumDialog({
   open,
   onOpenChange,
@@ -54,7 +48,7 @@ export function AddContentToAlbumDialog({
   existingItemIds,
   onItemsAdded,
 }: AddContentToAlbumDialogProps) {
-  const { userId } = useAuth();
+  const { userId, supabaseClient: supabase } = useAuth();
   const [activeTab, setActiveTab] = useState('photos');
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -67,6 +61,11 @@ export function AddContentToAlbumDialog({
   const [tiktoks, setTiktoks] = useState<ContentItem[]>([]);
   
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+
+  const getPhotoSignedUrl = async (filename: string): Promise<string> => {
+    const { data } = await supabase.storage.from('photos').createSignedUrl(filename, 3600);
+    return data?.signedUrl || '';
+  };
 
   useEffect(() => {
     if (open && userId) {

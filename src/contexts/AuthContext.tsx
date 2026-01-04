@@ -1,5 +1,10 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import type { Database } from '@/integrations/supabase/types';
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://zbniouzrkbkyvkpnpwxa.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpibmlvdXpya2JreXZrcG5wd3hhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYzMTcyMzYsImV4cCI6MjA4MTg5MzIzNn0.gTU98s049QxA0ZCco4rJYFJG5B00LaRPJbFY_6j1es8";
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -7,6 +12,7 @@ interface AuthContextType {
   userId: string | null;
   isDecoyMode: boolean;
   sessionToken: string | null;
+  supabaseClient: SupabaseClient<Database>;
   login: (userId: string, isDecoy: boolean, sessionToken: string) => void;
   logout: () => void;
   extendSession: () => void;
@@ -162,6 +168,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setSessionExpiresAt(null);
   }, [sessionToken, userId]);
 
+  // Create an authenticated Supabase client with session token in headers
+  const supabaseClient = useMemo(() => {
+    return createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+      global: {
+        headers: sessionToken ? { 'x-session-token': sessionToken } : {}
+      },
+      auth: {
+        storage: localStorage,
+        persistSession: true,
+        autoRefreshToken: true,
+      }
+    });
+  }, [sessionToken]);
+
   return (
     <AuthContext.Provider value={{ 
       isAuthenticated, 
@@ -169,6 +189,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       userId, 
       isDecoyMode, 
       sessionToken,
+      supabaseClient,
       login, 
       logout, 
       extendSession, 

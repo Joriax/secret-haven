@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Share2, Plus, Loader2, Globe, Users, Copy, Check } from 'lucide-react';
 import { useSharedAlbums, ContentType, SharedAlbum } from '@/hooks/useSharedAlbums';
-import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
@@ -32,6 +32,7 @@ export function ShareToAlbumDialog({
   itemType,
   contentType,
 }: ShareToAlbumDialogProps) {
+  const { supabaseClient: supabase } = useAuth();
   const {
     albums,
     isLoading,

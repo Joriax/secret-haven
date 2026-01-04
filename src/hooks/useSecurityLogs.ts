@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
 export interface SecurityLog {
@@ -14,7 +13,7 @@ export interface SecurityLog {
 export const useSecurityLogs = () => {
   const [logs, setLogs] = useState<SecurityLog[]>([]);
   const [loading, setLoading] = useState(true);
-  const { userId } = useAuth();
+  const { userId, supabaseClient: supabase } = useAuth();
 
   const fetchLogs = useCallback(async () => {
     if (!userId) return;

@@ -32,7 +32,6 @@ import { useLinks, Link } from '@/hooks/useLinks';
 import { useLinkFolders, LinkFolder } from '@/hooks/useLinkFolders';
 import { useViewHistory } from '@/hooks/useViewHistory';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
 import {
   Link2,
   Plus,
@@ -78,7 +77,7 @@ export default function Links() {
   const { links, isLoading, createLink, updateLink, deleteLink, toggleFavorite, moveToFolder } = useLinks();
   const { folders, createFolder, updateFolder, deleteFolder } = useLinkFolders();
   const { recordView } = useViewHistory();
-  const { sessionToken } = useAuth();
+  const { sessionToken, supabaseClient: supabase } = useAuth();
 
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
