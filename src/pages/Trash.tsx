@@ -10,13 +10,16 @@ import {
   AlertTriangle,
   Video,
   CheckCircle2,
-  Play
+  Play,
+  Settings
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
 import { MultiSelectBar } from '@/components/MultiSelect';
+import { useTrashSettings } from '@/hooks/useTrashSettings';
 import { toast } from 'sonner';
+import { Slider } from '@/components/ui/slider';
 
 interface TrashItem {
   id: string;
@@ -27,8 +30,6 @@ interface TrashItem {
   isVideo?: boolean;
 }
 
-const TRASH_RETENTION_DAYS = 30;
-
 export default function Trash() {
   const [items, setItems] = useState<TrashItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,14 +37,16 @@ export default function Trash() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<TrashItem | null>(null);
   const [emptyTrashDialogOpen, setEmptyTrashDialogOpen] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const { userId, isDecoyMode, supabaseClient: supabase } = useAuth();
+  const { retentionDays, updateRetentionDays } = useTrashSettings();
 
   // Auto-cleanup expired items (client-side backup for cron job)
   const cleanupExpiredItems = useCallback(async () => {
     if (!userId) return;
 
     const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - TRASH_RETENTION_DAYS);
+    cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
     const cutoffDateStr = cutoffDate.toISOString();
 
     try {
@@ -107,7 +110,7 @@ export default function Trash() {
     } catch (err) {
       console.error('Error during auto-cleanup:', err);
     }
-  }, [userId]);
+  }, [userId, retentionDays]);
 
   const fetchTrashItems = useCallback(async () => {
     if (!userId || isDecoyMode) {
@@ -132,7 +135,7 @@ export default function Trash() {
 
       notes?.forEach(note => {
         const deletedAt = new Date(note.deleted_at!);
-        const daysLeft = TRASH_RETENTION_DAYS - Math.floor((now.getTime() - deletedAt.getTime()) / (1000 * 60 * 60 * 24));
+        const daysLeft = retentionDays - Math.floor((now.getTime() - deletedAt.getTime()) / (1000 * 60 * 60 * 24));
         if (daysLeft > 0) {
           trashItems.push({
             id: note.id,
@@ -153,7 +156,7 @@ export default function Trash() {
 
       photos?.forEach(photo => {
         const deletedAt = new Date(photo.deleted_at!);
-        const daysLeft = TRASH_RETENTION_DAYS - Math.floor((now.getTime() - deletedAt.getTime()) / (1000 * 60 * 60 * 24));
+        const daysLeft = retentionDays - Math.floor((now.getTime() - deletedAt.getTime()) / (1000 * 60 * 60 * 24));
         const isVideo = /\.(mp4|webm|mov|avi|mkv)$/i.test(photo.filename);
         if (daysLeft > 0) {
           trashItems.push({
@@ -176,7 +179,7 @@ export default function Trash() {
 
       files?.forEach(file => {
         const deletedAt = new Date(file.deleted_at!);
-        const daysLeft = TRASH_RETENTION_DAYS - Math.floor((now.getTime() - deletedAt.getTime()) / (1000 * 60 * 60 * 24));
+        const daysLeft = retentionDays - Math.floor((now.getTime() - deletedAt.getTime()) / (1000 * 60 * 60 * 24));
         if (daysLeft > 0) {
           trashItems.push({
             id: file.id,
@@ -197,7 +200,7 @@ export default function Trash() {
 
       tiktokVideos?.forEach(video => {
         const deletedAt = new Date(video.deleted_at!);
-        const daysLeft = TRASH_RETENTION_DAYS - Math.floor((now.getTime() - deletedAt.getTime()) / (1000 * 60 * 60 * 24));
+        const daysLeft = retentionDays - Math.floor((now.getTime() - deletedAt.getTime()) / (1000 * 60 * 60 * 24));
         if (daysLeft > 0) {
           trashItems.push({
             id: video.id,
@@ -404,37 +407,75 @@ export default function Trash() {
           <div>
             <h1 className="text-2xl md:text-3xl font-bold text-foreground">Papierkorb</h1>
             <p className="text-muted-foreground text-sm">
-              {items.length} Elemente · Automatische Löschung nach {TRASH_RETENTION_DAYS} Tagen
+              {items.length} Elemente · Automatische Löschung nach {retentionDays} Tagen
             </p>
           </div>
         </div>
 
-        {items.length > 0 && (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={restoreAll}
-              className="px-4 py-2 rounded-xl bg-green-500/10 hover:bg-green-500/20 text-green-500 transition-colors flex items-center gap-2 text-sm"
-            >
-              <RotateCcw className="w-4 h-4" />
-              <span className="hidden md:inline">Alles wiederherstellen</span>
-            </button>
-            <button
-              onClick={() => setEmptyTrashDialogOpen(true)}
-              className="px-4 py-2 rounded-xl bg-destructive/10 hover:bg-destructive/20 text-destructive transition-colors flex items-center gap-2 text-sm"
-            >
-              <Trash2 className="w-4 h-4" />
-              <span className="hidden md:inline">Leeren</span>
-            </button>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowSettings(!showSettings)}
+            className={cn(
+              "p-2 rounded-xl transition-colors",
+              showSettings ? "bg-primary/20 text-primary" : "bg-muted/50 hover:bg-muted text-muted-foreground"
+            )}
+            title="Einstellungen"
+          >
+            <Settings className="w-5 h-5" />
+          </button>
+          {items.length > 0 && (
+            <>
+              <button
+                onClick={restoreAll}
+                className="px-4 py-2 rounded-xl bg-green-500/10 hover:bg-green-500/20 text-green-500 transition-colors flex items-center gap-2 text-sm"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span className="hidden md:inline">Alles wiederherstellen</span>
+              </button>
+              <button
+                onClick={() => setEmptyTrashDialogOpen(true)}
+                className="px-4 py-2 rounded-xl bg-destructive/10 hover:bg-destructive/20 text-destructive transition-colors flex items-center gap-2 text-sm"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span className="hidden md:inline">Leeren</span>
+              </button>
+            </>
+          )}
+        </div>
       </div>
+
+      {/* Settings Panel */}
+      {showSettings && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          className="glass-card p-4"
+        >
+          <h3 className="text-sm font-medium text-foreground mb-3">Aufbewahrungszeit</h3>
+          <div className="flex items-center gap-4">
+            <Slider
+              value={[retentionDays]}
+              onValueChange={(value) => updateRetentionDays(value[0])}
+              min={7}
+              max={90}
+              step={1}
+              className="flex-1"
+            />
+            <span className="text-sm text-muted-foreground min-w-[80px]">{retentionDays} Tage</span>
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            Elemente werden nach dieser Anzahl Tage automatisch endgültig gelöscht.
+          </p>
+        </motion.div>
+      )}
 
       {/* Warning */}
       <div className="glass-card p-4 border-yellow-500/30 bg-yellow-500/5">
         <div className="flex items-center gap-3">
           <AlertTriangle className="w-5 h-5 text-yellow-500 shrink-0" />
           <p className="text-foreground/80 text-sm">
-            Elemente werden nach {TRASH_RETENTION_DAYS} Tagen automatisch endgültig gelöscht.
+            Elemente werden nach {retentionDays} Tagen automatisch endgültig gelöscht.
           </p>
         </div>
       </div>

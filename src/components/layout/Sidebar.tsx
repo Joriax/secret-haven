@@ -116,7 +116,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onSearchOpen
         )}
       </AnimatePresence>
 
-      {/* Mobile menu button */}
+      {/* Mobile menu button - only on mobile */}
       <button
         onClick={onToggle}
         className="fixed top-4 left-4 z-50 lg:hidden p-2.5 rounded-xl bg-card border border-border"
@@ -128,15 +128,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onSearchOpen
         )}
       </button>
 
-      {/* Sidebar */}
-      <motion.aside
-        initial={{ x: -260 }}
-        animate={{ x: isOpen ? 0 : -260 }}
-        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+      {/* Sidebar - always visible on desktop, animated on mobile */}
+      <aside
         className={cn(
           "fixed left-0 top-0 h-full w-[260px] z-50",
           "bg-sidebar border-r border-border flex flex-col",
-          "lg:translate-x-0 lg:static"
+          "transition-transform duration-300 ease-out",
+          "lg:translate-x-0 lg:static lg:z-auto",
+          isOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
         {/* Logo */}
@@ -261,7 +260,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onSearchOpen
             <span className="text-sm font-medium">Abmelden</span>
           </button>
         </div>
-      </motion.aside>
+      </aside>
     </>
   );
 };
