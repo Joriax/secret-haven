@@ -36,6 +36,8 @@ import {
   Share2
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTags, Tag as TagType } from '@/hooks/useTags';
 import { useNoteFolders } from '@/hooks/useNoteFolders';
@@ -1054,16 +1056,40 @@ export default function Notes() {
                       <div className="prose prose-neutral dark:prose-invert max-w-none">
                         <ReactMarkdown
                           components={{
-                            code: ({ className, children }) => (
-                              <code className={cn(className, "bg-muted rounded px-2 py-1 text-primary font-mono text-sm")}>
-                                {children}
-                              </code>
-                            ),
-                            pre: ({ children }) => (
-                              <pre className="bg-muted rounded-xl p-4 overflow-x-auto border border-border">
-                                {children}
-                              </pre>
-                            ),
+                            code: ({ className, children, ...props }) => {
+                              const match = /language-(\w+)/.exec(className || '');
+                              const isInline = !match && String(children).split('\n').length === 1;
+                              
+                              if (isInline) {
+                                return (
+                                  <code className="bg-muted rounded px-1.5 py-0.5 text-primary font-mono text-sm">
+                                    {children}
+                                  </code>
+                                );
+                              }
+                              
+                              return match ? (
+                                <SyntaxHighlighter
+                                  style={oneDark}
+                                  language={match[1]}
+                                  PreTag="div"
+                                  className="rounded-xl !bg-[#1e1e2e] !mt-0 !mb-4"
+                                  customStyle={{ 
+                                    fontSize: '0.875rem',
+                                    borderRadius: '0.75rem',
+                                    padding: '1rem',
+                                    margin: 0,
+                                  }}
+                                >
+                                  {String(children).replace(/\n$/, '')}
+                                </SyntaxHighlighter>
+                              ) : (
+                                <code className="bg-muted rounded px-1.5 py-0.5 text-primary font-mono text-sm block p-4 overflow-x-auto">
+                                  {children}
+                                </code>
+                              );
+                            },
+                            pre: ({ children }) => <>{children}</>,
                             h1: ({ children }) => <h1 className="text-2xl font-bold text-foreground mt-6 mb-4">{children}</h1>,
                             h2: ({ children }) => <h2 className="text-xl font-bold text-foreground mt-5 mb-3">{children}</h2>,
                             h3: ({ children }) => <h3 className="text-lg font-bold text-foreground mt-4 mb-2">{children}</h3>,
@@ -1080,7 +1106,7 @@ export default function Notes() {
                               }
                               return <li>{children}</li>;
                             },
-                            a: ({ href, children }) => <a href={href} className="text-primary hover:underline">{children}</a>,
+                            a: ({ href, children }) => <a href={href} className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>,
                             blockquote: ({ children }) => <blockquote className="border-l-4 border-primary pl-4 italic text-muted-foreground my-4">{children}</blockquote>,
                           }}
                         >
