@@ -3,9 +3,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Search, X, FileText, Image, FolderOpen, Music, Lock, Filter, Link2, Play } from 'lucide-react';
 import { useGlobalSearch, SearchResult } from '@/hooks/useGlobalSearch';
 import { useTags } from '@/hooks/useTags';
+import { useSavedSearches, SavedSearch } from '@/hooks/useSavedSearches';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { GlobalSearchFilters } from './GlobalSearchFilters';
+import { SavedSearches } from './SavedSearches';
 
 interface GlobalSearchProps {
   isOpen: boolean;
@@ -96,6 +98,16 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ isOpen, onClose }) =
   const handleResultClick = (result: SearchResult) => {
     navigate(typeRoutes[result.type], { state: { selectedId: result.id } });
     onClose();
+  };
+
+  const handleSelectSavedSearch = (savedSearch: SavedSearch) => {
+    setQuery(savedSearch.query);
+    setSelectedTypes(savedSearch.filters.types);
+    setSelectedTags(savedSearch.filters.tags);
+    setDateRange(savedSearch.filters.dateRange);
+    if (savedSearch.filters.types.length > 0 || savedSearch.filters.tags.length > 0 || savedSearch.filters.dateRange !== 'all') {
+      setShowFilters(true);
+    }
   };
 
   // Apply filters to results
@@ -277,6 +289,17 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ isOpen, onClose }) =
                     </div>
                   )}
                 </div>
+
+                {/* Saved Searches */}
+                <SavedSearches
+                  currentQuery={query}
+                  currentFilters={{
+                    types: selectedTypes,
+                    tags: selectedTags,
+                    dateRange,
+                  }}
+                  onSelectSearch={handleSelectSavedSearch}
+                />
               </div>
             </motion.div>
           </div>
