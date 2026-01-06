@@ -30,6 +30,8 @@ import { useAutoLock } from '@/hooks/useAutoLock';
 import { useBiometric } from '@/hooks/useBiometric';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
+import { ThemeCustomizer } from '@/components/ThemeCustomizer';
+import { ExportBackup } from '@/components/ExportBackup';
 
 const PIN_LENGTH = 6;
 
@@ -682,65 +684,11 @@ export default function Settings() {
         </div>
       </div>
 
-      {/* Backup Section */}
-      <div className="glass-card p-6">
-        <div className="flex items-center gap-3 mb-6">
-          <Download className="w-5 h-5 text-green-400" />
-          <h2 className="text-lg font-semibold text-white">Backup & Wiederherstellung</h2>
-        </div>
+      {/* Theme Customizer */}
+      <ThemeCustomizer />
 
-        <button
-          onClick={() => setShowBackup(!showBackup)}
-          className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-white/5 transition-colors group"
-        >
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
-              <Download className="w-5 h-5 text-green-400" />
-            </div>
-            <div className="text-left">
-              <h3 className="font-medium text-white">Verschlüsseltes Backup</h3>
-              <p className="text-sm text-white/50">Exportiere alle Daten als .vlt Datei</p>
-            </div>
-          </div>
-          <motion.div animate={{ rotate: showBackup ? 180 : 0 }} className="text-white/40">▼</motion.div>
-        </button>
-
-        <AnimatePresence>
-          {showBackup && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              className="overflow-hidden"
-            >
-              <div className="p-4 space-y-4 bg-white/5 rounded-xl mt-4">
-                <div>
-                  <label className="block text-sm text-white/60 mb-2">Backup-Passwort</label>
-                  <input
-                    type="password"
-                    value={backupPassword}
-                    onChange={(e) => setBackupPassword(e.target.value)}
-                    placeholder="Sicheres Passwort für die Verschlüsselung"
-                    className="w-full px-4 py-3 rounded-xl vault-input text-white placeholder:text-white/30"
-                  />
-                </div>
-                <button
-                  onClick={handleBackup}
-                  disabled={isLoading || !backupPassword}
-                  className="w-full py-3 rounded-xl bg-green-600 hover:bg-green-500 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {isLoading ? <Loader2 className="w-5 h-5 text-white animate-spin" /> : (
-                    <>
-                      <Download className="w-4 h-4 text-white" />
-                      <span className="text-white font-medium">Backup erstellen</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+      {/* Export/Backup Section */}
+      <ExportBackup />
 
       {/* Logout */}
       <div className="glass-card p-6">

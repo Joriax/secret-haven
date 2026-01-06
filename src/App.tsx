@@ -29,6 +29,7 @@ import SharedAlbum from "./pages/SharedAlbum";
 import SharedAlbums from "./pages/SharedAlbums";
 import SharedAlbumView from "./pages/SharedAlbumView";
 import BreakTracker from "./pages/BreakTracker";
+import DuplicateFinder from "./pages/DuplicateFinder";
 
 const queryClient = new QueryClient();
 
@@ -61,6 +62,7 @@ const App = () => (
                 <Route path="/shared-albums" element={<SharedAlbums />} />
                 <Route path="/shared-album/:albumId" element={<SharedAlbumView />} />
                 <Route path="/break-tracker" element={<BreakTracker />} />
+                <Route path="/duplicate-finder" element={<DuplicateFinder />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/admin" element={<Admin />} />
               </Route>
