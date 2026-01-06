@@ -21,7 +21,8 @@ import {
   Clock,
   Crown,
   Share2,
-  Coffee
+  Coffee,
+  Copy
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserRoles } from '@/hooks/useUserRoles';
@@ -48,6 +49,7 @@ const secondaryNavItems = [
   { icon: Tag, label: 'Tags', path: '/tags' },
   { icon: Share2, label: 'Geteilte Alben', path: '/shared-albums' },
   { icon: Coffee, label: 'Pausen', path: '/break-tracker' },
+  { icon: Copy, label: 'Duplikate', path: '/duplicate-finder' },
 ];
 
 const securityNavItems = [

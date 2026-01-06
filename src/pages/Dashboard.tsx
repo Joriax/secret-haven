@@ -27,6 +27,7 @@ import { CreateNewDialog } from '@/components/CreateNewDialog';
 import { Button } from '@/components/ui/button';
 import { DraggableWidget } from '@/components/dashboard/DraggableWidget';
 import { WidgetCustomizer } from '@/components/dashboard/WidgetCustomizer';
+import { QuickCaptureWidget } from '@/components/dashboard/QuickCaptureWidget';
 
 interface Stats {
   notes: number;
@@ -723,6 +724,8 @@ export default function Dashboard() {
 
         {/* Side Panel */}
         <div className="space-y-4">
+          {/* Quick Capture Widget */}
+          <QuickCaptureWidget />
           {sideWidgets.map((widget, idx) => renderWidget(widget, fullWidthWidgets.length + mainWidgets.length + idx))}
         </div>
       </div>
