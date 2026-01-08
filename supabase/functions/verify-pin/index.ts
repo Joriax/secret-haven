@@ -285,11 +285,14 @@ async function createSessionWithHistory(
 async function validateSession(supabase: any, sessionToken: string): Promise<{ userId: string; isDecoy: boolean } | null> {
   if (!sessionToken) return null;
   
+  // Be tolerant to duplicates / missing rows
   const { data, error } = await supabase
     .from('vault_sessions')
     .select('user_id, is_decoy, expires_at')
     .eq('session_token', sessionToken)
-    .single();
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
   
   if (error || !data) {
     console.log('Session validation failed:', error?.message);
@@ -540,7 +543,9 @@ serve(async (req) => {
           .from('vault_sessions')
           .select('user_id')
           .eq('session_token', sessionToken)
-          .single();
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
         
         if (session) {
           await logSecurityEvent(supabase, session.user_id, 'logout', {}, req);

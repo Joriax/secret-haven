@@ -61,7 +61,7 @@ export default function Settings() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [backupPassword, setBackupPassword] = useState('');
   const [isBiometricRegistering, setIsBiometricRegistering] = useState(false);
-  const { userId, logout } = useAuth();
+  const { userId, sessionToken, logout } = useAuth();
   const navigate = useNavigate();
   const { getTimeoutDuration, setTimeoutDuration, isEnabled, setEnabled } = useAutoLock();
   const { isAvailable: biometricAvailable, isEnabled: biometricEnabled, register: registerBiometric, disable: disableBiometric } = useBiometric();
@@ -138,13 +138,26 @@ export default function Settings() {
       return;
     }
 
+    if (!sessionToken) {
+      setMessage({ type: 'error', text: 'Session abgelaufen – bitte neu anmelden' });
+      return;
+    }
+
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('verify-pin', {
-        body: { action: 'change', pin: currentPin, newPin, userId }
+      const response = await supabase.functions.invoke('verify-pin', {
+        body: { action: 'change', pin: currentPin, newPin, sessionToken }
       });
 
-      if (error) throw new Error('Verbindungsfehler');
+      const data = response.data;
+      const invokeError = response.error;
+
+      if (invokeError) {
+        const errMsg = (invokeError as any)?.context?.body
+          ? JSON.parse((invokeError as any).context.body)?.error
+          : null;
+        throw new Error(errMsg || 'Verbindungsfehler');
+      }
 
       if (data?.success) {
         setMessage({ type: 'success', text: 'PIN erfolgreich geändert!' });
@@ -182,13 +195,26 @@ export default function Settings() {
       return;
     }
 
+    if (!sessionToken) {
+      setMessage({ type: 'error', text: 'Session abgelaufen – bitte neu anmelden' });
+      return;
+    }
+
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('verify-pin', {
-        body: { action: 'set-decoy', pin: currentPin, newPin: decoyPin, userId }
+      const response = await supabase.functions.invoke('verify-pin', {
+        body: { action: 'set-decoy', pin: currentPin, newPin: decoyPin, sessionToken }
       });
 
-      if (error) throw new Error('Verbindungsfehler');
+      const data = response.data;
+      const invokeError = response.error;
+
+      if (invokeError) {
+        const errMsg = (invokeError as any)?.context?.body
+          ? JSON.parse((invokeError as any).context.body)?.error
+          : null;
+        throw new Error(errMsg || 'Verbindungsfehler');
+      }
 
       if (data?.success) {
         setMessage({ type: 'success', text: 'Tarn-PIN erfolgreich gesetzt!' });
