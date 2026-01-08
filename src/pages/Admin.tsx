@@ -226,11 +226,20 @@ export default function Admin() {
 
     setIsResettingPin(true);
     try {
-      const { data, error } = await supabase.functions.invoke('verify-pin', {
+      const response = await supabase.functions.invoke('verify-pin', {
         body: { action: 'admin-reset-pin', targetUserId, newPin: newPinValue, sessionToken }
       });
 
-      if (error) throw error;
+      const data = response.data;
+      const invokeError = response.error;
+
+      if (invokeError) {
+        const errMsg = (invokeError as any)?.context?.body
+          ? JSON.parse((invokeError as any).context.body)?.error
+          : null;
+        throw new Error(errMsg || 'Verbindungsfehler');
+      }
+
       if (data?.success) {
         toast.success('PIN wurde zurückgesetzt');
         setResetPinUser(null);
@@ -238,8 +247,8 @@ export default function Admin() {
       } else {
         throw new Error(data?.error || 'Fehler beim Zurücksetzen');
       }
-    } catch (error: any) {
-      toast.error(error.message || 'Fehler beim Zurücksetzen');
+    } catch (err: any) {
+      toast.error(err?.message || 'Fehler beim Zurücksetzen');
     } finally {
       setIsResettingPin(false);
     }
