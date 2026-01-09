@@ -57,6 +57,52 @@ import { ShareToAlbumDialog } from '@/components/ShareToAlbumDialog';
 import { toast } from 'sonner';
 import { useSecurityLogs } from '@/hooks/useSecurityLogs';
 
+// Video file extensions and MIME types
+const VIDEO_EXTENSIONS = /\.(mp4|mov|webm|avi|mkv|m4v|3gp|ogv|wmv|flv)$/i;
+const VIDEO_MIME_TYPES = [
+  'video/mp4', 'video/quicktime', 'video/webm', 'video/x-msvideo', 
+  'video/x-matroska', 'video/x-m4v', 'video/3gpp', 'video/ogg',
+  'video/x-ms-wmv', 'video/x-flv'
+];
+
+// Image file extensions
+const IMAGE_EXTENSIONS = /\.(jpg|jpeg|png|gif|webp|bmp|heic|heif|avif|tiff|svg)$/i;
+
+// Helper to determine if file is video
+const isVideoFile = (filename: string, mimeType?: string): boolean => {
+  if (mimeType && VIDEO_MIME_TYPES.some(type => mimeType.toLowerCase().startsWith(type.split('/')[0]))) {
+    return mimeType.toLowerCase().startsWith('video/');
+  }
+  return VIDEO_EXTENSIONS.test(filename);
+};
+
+// Get appropriate MIME type for file
+const getMimeType = (filename: string, originalMimeType?: string): string => {
+  if (originalMimeType) return originalMimeType;
+  
+  const ext = filename.split('.').pop()?.toLowerCase();
+  const mimeMap: Record<string, string> = {
+    mp4: 'video/mp4',
+    mov: 'video/quicktime',
+    webm: 'video/webm',
+    avi: 'video/x-msvideo',
+    mkv: 'video/x-matroska',
+    m4v: 'video/x-m4v',
+    '3gp': 'video/3gpp',
+    ogv: 'video/ogg',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    gif: 'image/gif',
+    webp: 'image/webp',
+    heic: 'image/heic',
+    heif: 'image/heif',
+    avif: 'image/avif',
+  };
+  
+  return mimeMap[ext || ''] || 'application/octet-stream';
+};
+
 interface MediaItem {
   id: string;
   filename: string;
@@ -166,13 +212,14 @@ export default function Photos() {
             .from('photos')
             .createSignedUrl(`${userId}/${photo.filename}`, 3600);
           
-          const isVideo = photo.filename.match(/\.(mp4|mov|webm|avi|mkv)$/i);
+          const isVideo = isVideoFile(photo.filename);
+          const mimeType = getMimeType(photo.filename);
           
           return { 
             ...photo, 
             url: data?.signedUrl,
             type: isVideo ? 'video' as const : 'photo' as const,
-            mime_type: isVideo ? 'video/mp4' : 'image/jpeg'
+            mime_type: mimeType
           };
         })
       );
@@ -234,21 +281,55 @@ export default function Photos() {
     setUploadProgress(0);
     const totalFiles = files.length;
     let uploaded = 0;
+    let skipped = 0;
+
+    // Filter valid media files first
+    const validFiles = Array.from(files).filter(file => {
+      const isVideo = file.type.startsWith('video/') || VIDEO_EXTENSIONS.test(file.name);
+      const isImage = file.type.startsWith('image/') || IMAGE_EXTENSIONS.test(file.name);
+      return isVideo || isImage;
+    });
+
+    if (validFiles.length === 0) {
+      toast.error('Keine gültigen Medien-Dateien gefunden');
+      setIsUploading(false);
+      return;
+    }
+
+    // Check file size limits (500MB for videos, 50MB for images)
+    const MAX_VIDEO_SIZE = 500 * 1024 * 1024; // 500MB
+    const MAX_IMAGE_SIZE = 50 * 1024 * 1024;  // 50MB
 
     try {
-      for (const file of Array.from(files)) {
-        const isVideo = file.type.startsWith('video/');
-        const isImage = file.type.startsWith('image/');
+      for (const file of validFiles) {
+        const isVideo = file.type.startsWith('video/') || VIDEO_EXTENSIONS.test(file.name);
+        const isImage = file.type.startsWith('image/') || IMAGE_EXTENSIONS.test(file.name);
         
-        if (!isVideo && !isImage) continue;
+        // Check file size
+        const maxSize = isVideo ? MAX_VIDEO_SIZE : MAX_IMAGE_SIZE;
+        if (file.size > maxSize) {
+          toast.error(`${file.name} ist zu groß (max. ${isVideo ? '500MB' : '50MB'})`);
+          skipped++;
+          continue;
+        }
 
         const filename = `${Date.now()}-${file.name}`;
+        const mimeType = file.type || getMimeType(file.name);
         
+        // Upload with proper content type
         const { error: uploadError } = await supabase.storage
           .from('photos')
-          .upload(`${userId}/${filename}`, file);
+          .upload(`${userId}/${filename}`, file, {
+            contentType: mimeType,
+            cacheControl: '3600',
+          });
 
-        if (uploadError) throw uploadError;
+        if (uploadError) {
+          console.error('Upload error:', uploadError);
+          toast.error(`Fehler bei ${file.name}: ${uploadError.message}`);
+          skipped++;
+          continue;
+        }
 
         const { data: photoData, error: dbError } = await supabase
           .from('photos')
@@ -261,24 +342,35 @@ export default function Photos() {
           .select()
           .single();
 
-        if (dbError) throw dbError;
+        if (dbError) {
+          console.error('DB error:', dbError);
+          skipped++;
+          continue;
+        }
 
         const { data: urlData } = await supabase.storage
           .from('photos')
           .createSignedUrl(`${userId}/${filename}`, 3600);
 
+        const mediaType = isVideo ? 'video' as const : 'photo' as const;
+
         setMedia(prev => [{
           ...photoData, 
           url: urlData?.signedUrl,
-          type: isVideo ? 'video' : 'photo',
-          mime_type: file.type
+          type: mediaType,
+          mime_type: mimeType
         }, ...prev]);
 
         uploaded++;
-        setUploadProgress((uploaded / totalFiles) * 100);
+        setUploadProgress((uploaded / validFiles.length) * 100);
       }
-      toast.success(`${uploaded} ${uploaded === 1 ? 'Datei' : 'Dateien'} hochgeladen`);
-      logEvent('photo_upload', { count: uploaded, album: selectedAlbum?.name || null });
+      
+      if (uploaded > 0) {
+        toast.success(`${uploaded} ${uploaded === 1 ? 'Datei' : 'Dateien'} hochgeladen${skipped > 0 ? `, ${skipped} übersprungen` : ''}`);
+        logEvent('photo_upload', { count: uploaded, album: selectedAlbum?.name || null });
+      } else if (skipped > 0) {
+        toast.error(`Alle ${skipped} Dateien konnten nicht hochgeladen werden`);
+      }
     } catch (error) {
       console.error('Error uploading:', error);
       toast.error('Fehler beim Hochladen');
@@ -1477,15 +1569,29 @@ export default function Photos() {
                     )}
 
                     {item.type === 'video' ? (
-                      <div className="relative w-full h-full">
+                      <div className="relative w-full h-full bg-muted">
                         <video
                           src={item.url}
                           className="w-full h-full object-cover"
                           muted
                           playsInline
+                          preload="metadata"
+                          onLoadedMetadata={(e) => {
+                            // Seek to 1 second to get a better thumbnail frame
+                            const video = e.currentTarget;
+                            if (video.duration > 1) {
+                              video.currentTime = 1;
+                            }
+                          }}
                         />
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                          <Play className="w-10 h-10 text-white" />
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/30 pointer-events-none">
+                          <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                            <Play className="w-6 h-6 text-white ml-0.5" fill="white" />
+                          </div>
+                        </div>
+                        {/* Video duration badge - could be added if stored */}
+                        <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded bg-black/70 text-white text-xs font-medium pointer-events-none">
+                          Video
                         </div>
                       </div>
                     ) : (
@@ -1789,16 +1895,24 @@ export default function Photos() {
                   className="max-w-full max-h-full"
                 >
                   {currentLightboxItem.type === 'video' ? (
-                    <div className="relative">
+                    <div className="relative flex items-center justify-center">
                       <video
                         ref={videoRef}
                         src={currentLightboxItem.url}
-                        className="max-w-full max-h-[80vh] rounded-lg"
+                        className="max-w-full max-h-[80vh] rounded-lg shadow-2xl"
                         controls
+                        controlsList="nodownload"
                         autoPlay
+                        playsInline
                         muted={isMuted}
                         onClick={(e) => e.stopPropagation()}
-                      />
+                        onPlay={() => setIsVideoPlaying(true)}
+                        onPause={() => setIsVideoPlaying(false)}
+                        onEnded={() => setIsVideoPlaying(false)}
+                      >
+                        <source src={currentLightboxItem.url} type={currentLightboxItem.mime_type || 'video/mp4'} />
+                        Dein Browser unterstützt dieses Videoformat nicht.
+                      </video>
                     </div>
                   ) : (
                     <img
