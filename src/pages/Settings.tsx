@@ -32,6 +32,7 @@ import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { ThemeCustomizer } from '@/components/ThemeCustomizer';
 import { ExportBackup } from '@/components/ExportBackup';
+import { ImportBackup } from '@/components/ImportBackup';
 
 const PIN_LENGTH = 6;
 

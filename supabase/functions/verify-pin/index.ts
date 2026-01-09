@@ -1141,6 +1141,41 @@ serve(async (req) => {
       );
     }
 
+    // ========== BIOMETRIC LOGIN ==========
+    else if (action === 'biometric-login') {
+      const { userId: biometricUserId } = body;
+      
+      if (!biometricUserId) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Ungültige Parameter' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
+      }
+
+      // Verify the user exists
+      const { data: user, error: fetchError } = await supabase
+        .from('vault_users')
+        .select('id')
+        .eq('id', biometricUserId)
+        .single();
+
+      if (fetchError || !user) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Benutzer nicht gefunden' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
+        );
+      }
+
+      await recordLoginAttempt(supabase, ipAddress, true);
+      await logSecurityEvent(supabase, user.id, 'login_success', { method: 'biometric' }, req);
+      const token = await createSessionWithHistory(supabase, user.id, false, req);
+      
+      return new Response(
+        JSON.stringify({ success: true, userId: user.id, isDecoy: false, sessionToken: token }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     return new Response(
       JSON.stringify({ success: false, error: 'Ungültige Aktion' }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }

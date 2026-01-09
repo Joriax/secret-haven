@@ -17,7 +17,6 @@ import {
   ArrowRight,
   Sparkles
 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useViewHistory } from '@/hooks/useViewHistory';
 import { useDashboardWidgets, DashboardWidget } from '@/hooks/useDashboardWidgets';
@@ -88,7 +87,7 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  const { userId, isDecoyMode } = useAuth();
+  const { userId, isDecoyMode, supabaseClient: supabase } = useAuth();
   const { history } = useViewHistory();
   const navigate = useNavigate();
   
