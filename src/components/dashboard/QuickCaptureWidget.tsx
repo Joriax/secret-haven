@@ -72,7 +72,7 @@ export function QuickCaptureWidget() {
   };
 
   return (
-    <div className="bento-card h-full">
+    <div className="bento-card">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Plus className="w-4 h-4 text-primary" />

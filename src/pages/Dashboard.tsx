@@ -671,7 +671,7 @@ export default function Dashboard() {
   const sideWidgets = gridWidgets.filter(w => w.type !== 'recent-activity');
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8">
+    <div className="max-w-6xl mx-auto space-y-8 pb-8">
       <CreateNewDialog isOpen={createDialogOpen} onClose={() => setCreateDialogOpen(false)} />
       
       {/* Header */}
