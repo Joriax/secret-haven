@@ -1176,6 +1176,63 @@ serve(async (req) => {
       );
     }
 
+    // ========== GENERATE RECOVERY KEY (Server-side, PIN protected) ==========
+    else if (action === 'generate-recovery-key') {
+      if (!authenticatedUser) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Nicht autorisiert' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+        );
+      }
+
+      if (!pin || pin.length !== 6) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Aktueller PIN erforderlich' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
+      }
+
+      // Fetch user and verify PIN
+      const { data: user, error: fetchError } = await supabase
+        .from('vault_users')
+        .select('id, pin_hash')
+        .eq('id', authenticatedUser.userId)
+        .single();
+
+      if (fetchError || !user) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Benutzer nicht gefunden' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
+        );
+      }
+
+      const isValid = await verifyPin(pin, user.pin_hash);
+      if (!isValid) {
+        await logSecurityEvent(supabase, authenticatedUser.userId, 'recovery_key_gen_failed', { reason: 'wrong_pin' }, req);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Falscher PIN' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+        );
+      }
+
+      // Generate new recovery key (4 groups of 4 uppercase alphanumeric)
+      const newKey = `${crypto.randomUUID().slice(0, 4)}-${crypto.randomUUID().slice(0, 4)}-${crypto.randomUUID().slice(0, 4)}-${crypto.randomUUID().slice(0, 4)}`.toUpperCase();
+
+      const { error: updateError } = await supabase
+        .from('vault_users')
+        .update({ recovery_key: newKey, updated_at: new Date().toISOString() })
+        .eq('id', authenticatedUser.userId);
+
+      if (updateError) throw updateError;
+
+      await logSecurityEvent(supabase, authenticatedUser.userId, 'recovery_key_generated', {}, req);
+
+      return new Response(
+        JSON.stringify({ success: true, recoveryKey: newKey }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     return new Response(
       JSON.stringify({ success: false, error: 'Ungültige Aktion' }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
