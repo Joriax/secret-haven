@@ -139,7 +139,7 @@ export default function SecurityLogs() {
     to: new Date()
   });
   const [quickRange, setQuickRange] = useState('30d');
-  const { userId, sessionToken } = useAuth();
+  const { userId, sessionToken, supabaseClient } = useAuth();
 
   const handleQuickRange = (value: string) => {
     setQuickRange(value);
@@ -324,7 +324,7 @@ export default function SecurityLogs() {
     
     try {
       // Fetch security logs
-      const { data: logsData, error: logsError } = await supabase
+      const { data: logsData, error: logsError } = await supabaseClient
         .from('security_logs')
         .select('*')
         .eq('user_id', userId)
@@ -335,7 +335,7 @@ export default function SecurityLogs() {
       setLogs(logsData || []);
 
       // Fetch session history
-      const { data: sessionsData, error: sessionsError } = await supabase
+      const { data: sessionsData, error: sessionsError } = await supabaseClient
         .from('session_history')
         .select('*')
         .eq('user_id', userId)
