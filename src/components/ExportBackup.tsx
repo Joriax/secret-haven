@@ -16,7 +16,6 @@ import { Progress } from '@/components/ui/progress';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
 
 type ExportFormat = 'json' | 'encrypted';
 
@@ -44,7 +43,7 @@ export function ExportBackup() {
   const [format, setFormat] = useState<ExportFormat>('json');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const { userId } = useAuth();
+  const { userId, supabaseClient: supabase } = useAuth();
 
   const handleExport = async () => {
     if (!userId) return;

@@ -69,13 +69,23 @@ export default function Login() {
       if (biometricEnabled && !isAuthenticated && !lockoutUntil) {
         setIsBiometricLoading(true);
         try {
-          const result = await authenticateBiometric();
-          if (result) {
-            localStorage.removeItem('vault_attempts');
-            localStorage.removeItem('vault_lockout');
-            login(result, false, '');
-            toast.success('Biometrische Anmeldung erfolgreich');
-            navigate('/dashboard', { replace: true });
+          const storedUserId = await authenticateBiometric();
+          if (storedUserId) {
+            // Get a real session token from the server
+            const response = await supabase.functions.invoke('verify-pin', {
+              body: { action: 'biometric-login', userId: storedUserId }
+            });
+            
+            const data = response.data;
+            if (data?.success && data?.sessionToken) {
+              localStorage.removeItem('vault_attempts');
+              localStorage.removeItem('vault_lockout');
+              login(storedUserId, data.isDecoy || false, data.sessionToken);
+              toast.success('Biometrische Anmeldung erfolgreich');
+              navigate('/dashboard', { replace: true });
+            } else {
+              console.error('Biometric login failed: no session token');
+            }
           }
         } catch (error) {
           console.error('Auto biometric failed:', error);
@@ -96,19 +106,29 @@ export default function Login() {
     setError('');
     
     try {
-      const result = await authenticateBiometric();
-      if (result) {
-        localStorage.removeItem('vault_attempts');
-        localStorage.removeItem('vault_lockout');
-        login(result, false, '');
-        toast.success('Biometrische Anmeldung erfolgreich');
-        navigate('/dashboard', { replace: true });
+      const storedUserId = await authenticateBiometric();
+      if (storedUserId) {
+        // Get a real session token from the server
+        const response = await supabase.functions.invoke('verify-pin', {
+          body: { action: 'biometric-login', userId: storedUserId }
+        });
+        
+        const data = response.data;
+        if (data?.success && data?.sessionToken) {
+          localStorage.removeItem('vault_attempts');
+          localStorage.removeItem('vault_lockout');
+          login(storedUserId, data.isDecoy || false, data.sessionToken);
+          toast.success('Biometrische Anmeldung erfolgreich');
+          navigate('/dashboard', { replace: true });
+        } else {
+          throw new Error(data?.error || 'Biometrische Authentifizierung fehlgeschlagen');
+        }
       } else {
         setError('Biometrische Authentifizierung fehlgeschlagen');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Biometric login error:', error);
-      setError('Biometrische Authentifizierung fehlgeschlagen');
+      setError(error.message || 'Biometrische Authentifizierung fehlgeschlagen');
     } finally {
       setIsBiometricLoading(false);
     }

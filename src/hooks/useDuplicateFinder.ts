@@ -92,7 +92,7 @@ export function useDuplicateFinder() {
 
       for (const item of allItems) {
         // Extract original filename (remove timestamp prefix)
-        const originalName = item.filename.replace(/^\\d+-/, '').toLowerCase();
+        const originalName = item.filename.replace(/^\d+-/, '').toLowerCase();
         const hash = `${originalName}_${item.size}`;
         
         if (!duplicateMap.has(hash)) {

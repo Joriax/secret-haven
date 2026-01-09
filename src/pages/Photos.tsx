@@ -121,6 +121,7 @@ export default function Photos() {
   const [isSlideshow, setIsSlideshow] = useState(false);
   const [slideshowInterval, setSlideshowInterval] = useState(3000);
   const slideshowTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [imagePosition, setImagePosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -938,8 +939,32 @@ export default function Photos() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [lightboxIndex, filteredMedia.length, isSlideshow]);
 
+  // Wake Lock functions for slideshow
+  const requestWakeLock = async () => {
+    try {
+      if ('wakeLock' in navigator) {
+        wakeLockRef.current = await navigator.wakeLock.request('screen');
+        console.log('Wake Lock acquired');
+      }
+    } catch (err) {
+      console.log('Wake Lock failed:', err);
+    }
+  };
+
+  const releaseWakeLock = async () => {
+    if (wakeLockRef.current) {
+      try {
+        await wakeLockRef.current.release();
+        wakeLockRef.current = null;
+        console.log('Wake Lock released');
+      } catch (err) {
+        console.log('Wake Lock release failed:', err);
+      }
+    }
+  };
+
   // Slideshow functions
-  const startSlideshow = () => {
+  const startSlideshow = async () => {
     if (filteredMedia.length === 0) return;
     
     // Only photos for slideshow
@@ -953,16 +978,22 @@ export default function Photos() {
       const firstPhotoIndex = filteredMedia.findIndex(m => m.type === 'photo');
       setLightboxIndex(firstPhotoIndex >= 0 ? firstPhotoIndex : 0);
     }
+    
+    // Request wake lock to prevent screen from sleeping
+    await requestWakeLock();
+    
     setIsSlideshow(true);
     toast.success('Slideshow gestartet');
   };
 
-  const stopSlideshow = () => {
+  const stopSlideshow = async () => {
     setIsSlideshow(false);
     if (slideshowTimerRef.current) {
       clearInterval(slideshowTimerRef.current);
       slideshowTimerRef.current = null;
     }
+    // Release wake lock
+    await releaseWakeLock();
   };
 
   // Slideshow timer
@@ -993,11 +1024,15 @@ export default function Photos() {
     }
   }, [isSlideshow, slideshowInterval, filteredMedia.length]);
 
-  // Cleanup slideshow on unmount
+  // Cleanup slideshow and wake lock on unmount
   useEffect(() => {
     return () => {
       if (slideshowTimerRef.current) {
         clearInterval(slideshowTimerRef.current);
+      }
+      // Also release wake lock on unmount
+      if (wakeLockRef.current) {
+        wakeLockRef.current.release().catch(() => {});
       }
     };
   }, []);
@@ -1531,7 +1566,7 @@ export default function Photos() {
                     </div>
                   </div>
 
-                  {/* Tag Selector Dropdown */}
+                  {/* Tag Selector Dropdown - positioned above if near bottom */}
                   {showTagSelector === item.id && (
                     <>
                       <div 
@@ -1539,7 +1574,14 @@ export default function Photos() {
                         onClick={(e) => { e.stopPropagation(); setShowTagSelector(null); }}
                       />
                       <div 
-                        className="absolute top-full left-0 mt-2 w-48 bg-card border border-border shadow-xl rounded-xl p-2 z-50"
+                        className="absolute left-0 w-48 bg-card border border-border shadow-xl rounded-xl p-2 z-50 max-h-64 overflow-y-auto"
+                        style={{
+                          // Position above if item is in lower half of viewport
+                          bottom: index >= Math.floor(filteredMedia.length / 2) ? '100%' : 'auto',
+                          top: index >= Math.floor(filteredMedia.length / 2) ? 'auto' : '100%',
+                          marginBottom: index >= Math.floor(filteredMedia.length / 2) ? '8px' : '0',
+                          marginTop: index >= Math.floor(filteredMedia.length / 2) ? '0' : '8px',
+                        }}
                         onClick={(e) => e.stopPropagation()}
                       >
                         {tags.length === 0 ? (
@@ -1699,7 +1741,7 @@ export default function Photos() {
                 </button>
                 <button
                   onClick={() => setRenameDialog({ isOpen: true, item: currentLightboxItem })}
-                  className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                  className="p-2 hover:bg-white/10 rounded-full transition-colors hidden sm:flex"
                 >
                   <Pencil className="w-5 h-5 text-white" />
                 </button>
