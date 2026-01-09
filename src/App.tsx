@@ -8,6 +8,7 @@ import { RealtimeSyncProvider } from "@/contexts/RealtimeSyncContext";
 import { AutoLockProvider } from "@/components/AutoLockProvider";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
+import { PWAUpdatePrompt } from "@/components/PWAUpdatePrompt";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -43,6 +44,7 @@ const App = () => (
             <Toaster />
             <Sonner />
             <PWAInstallPrompt />
+            <PWAUpdatePrompt />
             <BrowserRouter>
               <Routes>
                 <Route path="/" element={<Index />} />
