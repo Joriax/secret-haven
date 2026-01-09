@@ -59,6 +59,7 @@ import { SharedAlbumButton } from '@/components/SharedAlbumButton';
 import { ShareToAlbumDialog } from '@/components/ShareToAlbumDialog';
 import { toast } from 'sonner';
 import { useSecurityLogs } from '@/hooks/useSecurityLogs';
+import { resumableStorageUpload } from '@/lib/resumableStorageUpload';
 
 // Video file extensions and MIME types
 const VIDEO_EXTENSIONS = /\.(mp4|mov|webm|avi|mkv|m4v|3gp|ogv|wmv|flv)$/i;
@@ -185,7 +186,7 @@ export default function Photos() {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const touchStartX = useRef<number | null>(null);
-  const { userId, isDecoyMode, supabaseClient: supabase } = useAuth();
+  const { userId, isDecoyMode, sessionToken, supabaseClient: supabase } = useAuth();
   const location = useLocation();
   const { tags } = useTags();
   const { logEvent } = useSecurityLogs();
@@ -324,13 +325,38 @@ export default function Photos() {
         const filename = `${timestamp}-${file.name}`;
         const mimeType = file.type || getMimeType(file.name);
         
+        const objectPath = `${userId}/${filename}`;
+
         // Upload with proper content type
-        const { error: uploadError } = await supabase.storage
-          .from('photos')
-          .upload(`${userId}/${filename}`, file, {
-            contentType: mimeType,
-            cacheControl: '3600',
-          });
+        // NOTE: Large videos often fail with non-resumable uploads; use resumable uploads instead.
+        const RESUMABLE_THRESHOLD_BYTES = 45 * 1024 * 1024; // 45MB
+
+        let uploadError: { message: string } | null = null;
+        try {
+          if (isVideo && file.size >= RESUMABLE_THRESHOLD_BYTES && sessionToken) {
+            await resumableStorageUpload({
+              bucket: 'photos',
+              objectPath,
+              file,
+              contentType: mimeType,
+              sessionToken,
+              onProgress: (p01) => {
+                // Smooth overall progress: completed files + current file
+                setUploadProgress(((uploaded + p01) / validFiles.length) * 100);
+              },
+            });
+          } else {
+            const { error } = await supabase.storage
+              .from('photos')
+              .upload(objectPath, file, {
+                contentType: mimeType,
+                cacheControl: '3600',
+              });
+            if (error) uploadError = error;
+          }
+        } catch (e: any) {
+          uploadError = { message: e?.message || 'Upload fehlgeschlagen' };
+        }
 
         if (uploadError) {
           console.error('Upload error:', uploadError);

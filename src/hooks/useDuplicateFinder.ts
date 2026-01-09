@@ -92,6 +92,25 @@ export function useDuplicateFinder() {
     setProgress({ phase: 'loading', current: 0, total: 0, message: 'Lade Dateien...' });
     setDuplicates([]);
 
+    // Fetch 1 byte with Range header to read total size from Content-Range
+    const getRemoteSize = async (signedUrl: string): Promise<number> => {
+      try {
+        const res = await fetch(signedUrl, {
+          method: 'GET',
+          headers: { Range: 'bytes=0-0' },
+          signal,
+        });
+        const contentRange = res.headers.get('content-range');
+        const match = contentRange?.match(/\/(\d+)$/);
+        if (match?.[1]) return Number(match[1]);
+        const contentLength = res.headers.get('content-length');
+        if (contentLength) return Number(contentLength);
+      } catch {
+        // ignore
+      }
+      return 0;
+    };
+
     try {
       // Phase 1: Fetch all photos and files in parallel
       const [photosRes, filesRes] = await Promise.all([
@@ -157,8 +176,10 @@ export function useDuplicateFinder() {
           
           if (photoList) {
             for (const file of photoList) {
-              const size = (file.metadata as any)?.size || file.metadata?.contentLength || 0;
-              photoSizes.set(file.name, size);
+              // skip folder entries like "thumbnails"
+              if ((file as any)?.id === null && !(file as any)?.metadata) continue;
+              const size = (file.metadata as any)?.size || (file.metadata as any)?.contentLength || 0;
+              if (size > 0) photoSizes.set(file.name, size);
             }
           }
           
@@ -193,7 +214,33 @@ export function useDuplicateFinder() {
 
       if (signal.aborted) return;
 
-      // Phase 3: Group by normalized filename + size
+      // Fallback: if storage listing didn't give sizes (often happens), derive size via signed URL
+      const missingSizePhotos = photos.filter(p => (photoSizes.get(p.filename) || 0) === 0);
+      if (missingSizePhotos.length > 0) {
+        setProgress({
+          phase: 'hashing',
+          current: Math.floor(allItems.length * 0.45),
+          total: allItems.length,
+          message: 'Ermittle fehlende Größen...' 
+        });
+
+        const CONCURRENCY = 8;
+        for (let i = 0; i < missingSizePhotos.length; i += CONCURRENCY) {
+          const batch = missingSizePhotos.slice(i, i + CONCURRENCY);
+          await Promise.allSettled(
+            batch.map(async (p) => {
+              if (signal.aborted) return;
+              const url = photoUrls.get(`${userId}/${p.filename}`);
+              if (!url) return;
+              const size = await getRemoteSize(url);
+              if (size > 0) photoSizes.set(p.filename, size);
+            })
+          );
+          if (signal.aborted) return;
+        }
+      }
+
+      // Phase 3: Group by normalized filename + size (fallback to name-only when size is unknown)
       setProgress({ 
         phase: 'analyzing', 
         current: Math.floor(allItems.length * 0.6), 
@@ -205,7 +252,7 @@ export function useDuplicateFinder() {
       
       for (const item of allItems) {
         // Normalize filename: remove timestamp prefix, lowercase
-        let normalizedName = item.filename
+        const normalizedName = item.filename
           .replace(/^\d+-/, '') // Remove timestamp prefix
           .replace(/\s*\(\d+\)\s*/, '') // Remove (1), (2) suffixes
           .toLowerCase()
@@ -214,16 +261,13 @@ export function useDuplicateFinder() {
         // Get size
         let size = item.type === 'file' ? item.size : (photoSizes.get(item.filename) || 0);
         
-        // Create hash key from normalized name + size
-        const hashKey = `${normalizedName}_${size}`;
+        // Create hash key from normalized name + size (or name-only if size unknown)
+        const hashKey = size > 0 ? `${normalizedName}_${size}` : normalizedName;
         
         // Get URL
         const path = `${userId}/${item.filename}`;
         const url = item.type === 'photo' ? photoUrls.get(path) : fileUrls.get(path);
-        
-        // Check if video for thumbnail
-        const isVideo = VIDEO_EXTENSIONS.test(item.filename);
-        
+
         const duplicateItem: DuplicateItem = {
           id: item.id,
           filename: item.filename,
