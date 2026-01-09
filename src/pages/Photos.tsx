@@ -1727,7 +1727,7 @@ export default function Photos() {
                 </span>
               </div>
               
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 flex-wrap justify-end">
                 {/* Zoom controls - only for photos */}
                 {currentLightboxItem.type === 'photo' && (
                   <>
@@ -1735,21 +1735,21 @@ export default function Photos() {
                       onClick={zoomOut}
                       disabled={zoomLevel <= 1}
                       className={cn(
-                        "p-2 rounded-full transition-colors",
+                        "p-2 rounded-full transition-colors hidden sm:flex",
                         zoomLevel <= 1 ? "opacity-50 cursor-not-allowed" : "hover:bg-white/10"
                       )}
                       title="Verkleinern"
                     >
                       <ZoomOut className="w-5 h-5 text-white" />
                     </button>
-                    <span className="text-white text-xs min-w-[3rem] text-center">
+                    <span className="text-white text-xs min-w-[3rem] text-center hidden sm:inline">
                       {Math.round(zoomLevel * 100)}%
                     </span>
                     <button
                       onClick={zoomIn}
                       disabled={zoomLevel >= 4}
                       className={cn(
-                        "p-2 rounded-full transition-colors",
+                        "p-2 rounded-full transition-colors hidden sm:flex",
                         zoomLevel >= 4 ? "opacity-50 cursor-not-allowed" : "hover:bg-white/10"
                       )}
                       title="Vergrößern"
@@ -1759,42 +1759,42 @@ export default function Photos() {
                     {zoomLevel > 1 && (
                       <button
                         onClick={resetZoom}
-                        className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                        className="p-2 hover:bg-white/10 rounded-full transition-colors hidden sm:flex"
                         title="Zoom zurücksetzen"
                       >
                         <RotateCcw className="w-5 h-5 text-white" />
                       </button>
                     )}
-                    <div className="w-px h-6 bg-white/20 mx-1" />
+                    <div className="w-px h-6 bg-white/20 mx-1 hidden sm:block" />
                   </>
                 )}
                 
                 <button
                   onClick={() => toggleFavorite(currentLightboxItem)}
-                  className="p-3 sm:p-2 hover:bg-white/10 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                  className="p-2 hover:bg-white/10 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
                 >
                   <Heart className={cn(
-                    "w-6 h-6 sm:w-5 sm:h-5",
+                    "w-5 h-5",
                     currentLightboxItem.is_favorite ? "text-red-500 fill-red-500" : "text-white"
                   )} />
                 </button>
                 <button
                   onClick={() => downloadMedia(currentLightboxItem)}
-                  className="p-3 sm:p-2 hover:bg-white/10 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                  className="p-2 hover:bg-white/10 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
                 >
-                  <Download className="w-6 h-6 sm:w-5 sm:h-5 text-white" />
+                  <Download className="w-5 h-5 text-white" />
                 </button>
                 <button
                   onClick={() => setRenameDialog({ isOpen: true, item: currentLightboxItem })}
-                  className="p-3 sm:p-2 hover:bg-white/10 rounded-full transition-colors hidden sm:flex min-h-[44px] min-w-[44px] items-center justify-center"
+                  className="p-2 hover:bg-white/10 rounded-full transition-colors hidden sm:flex min-h-[44px] min-w-[44px] items-center justify-center"
                 >
                   <Pencil className="w-5 h-5 text-white" />
                 </button>
                 <button
                   onClick={() => setDeleteConfirm({ isOpen: true, item: currentLightboxItem })}
-                  className="p-3 sm:p-2 hover:bg-red-500/20 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                  className="p-2 hover:bg-red-500/20 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center flex-shrink-0"
                 >
-                  <Trash2 className="w-6 h-6 sm:w-5 sm:h-5 text-red-400" />
+                  <Trash2 className="w-5 h-5 text-red-400" />
                 </button>
               </div>
             </div>

@@ -137,28 +137,48 @@ export function useDuplicateFinder() {
         message: 'Ermittle Dateigrößen...' 
       });
 
-      // Get storage metadata for photos (to get sizes)
+      // Get storage metadata for photos (to get sizes) - PAGINATED
       const photoSizes = new Map<string, number>();
-      const photoPaths = photos.map(p => `${userId}/${p.filename}`);
-      const filePaths = files.map(f => `${userId}/${f.filename}`);
-
-      // Batch list storage to get sizes
+      
       try {
-        const { data: photoList } = await supabase.storage
-          .from('photos')
-          .list(userId, { limit: 1000 });
+        let offset = 0;
+        const STORAGE_BATCH_SIZE = 1000;
+        let hasMore = true;
         
-        if (photoList) {
-          for (const file of photoList) {
-            const size = (file.metadata as any)?.size || file.metadata?.contentLength || 0;
-            photoSizes.set(file.name, size);
+        while (hasMore) {
+          const { data: photoList, error } = await supabase.storage
+            .from('photos')
+            .list(userId, { limit: STORAGE_BATCH_SIZE, offset });
+          
+          if (error) {
+            console.warn('Could not list photos storage:', error);
+            break;
           }
+          
+          if (photoList) {
+            for (const file of photoList) {
+              const size = (file.metadata as any)?.size || file.metadata?.contentLength || 0;
+              photoSizes.set(file.name, size);
+            }
+          }
+          
+          if (!photoList || photoList.length < STORAGE_BATCH_SIZE) {
+            hasMore = false;
+          } else {
+            offset += STORAGE_BATCH_SIZE;
+          }
+          
+          if (signal.aborted) return;
         }
       } catch (e) {
         console.warn('Could not list photos storage:', e);
       }
 
       if (signal.aborted) return;
+
+      // Build paths for signed URLs
+      const photoPaths = photos.map(p => `${userId}/${p.filename}`);
+      const filePaths = files.map(f => `${userId}/${f.filename}`);
 
       // Get signed URLs in batches
       setProgress({ 
