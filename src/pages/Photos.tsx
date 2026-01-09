@@ -46,6 +46,8 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useTags } from '@/hooks/useTags';
 import { useViewHistory } from '@/hooks/useViewHistory';
+import { useVideoThumbnail } from '@/hooks/useVideoThumbnail';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { useLocation } from 'react-router-dom';
 import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
@@ -111,6 +113,7 @@ interface MediaItem {
   taken_at: string;
   uploaded_at: string;
   url?: string;
+  thumbnail_url?: string;
   is_favorite?: boolean;
   type: 'photo' | 'video';
   mime_type?: string;
@@ -185,6 +188,8 @@ export default function Photos() {
   const { tags } = useTags();
   const { logEvent } = useSecurityLogs();
   const { recordView } = useViewHistory();
+  const { generateThumbnail } = useVideoThumbnail();
+  const isMobile = useIsMobile();
 
   const fetchData = useCallback(async () => {
     if (!userId) return;
@@ -313,7 +318,8 @@ export default function Photos() {
           continue;
         }
 
-        const filename = `${Date.now()}-${file.name}`;
+        const timestamp = Date.now();
+        const filename = `${timestamp}-${file.name}`;
         const mimeType = file.type || getMimeType(file.name);
         
         // Upload with proper content type
@@ -329,6 +335,30 @@ export default function Photos() {
           toast.error(`Fehler bei ${file.name}: ${uploadError.message}`);
           skipped++;
           continue;
+        }
+
+        // Generate and upload thumbnail for videos
+        let thumbnailFilename: string | null = null;
+        if (isVideo) {
+          try {
+            const thumbnailBlob = await generateThumbnail(file, 1, 640, 480);
+            if (thumbnailBlob) {
+              thumbnailFilename = `${timestamp}-thumb-${file.name.replace(/\.[^.]+$/, '.jpg')}`;
+              const { error: thumbError } = await supabase.storage
+                .from('photos')
+                .upload(`${userId}/thumbnails/${thumbnailFilename}`, thumbnailBlob, {
+                  contentType: 'image/jpeg',
+                  cacheControl: '31536000', // Cache for 1 year
+                });
+              
+              if (thumbError) {
+                console.warn('Thumbnail upload failed:', thumbError);
+                thumbnailFilename = null;
+              }
+            }
+          } catch (thumbErr) {
+            console.warn('Thumbnail generation failed:', thumbErr);
+          }
         }
 
         const { data: photoData, error: dbError } = await supabase
@@ -352,11 +382,21 @@ export default function Photos() {
           .from('photos')
           .createSignedUrl(`${userId}/${filename}`, 3600);
 
+        // Get thumbnail URL if available
+        let thumbnailUrl: string | undefined;
+        if (thumbnailFilename) {
+          const { data: thumbUrlData } = await supabase.storage
+            .from('photos')
+            .createSignedUrl(`${userId}/thumbnails/${thumbnailFilename}`, 3600);
+          thumbnailUrl = thumbUrlData?.signedUrl;
+        }
+
         const mediaType = isVideo ? 'video' as const : 'photo' as const;
 
         setMedia(prev => [{
           ...photoData, 
           url: urlData?.signedUrl,
+          thumbnail_url: thumbnailUrl,
           type: mediaType,
           mime_type: mimeType
         }, ...prev]);
@@ -1233,37 +1273,37 @@ export default function Photos() {
                 setSelectedItems(new Set());
               }}
               className={cn(
-                "flex items-center gap-2 px-3 py-2 rounded-xl border transition-all text-sm",
+                "flex items-center justify-center gap-2 min-h-[44px] min-w-[44px] px-3 py-2 rounded-xl border transition-all text-sm",
                 isMultiSelectMode 
                   ? "bg-primary text-primary-foreground border-primary" 
                   : "border-border hover:bg-muted"
               )}
             >
-              <CheckSquare className="w-4 h-4" />
+              <CheckSquare className="w-5 h-5" />
               <span className="hidden sm:inline">Auswählen</span>
             </button>
 
             <button
               onClick={() => setShowNewAlbumModal(true)}
-              className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border hover:bg-muted transition-all text-sm"
+              className="flex items-center justify-center gap-2 min-h-[44px] min-w-[44px] px-3 py-2 rounded-xl border border-border hover:bg-muted transition-all text-sm"
             >
-              <FolderPlus className="w-4 h-4" />
+              <FolderPlus className="w-5 h-5" />
               <span className="hidden sm:inline">Album</span>
             </button>
             
             <button
               onClick={() => cameraInputRef.current?.click()}
-              className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border hover:bg-muted transition-all text-sm"
+              className="flex items-center justify-center gap-2 min-h-[44px] min-w-[44px] px-3 py-2 rounded-xl border border-border hover:bg-muted transition-all text-sm"
             >
-              <Camera className="w-4 h-4" />
+              <Camera className="w-5 h-5" />
               <span className="hidden sm:inline">Kamera</span>
             </button>
 
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-primary hover:shadow-glow transition-all text-sm text-primary-foreground"
+              className="flex items-center justify-center gap-2 min-h-[44px] px-4 py-2 rounded-xl bg-primary text-primary-foreground hover:opacity-90 transition-all text-sm"
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-5 h-5" />
               <span>Hochladen</span>
             </button>
           </div>
@@ -1570,27 +1610,35 @@ export default function Photos() {
 
                     {item.type === 'video' ? (
                       <div className="relative w-full h-full bg-muted">
-                        <video
-                          src={item.url}
-                          className="w-full h-full object-cover"
-                          muted
-                          playsInline
-                          preload="metadata"
-                          onLoadedMetadata={(e) => {
-                            // Seek to 1 second to get a better thumbnail frame
-                            const video = e.currentTarget;
-                            if (video.duration > 1) {
-                              video.currentTime = 1;
-                            }
-                          }}
-                        />
+                        {/* Use thumbnail if available, otherwise load video */}
+                        {item.thumbnail_url ? (
+                          <img
+                            src={item.thumbnail_url}
+                            alt={item.caption || item.filename}
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <video
+                            src={item.url}
+                            className="w-full h-full object-cover"
+                            muted
+                            playsInline
+                            preload="metadata"
+                            onLoadedMetadata={(e) => {
+                              const video = e.currentTarget;
+                              if (video.duration > 1) {
+                                video.currentTime = 1;
+                              }
+                            }}
+                          />
+                        )}
                         <div className="absolute inset-0 flex items-center justify-center bg-black/30 pointer-events-none">
-                          <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                            <Play className="w-6 h-6 text-white ml-0.5" fill="white" />
+                          <div className="w-14 h-14 sm:w-12 sm:h-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                            <Play className="w-7 h-7 sm:w-6 sm:h-6 text-white ml-0.5" fill="white" />
                           </div>
                         </div>
-                        {/* Video duration badge - could be added if stored */}
-                        <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded bg-black/70 text-white text-xs font-medium pointer-events-none">
+                        <div className="absolute bottom-2 right-2 px-2 py-1 rounded bg-black/70 text-white text-xs font-medium pointer-events-none">
                           Video
                         </div>
                       </div>
@@ -1672,24 +1720,36 @@ export default function Photos() {
                     </div>
                   </div>
 
-                  {/* Tag Selector Dropdown - positioned above if near bottom */}
+                  {/* Tag Selector Dropdown - mobile-optimized positioning */}
                   {showTagSelector === item.id && (
                     <>
                       <div 
-                        className="fixed inset-0 z-40" 
+                        className="fixed inset-0 z-40 bg-black/20 sm:bg-transparent" 
                         onClick={(e) => { e.stopPropagation(); setShowTagSelector(null); }}
                       />
                       <div 
-                        className="absolute left-0 w-48 bg-card border border-border shadow-xl rounded-xl p-2 z-50 max-h-64 overflow-y-auto"
-                        style={{
-                          // Position above if item is in lower half of viewport
-                          bottom: index >= Math.floor(filteredMedia.length / 2) ? '100%' : 'auto',
-                          top: index >= Math.floor(filteredMedia.length / 2) ? 'auto' : '100%',
-                          marginBottom: index >= Math.floor(filteredMedia.length / 2) ? '8px' : '0',
-                          marginTop: index >= Math.floor(filteredMedia.length / 2) ? '0' : '8px',
-                        }}
+                        className={cn(
+                          "bg-card border border-border shadow-xl rounded-xl p-2 overflow-y-auto z-50",
+                          // Mobile: fixed bottom sheet style
+                          isMobile ? "fixed left-4 right-4 bottom-4 max-h-[60vh]" : "absolute left-0 w-48 max-h-64",
+                          // Desktop: position above if near bottom
+                          !isMobile && index >= Math.floor(filteredMedia.length / 2) && "bottom-full mb-2",
+                          !isMobile && index < Math.floor(filteredMedia.length / 2) && "top-full mt-2"
+                        )}
+                        style={isMobile ? { marginBottom: 'env(safe-area-inset-bottom)' } : undefined}
                         onClick={(e) => e.stopPropagation()}
                       >
+                        {isMobile && (
+                          <div className="flex items-center justify-between mb-3 pb-2 border-b border-border">
+                            <h3 className="font-medium text-foreground">Tags auswählen</h3>
+                            <button
+                              onClick={() => setShowTagSelector(null)}
+                              className="p-2 hover:bg-muted rounded-lg"
+                            >
+                              <X className="w-5 h-5 text-muted-foreground" />
+                            </button>
+                          </div>
+                        )}
                         {tags.length === 0 ? (
                           <p className="text-muted-foreground text-sm p-2 text-center">Keine Tags vorhanden</p>
                         ) : (
@@ -1703,21 +1763,23 @@ export default function Photos() {
                                 updateMediaTags(item.id, newTags);
                               }}
                               className={cn(
-                                "w-full px-3 py-2 rounded-lg text-left flex items-center gap-2 transition-all text-sm",
+                                "w-full min-h-[44px] px-3 py-2 rounded-lg text-left flex items-center gap-2 transition-all text-sm",
                                 item.tags?.includes(tag.id) ? "bg-primary/20" : "hover:bg-muted"
                               )}
                             >
-                              <span className="w-3 h-3 rounded-full" style={{ backgroundColor: tag.color }} />
+                              <span className="w-4 h-4 rounded-full" style={{ backgroundColor: tag.color }} />
                               <span className="text-foreground">{tag.name}</span>
                             </button>
                           ))
                         )}
-                        <button
-                          onClick={() => setShowTagSelector(null)}
-                          className="w-full mt-2 px-3 py-2 rounded-lg text-center text-sm text-muted-foreground hover:bg-muted border-t border-border"
-                        >
-                          Schließen
-                        </button>
+                        {!isMobile && (
+                          <button
+                            onClick={() => setShowTagSelector(null)}
+                            className="w-full mt-2 px-3 py-2 rounded-lg text-center text-sm text-muted-foreground hover:bg-muted border-t border-border"
+                          >
+                            Schließen
+                          </button>
+                        )}
                       </div>
                     </>
                   )}
@@ -1832,30 +1894,30 @@ export default function Photos() {
                 
                 <button
                   onClick={() => toggleFavorite(currentLightboxItem)}
-                  className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                  className="p-3 sm:p-2 hover:bg-white/10 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
                 >
                   <Heart className={cn(
-                    "w-5 h-5",
+                    "w-6 h-6 sm:w-5 sm:h-5",
                     currentLightboxItem.is_favorite ? "text-red-500 fill-red-500" : "text-white"
                   )} />
                 </button>
                 <button
                   onClick={() => downloadMedia(currentLightboxItem)}
-                  className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                  className="p-3 sm:p-2 hover:bg-white/10 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
                 >
-                  <Download className="w-5 h-5 text-white" />
+                  <Download className="w-6 h-6 sm:w-5 sm:h-5 text-white" />
                 </button>
                 <button
                   onClick={() => setRenameDialog({ isOpen: true, item: currentLightboxItem })}
-                  className="p-2 hover:bg-white/10 rounded-full transition-colors hidden sm:flex"
+                  className="p-3 sm:p-2 hover:bg-white/10 rounded-full transition-colors hidden sm:flex min-h-[44px] min-w-[44px] items-center justify-center"
                 >
                   <Pencil className="w-5 h-5 text-white" />
                 </button>
                 <button
                   onClick={() => setDeleteConfirm({ isOpen: true, item: currentLightboxItem })}
-                  className="p-2 hover:bg-red-500/20 rounded-full transition-colors"
+                  className="p-3 sm:p-2 hover:bg-red-500/20 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
                 >
-                  <Trash2 className="w-5 h-5 text-red-400" />
+                  <Trash2 className="w-6 h-6 sm:w-5 sm:h-5 text-red-400" />
                 </button>
               </div>
             </div>
