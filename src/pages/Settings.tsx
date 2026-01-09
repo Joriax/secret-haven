@@ -235,22 +235,36 @@ export default function Settings() {
   };
 
   const generateNewRecoveryKey = async () => {
-    if (!userId) return;
+    if (!userId || !sessionToken) return;
+
+    // Prompt for current PIN to authorize
+    const currentPinInput = prompt('Gib deinen aktuellen 6-stelligen PIN ein, um einen neuen Recovery-Key zu generieren:');
+    if (!currentPinInput || currentPinInput.length !== 6 || !/^\d+$/.test(currentPinInput)) {
+      toast.error('Gültiger 6-stelliger PIN erforderlich');
+      return;
+    }
 
     setIsLoading(true);
     try {
-      const newKey = generateRecoveryKey();
-      const { error } = await supabase
-        .from('vault_users')
-        .update({ recovery_key: newKey })
-        .eq('id', userId);
+      const response = await supabase.functions.invoke('verify-pin', {
+        body: { 
+          action: 'generate-recovery-key',
+          pin: currentPinInput,
+          sessionToken 
+        }
+      });
 
-      if (error) throw error;
+      const data = response.data;
+      if (response.error) throw new Error('Verbindungsfehler');
 
-      setRecoveryKey(newKey);
-      toast.success('Recovery-Key generiert', { description: 'Speichere ihn sicher ab!' });
-    } catch (err) {
-      toast.error('Fehler beim Generieren des Recovery-Keys');
+      if (data?.success && data?.recoveryKey) {
+        setRecoveryKey(data.recoveryKey);
+        toast.success('Recovery-Key generiert', { description: 'Speichere ihn sicher ab!' });
+      } else {
+        throw new Error(data?.error || 'Fehler beim Generieren des Recovery-Keys');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Fehler beim Generieren des Recovery-Keys');
     } finally {
       setIsLoading(false);
     }
