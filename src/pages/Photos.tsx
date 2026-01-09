@@ -46,7 +46,8 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useTags } from '@/hooks/useTags';
 import { useViewHistory } from '@/hooks/useViewHistory';
-import { useVideoThumbnail } from '@/hooks/useVideoThumbnail';
+import { useVideoThumbnail, formatDuration } from '@/hooks/useVideoThumbnail';
+import { LazyMediaItem } from '@/components/LazyMediaItem';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { useLocation } from 'react-router-dom';
@@ -118,6 +119,7 @@ interface MediaItem {
   type: 'photo' | 'video';
   mime_type?: string;
   tags?: string[];
+  duration?: number;
 }
 
 interface Album {
@@ -337,11 +339,14 @@ export default function Photos() {
           continue;
         }
 
-        // Generate and upload thumbnail for videos
+        // Generate and upload thumbnail for videos, also extract duration
         let thumbnailFilename: string | null = null;
+        let videoDuration: number | undefined;
         if (isVideo) {
           try {
-            const thumbnailBlob = await generateThumbnail(file, 1, 640, 480);
+            const { thumbnail: thumbnailBlob, duration } = await generateThumbnail(file, 1, 640, 480);
+            videoDuration = duration > 0 ? duration : undefined;
+            
             if (thumbnailBlob) {
               thumbnailFilename = `${timestamp}-thumb-${file.name.replace(/\.[^.]+$/, '.jpg')}`;
               const { error: thumbError } = await supabase.storage
@@ -398,7 +403,8 @@ export default function Photos() {
           url: urlData?.signedUrl,
           thumbnail_url: thumbnailUrl,
           type: mediaType,
-          mime_type: mimeType
+          mime_type: mimeType,
+          duration: videoDuration
         }, ...prev]);
 
         uploaded++;
@@ -1569,156 +1575,27 @@ export default function Photos() {
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3">
               {filteredMedia.map((item, index) => (
-                <div
-                  key={item.id}
-                  className={cn(
-                    "relative aspect-square group",
-                    isMultiSelectMode && selectedItems.has(item.id) && "ring-2 ring-primary rounded-xl"
-                  )}
-                  draggable={!isMultiSelectMode}
-                  onDragStart={(e) => handleDragStart(e, item)}
-                  onDragEnd={handleDragEnd}
-                >
-                  <div
-                    onClick={() => {
-                      if (isMultiSelectMode) {
-                        toggleItemSelection(item.id);
-                      } else {
-                        setLightboxIndex(index);
-                        recordView('photo', item.id);
-                      }
+                <div key={item.id} className="relative">
+                  <LazyMediaItem
+                    item={item}
+                    index={index}
+                    isSelected={selectedItems.has(item.id)}
+                    isMultiSelectMode={isMultiSelectMode}
+                    tags={tags}
+                    onToggleSelect={toggleItemSelection}
+                    onOpenLightbox={(idx) => {
+                      setLightboxIndex(idx);
+                      recordView('photo', item.id);
                     }}
-                    className="glass-card-hover overflow-hidden cursor-pointer w-full h-full"
-                  >
-                    {/* Multi-select checkbox */}
-                    {isMultiSelectMode && (
-                      <div className="absolute top-2 left-2 z-10">
-                        <div className={cn(
-                          "w-6 h-6 rounded-md flex items-center justify-center transition-colors",
-                          selectedItems.has(item.id) 
-                            ? "bg-primary text-primary-foreground" 
-                            : "bg-black/50 text-white"
-                        )}>
-                          {selectedItems.has(item.id) ? (
-                            <CheckSquare className="w-4 h-4" />
-                          ) : (
-                            <Square className="w-4 h-4" />
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {item.type === 'video' ? (
-                      <div className="relative w-full h-full bg-muted">
-                        {/* Use thumbnail if available, otherwise load video */}
-                        {item.thumbnail_url ? (
-                          <img
-                            src={item.thumbnail_url}
-                            alt={item.caption || item.filename}
-                            className="w-full h-full object-cover"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <video
-                            src={item.url}
-                            className="w-full h-full object-cover"
-                            muted
-                            playsInline
-                            preload="metadata"
-                            onLoadedMetadata={(e) => {
-                              const video = e.currentTarget;
-                              if (video.duration > 1) {
-                                video.currentTime = 1;
-                              }
-                            }}
-                          />
-                        )}
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/30 pointer-events-none">
-                          <div className="w-14 h-14 sm:w-12 sm:h-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                            <Play className="w-7 h-7 sm:w-6 sm:h-6 text-white ml-0.5" fill="white" />
-                          </div>
-                        </div>
-                        <div className="absolute bottom-2 right-2 px-2 py-1 rounded bg-black/70 text-white text-xs font-medium pointer-events-none">
-                          Video
-                        </div>
-                      </div>
-                    ) : (
-                      <img
-                        src={item.url}
-                        alt={item.caption || item.filename}
-                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                        loading="lazy"
-                      />
-                    )}
-                    
-                    {item.is_favorite && (
-                      <div className="absolute top-2 right-2">
-                        <Heart className="w-5 h-5 text-red-500 fill-red-500" />
-                      </div>
-                    )}
-
-                    {/* Tags indicator */}
-                    {item.tags && item.tags.length > 0 && !isMultiSelectMode && (
-                      <div className="absolute top-2 left-2 flex gap-1">
-                        {item.tags.slice(0, 2).map(tagId => {
-                          const tag = tags.find(t => t.id === tagId);
-                          return tag ? (
-                            <span key={tagId} className="w-3 h-3 rounded-full" style={{ backgroundColor: tag.color }} />
-                          ) : null;
-                        })}
-                      </div>
-                    )}
-                    
-                    {/* Hover overlay with actions */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                      <div className="absolute bottom-0 left-0 right-0 p-2">
-                        <p className="text-white text-xs truncate mb-2">
-                          {item.caption || item.filename.replace(/^\d+-/, '')}
-                        </p>
-                        {!isMultiSelectMode && (
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); toggleFavorite(item); }}
-                              className="p-1.5 hover:bg-white/20 rounded-lg transition-colors"
-                            >
-                              <Heart className={cn("w-4 h-4", item.is_favorite ? "text-red-500 fill-red-500" : "text-white")} />
-                            </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setShowTagSelector(item.id); }}
-                              className="p-1.5 hover:bg-white/20 rounded-lg transition-colors"
-                            >
-                              <Tag className="w-4 h-4 text-white" />
-                            </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setSinglePhotoAlbumPicker(item); }}
-                              className="p-1.5 hover:bg-white/20 rounded-lg transition-colors"
-                            >
-                              <Folder className="w-4 h-4 text-white" />
-                            </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setShareToAlbum({ isOpen: true, photo: item }); }}
-                              className="p-1.5 hover:bg-white/20 rounded-lg transition-colors"
-                              title="Zu geteiltem Album hinzufügen"
-                            >
-                              <Share2 className="w-4 h-4 text-white" />
-                            </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); downloadMedia(item); }}
-                              className="p-1.5 hover:bg-white/20 rounded-lg transition-colors"
-                            >
-                              <Download className="w-4 h-4 text-white" />
-                            </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ isOpen: true, item }); }}
-                              className="p-1.5 hover:bg-red-500/30 rounded-lg transition-colors"
-                            >
-                              <Trash2 className="w-4 h-4 text-red-400" />
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+                    onToggleFavorite={toggleFavorite}
+                    onShowTagSelector={setShowTagSelector}
+                    onShowAlbumPicker={setSinglePhotoAlbumPicker}
+                    onShareToAlbum={(item) => setShareToAlbum({ isOpen: true, photo: item })}
+                    onDownload={downloadMedia}
+                    onDelete={(item) => setDeleteConfirm({ isOpen: true, item })}
+                    onDragStart={handleDragStart}
+                    onDragEnd={handleDragEnd}
+                  />
 
                   {/* Tag Selector Dropdown - mobile-optimized positioning */}
                   {showTagSelector === item.id && (
