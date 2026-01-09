@@ -52,6 +52,78 @@ export type Database = {
           },
         ]
       }
+      backup_settings: {
+        Row: {
+          auto_backup_enabled: boolean
+          backup_frequency: string
+          created_at: string
+          id: string
+          include_media: boolean
+          last_auto_backup: string | null
+          max_versions: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          auto_backup_enabled?: boolean
+          backup_frequency?: string
+          created_at?: string
+          id?: string
+          include_media?: boolean
+          last_auto_backup?: string | null
+          max_versions?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          auto_backup_enabled?: boolean
+          backup_frequency?: string
+          created_at?: string
+          id?: string
+          include_media?: boolean
+          last_auto_backup?: string | null
+          max_versions?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      backup_versions: {
+        Row: {
+          created_at: string
+          filename: string
+          id: string
+          includes_media: boolean
+          is_auto_backup: boolean
+          item_counts: Json
+          size_bytes: number
+          storage_path: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          filename: string
+          id?: string
+          includes_media?: boolean
+          is_auto_backup?: boolean
+          item_counts?: Json
+          size_bytes?: number
+          storage_path: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          filename?: string
+          id?: string
+          includes_media?: boolean
+          is_auto_backup?: boolean
+          item_counts?: Json
+          size_bytes?: number
+          storage_path?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       break_entries: {
         Row: {
           break_date: string
