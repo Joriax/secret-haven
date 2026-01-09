@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserRoles } from '@/hooks/useUserRoles';
+import { SyncStatusIndicator } from '@/components/SyncStatusIndicator';
 import { cn } from '@/lib/utils';
 
 interface SidebarProps {
@@ -240,7 +241,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onSearchOpen
         )}
 
         {/* Footer */}
-        <div className="p-4 border-t border-border space-y-1">
+        <div className="p-4 border-t border-border space-y-2">
+          {/* Sync Status */}
+          <div className="flex items-center justify-between px-3 py-2">
+            <span className="text-xs text-muted-foreground">Sync-Status</span>
+            <SyncStatusIndicator />
+          </div>
+          
           <NavLink
             to="/settings"
             className={cn(
