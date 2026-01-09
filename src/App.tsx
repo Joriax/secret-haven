@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { RealtimeSyncProvider } from "@/contexts/RealtimeSyncContext";
 import { AutoLockProvider } from "@/components/AutoLockProvider";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
@@ -37,40 +38,42 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <AuthProvider>
-        <AutoLockProvider>
-          <Toaster />
-          <Sonner />
-          <PWAInstallPrompt />
-          <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/login" element={<Login />} />
-              <Route element={<MainLayout />}>
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/notes" element={<Notes />} />
-                <Route path="/photos" element={<Photos />} />
-                <Route path="/files" element={<Files />} />
-                <Route path="/secret-texts" element={<SecretTexts />} />
-                <Route path="/security-logs" element={<SecurityLogs />} />
-                <Route path="/trash" element={<Trash />} />
-                <Route path="/favorites" element={<Favorites />} />
-                <Route path="/recently-viewed" element={<RecentlyViewed />} />
-                <Route path="/recently-added" element={<RecentlyAdded />} />
-                <Route path="/tags" element={<TagsManagement />} />
-                <Route path="/links" element={<Links />} />
-                <Route path="/tiktok" element={<TikTok />} />
-                <Route path="/shared-albums" element={<SharedAlbums />} />
-                <Route path="/shared-album/:albumId" element={<SharedAlbumView />} />
-                <Route path="/break-tracker" element={<BreakTracker />} />
-                <Route path="/duplicate-finder" element={<DuplicateFinder />} />
-                <Route path="/settings" element={<Settings />} />
-                <Route path="/admin" element={<Admin />} />
-              </Route>
-              <Route path="/shared/:token" element={<SharedAlbum />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
-        </AutoLockProvider>
+        <RealtimeSyncProvider>
+          <AutoLockProvider>
+            <Toaster />
+            <Sonner />
+            <PWAInstallPrompt />
+            <BrowserRouter>
+              <Routes>
+                <Route path="/" element={<Index />} />
+                <Route path="/login" element={<Login />} />
+                <Route element={<MainLayout />}>
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/notes" element={<Notes />} />
+                  <Route path="/photos" element={<Photos />} />
+                  <Route path="/files" element={<Files />} />
+                  <Route path="/secret-texts" element={<SecretTexts />} />
+                  <Route path="/security-logs" element={<SecurityLogs />} />
+                  <Route path="/trash" element={<Trash />} />
+                  <Route path="/favorites" element={<Favorites />} />
+                  <Route path="/recently-viewed" element={<RecentlyViewed />} />
+                  <Route path="/recently-added" element={<RecentlyAdded />} />
+                  <Route path="/tags" element={<TagsManagement />} />
+                  <Route path="/links" element={<Links />} />
+                  <Route path="/tiktok" element={<TikTok />} />
+                  <Route path="/shared-albums" element={<SharedAlbums />} />
+                  <Route path="/shared-album/:albumId" element={<SharedAlbumView />} />
+                  <Route path="/break-tracker" element={<BreakTracker />} />
+                  <Route path="/duplicate-finder" element={<DuplicateFinder />} />
+                  <Route path="/settings" element={<Settings />} />
+                  <Route path="/admin" element={<Admin />} />
+                </Route>
+                <Route path="/shared/:token" element={<SharedAlbum />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </BrowserRouter>
+          </AutoLockProvider>
+        </RealtimeSyncProvider>
       </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>
