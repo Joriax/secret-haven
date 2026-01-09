@@ -273,51 +273,100 @@ export function BackupManager() {
         media_files: [],
       };
 
-      // Download media files if requested
+      // Download media files if requested - IMPROVED BATCH PROCESSING
       if (includeMedia) {
-        setExportStatus('Lade Fotos...');
         const photos = photosRes.data || [];
         const files = filesRes.data || [];
         const totalMedia = photos.length + files.length;
-        let downloaded = 0;
-
-        // Download photos (in batches of 5 for performance)
-        for (let i = 0; i < photos.length; i += 5) {
-          const batch = photos.slice(i, i + 5);
-          const results = await Promise.all(
-            batch.map(async (photo) => {
-              const data = await downloadStorageFile('photos', `${userId}/${photo.filename}`);
-              if (data) {
-                return { bucket: 'photos', path: `${userId}/${photo.filename}`, data };
-              }
-              return null;
-            })
-          );
+        
+        if (totalMedia > 0) {
+          let downloaded = 0;
+          let failed = 0;
+          const BATCH_SIZE = 10; // Increased batch size
+          const TIMEOUT_MS = 30000; // 30 second timeout per file
           
-          results.filter(Boolean).forEach(r => exportData.media_files!.push(r!));
-          downloaded += batch.length;
-          setExportProgress(20 + Math.round((downloaded / totalMedia) * 50));
-          setExportStatus(`Lade Medien: ${downloaded}/${totalMedia}`);
-        }
-
-        // Download files (in batches of 5)
-        setExportStatus('Lade Dateien...');
-        for (let i = 0; i < files.length; i += 5) {
-          const batch = files.slice(i, i + 5);
-          const results = await Promise.all(
-            batch.map(async (file) => {
-              const data = await downloadStorageFile('files', `${userId}/${file.filename}`);
-              if (data) {
-                return { bucket: 'files', path: `${userId}/${file.filename}`, data };
-              }
+          // Helper to download with timeout
+          const downloadWithTimeout = async (bucket: string, path: string): Promise<string | null> => {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+            
+            try {
+              const { data, error } = await supabaseClient.storage
+                .from(bucket)
+                .download(path);
+              
+              clearTimeout(timeoutId);
+              if (error || !data) return null;
+              
+              return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result as string);
+                reader.onerror = () => resolve(null);
+                reader.readAsDataURL(data);
+              });
+            } catch {
+              clearTimeout(timeoutId);
               return null;
-            })
-          );
+            }
+          };
+
+          // Download photos in parallel batches
+          setExportStatus(`Lade Fotos (0/${photos.length})...`);
+          for (let i = 0; i < photos.length; i += BATCH_SIZE) {
+            const batch = photos.slice(i, i + BATCH_SIZE);
+            const results = await Promise.allSettled(
+              batch.map(async (photo) => {
+                const data = await downloadWithTimeout('photos', `${userId}/${photo.filename}`);
+                if (data) {
+                  return { bucket: 'photos', path: `${userId}/${photo.filename}`, data };
+                }
+                return null;
+              })
+            );
+            
+            results.forEach(r => {
+              if (r.status === 'fulfilled' && r.value) {
+                exportData.media_files!.push(r.value);
+                downloaded++;
+              } else {
+                failed++;
+              }
+            });
+            
+            setExportProgress(20 + Math.round((downloaded / totalMedia) * 50));
+            setExportStatus(`Lade Fotos: ${Math.min(i + BATCH_SIZE, photos.length)}/${photos.length}${failed > 0 ? ` (${failed} fehlgeschlagen)` : ''}`);
+          }
+
+          // Download files in parallel batches
+          setExportStatus(`Lade Dateien (0/${files.length})...`);
+          for (let i = 0; i < files.length; i += BATCH_SIZE) {
+            const batch = files.slice(i, i + BATCH_SIZE);
+            const results = await Promise.allSettled(
+              batch.map(async (file) => {
+                const data = await downloadWithTimeout('files', `${userId}/${file.filename}`);
+                if (data) {
+                  return { bucket: 'files', path: `${userId}/${file.filename}`, data };
+                }
+                return null;
+              })
+            );
+            
+            results.forEach(r => {
+              if (r.status === 'fulfilled' && r.value) {
+                exportData.media_files!.push(r.value);
+                downloaded++;
+              } else {
+                failed++;
+              }
+            });
+            
+            setExportProgress(20 + Math.round((downloaded / totalMedia) * 50));
+            setExportStatus(`Lade Dateien: ${Math.min(i + BATCH_SIZE, files.length)}/${files.length}${failed > 0 ? ` (${failed} fehlgeschlagen)` : ''}`);
+          }
           
-          results.filter(Boolean).forEach(r => exportData.media_files!.push(r!));
-          downloaded += batch.length;
-          setExportProgress(20 + Math.round((downloaded / totalMedia) * 50));
-          setExportStatus(`Lade Medien: ${downloaded}/${totalMedia}`);
+          if (failed > 0) {
+            console.warn(`${failed} Medien konnten nicht heruntergeladen werden`);
+          }
         }
       }
 
@@ -597,30 +646,49 @@ export function BackupManager() {
       }
       setImportProgress(75);
 
-      // Import media files
+      // Import media files - IMPROVED BATCH PROCESSING
       if (importData.media_files?.length) {
         setImportStatus('Importiere Medien...');
         let mediaImported = 0;
+        let mediaFailed = 0;
         const totalMedia = importData.media_files.length;
+        const IMPORT_BATCH_SIZE = 5; // Upload in batches
 
-        for (const media of importData.media_files) {
-          try {
-            // Convert base64 data URL to blob
-            const response = await fetch(media.data);
-            const blob = await response.blob();
-            
-            // Upload to storage
-            const newPath = `${userId}/${media.path.split('/').pop()}`;
-            await supabaseClient.storage
-              .from(media.bucket)
-              .upload(newPath, blob, { upsert: true });
-            
-            mediaImported++;
-            setImportProgress(75 + Math.round((mediaImported / totalMedia) * 20));
-            setImportStatus(`Importiere Medien: ${mediaImported}/${totalMedia}`);
-          } catch (err) {
-            console.error('Media import error:', err);
-          }
+        for (let i = 0; i < importData.media_files.length; i += IMPORT_BATCH_SIZE) {
+          const batch = importData.media_files.slice(i, i + IMPORT_BATCH_SIZE);
+          
+          const results = await Promise.allSettled(
+            batch.map(async (media) => {
+              try {
+                // Convert base64 data URL to blob
+                const response = await fetch(media.data);
+                const blob = await response.blob();
+                
+                // Upload to storage
+                const newPath = `${userId}/${media.path.split('/').pop()}`;
+                const { error } = await supabaseClient.storage
+                  .from(media.bucket)
+                  .upload(newPath, blob, { upsert: true });
+                
+                if (error) throw error;
+                return true;
+              } catch (err) {
+                console.error('Media import error:', err);
+                return false;
+              }
+            })
+          );
+          
+          results.forEach(r => {
+            if (r.status === 'fulfilled' && r.value) {
+              mediaImported++;
+            } else {
+              mediaFailed++;
+            }
+          });
+          
+          setImportProgress(75 + Math.round((mediaImported / totalMedia) * 20));
+          setImportStatus(`Importiere Medien: ${mediaImported}/${totalMedia}${mediaFailed > 0 ? ` (${mediaFailed} fehlgeschlagen)` : ''}`);
         }
       }
 

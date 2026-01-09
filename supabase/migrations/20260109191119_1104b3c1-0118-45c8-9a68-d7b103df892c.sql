@@ -1,0 +1,29 @@
+-- Enable REPLICA IDENTITY FULL for realtime updates on all relevant tables
+ALTER TABLE public.notes REPLICA IDENTITY FULL;
+ALTER TABLE public.photos REPLICA IDENTITY FULL;
+ALTER TABLE public.files REPLICA IDENTITY FULL;
+ALTER TABLE public.albums REPLICA IDENTITY FULL;
+ALTER TABLE public.links REPLICA IDENTITY FULL;
+ALTER TABLE public.tiktok_videos REPLICA IDENTITY FULL;
+ALTER TABLE public.tags REPLICA IDENTITY FULL;
+ALTER TABLE public.view_history REPLICA IDENTITY FULL;
+ALTER TABLE public.security_logs REPLICA IDENTITY FULL;
+ALTER TABLE public.secret_texts REPLICA IDENTITY FULL;
+ALTER TABLE public.note_folders REPLICA IDENTITY FULL;
+ALTER TABLE public.link_folders REPLICA IDENTITY FULL;
+ALTER TABLE public.tiktok_folders REPLICA IDENTITY FULL;
+ALTER TABLE public.file_albums REPLICA IDENTITY FULL;
+
+-- Add tables to realtime publication
+ALTER PUBLICATION supabase_realtime ADD TABLE public.notes;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.photos;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.files;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.albums;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.links;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.tiktok_videos;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.tags;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.secret_texts;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.note_folders;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.link_folders;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.tiktok_folders;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.file_albums;
