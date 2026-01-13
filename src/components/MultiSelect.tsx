@@ -1,7 +1,27 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Trash2, Tag, FolderOpen, Star, RotateCcw, Share2, CheckCheck } from 'lucide-react';
+import { X, Trash2, Tag, FolderOpen, Star, RotateCcw, Share2, CheckCheck, Calendar, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+
+interface TagOption {
+  id: string;
+  name: string;
+  color: string;
+}
+
+interface DateOption {
+  date: string;
+  label: string;
+  count: number;
+}
 
 interface MultiSelectBarProps {
   selectedCount: number;
@@ -13,8 +33,12 @@ interface MultiSelectBarProps {
   onRestore?: () => void;
   onShare?: () => void;
   onSelectAll?: () => void;
+  onSelectByTag?: (tagId: string) => void;
+  onSelectByDate?: (date: string) => void;
   totalCount?: number;
   isTrash?: boolean;
+  availableTags?: TagOption[];
+  availableDates?: DateOption[];
 }
 
 export const MultiSelectBar: React.FC<MultiSelectBarProps> = ({
@@ -27,9 +51,15 @@ export const MultiSelectBar: React.FC<MultiSelectBarProps> = ({
   onRestore,
   onShare,
   onSelectAll,
+  onSelectByTag,
+  onSelectByDate,
   totalCount,
-  isTrash = false
+  isTrash = false,
+  availableTags = [],
+  availableDates = [],
 }) => {
+  const hasQuickSelect = (onSelectByTag && availableTags.length > 0) || (onSelectByDate && availableDates.length > 0);
+
   return (
     <AnimatePresence>
       {selectedCount > 0 && (
@@ -60,6 +90,64 @@ export const MultiSelectBar: React.FC<MultiSelectBarProps> = ({
                   onClick={onSelectAll} 
                   variant="primary" 
                 />
+              )}
+
+              {/* Quick Select Dropdown */}
+              {hasQuickSelect && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      className="flex items-center gap-2 px-3 py-2 rounded-lg transition-colors text-sm text-white/80 hover:bg-white/10"
+                      title="Schnellauswahl"
+                    >
+                      <Tag className="w-4 h-4" />
+                      <span className="hidden md:inline">Schnellauswahl</span>
+                      <ChevronDown className="w-3 h-3" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-56 max-h-80 overflow-y-auto">
+                    {onSelectByTag && availableTags.length > 0 && (
+                      <>
+                        <DropdownMenuLabel className="flex items-center gap-2">
+                          <Tag className="w-3 h-3" />
+                          Nach Tag auswählen
+                        </DropdownMenuLabel>
+                        {availableTags.map(tag => (
+                          <DropdownMenuItem
+                            key={tag.id}
+                            onClick={() => onSelectByTag(tag.id)}
+                            className="flex items-center gap-2"
+                          >
+                            <span 
+                              className="w-3 h-3 rounded-full" 
+                              style={{ backgroundColor: tag.color }} 
+                            />
+                            {tag.name}
+                          </DropdownMenuItem>
+                        ))}
+                        {onSelectByDate && availableDates.length > 0 && <DropdownMenuSeparator />}
+                      </>
+                    )}
+                    {onSelectByDate && availableDates.length > 0 && (
+                      <>
+                        <DropdownMenuLabel className="flex items-center gap-2">
+                          <Calendar className="w-3 h-3" />
+                          Nach Datum auswählen
+                        </DropdownMenuLabel>
+                        {availableDates.slice(0, 10).map(dateOption => (
+                          <DropdownMenuItem
+                            key={dateOption.date}
+                            onClick={() => onSelectByDate(dateOption.date)}
+                            className="flex items-center justify-between"
+                          >
+                            <span>{dateOption.label}</span>
+                            <span className="text-xs text-muted-foreground">{dateOption.count}</span>
+                          </DropdownMenuItem>
+                        ))}
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
               
               {isTrash ? (

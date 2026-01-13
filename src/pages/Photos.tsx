@@ -2176,6 +2176,39 @@ export default function Photos() {
           const allIds = new Set(filteredMedia.map(m => m.id));
           setSelectedItems(allIds);
         }}
+        availableTags={tags}
+        onSelectByTag={(tagId) => {
+          const matchingIds = filteredMedia.filter(m => m.tags?.includes(tagId)).map(m => m.id);
+          setSelectedItems(prev => {
+            const newSet = new Set(prev);
+            matchingIds.forEach(id => newSet.add(id));
+            return newSet;
+          });
+        }}
+        availableDates={(() => {
+          const dateMap = new Map<string, number>();
+          filteredMedia.forEach(m => {
+            const date = new Date(m.uploaded_at).toISOString().split('T')[0];
+            dateMap.set(date, (dateMap.get(date) || 0) + 1);
+          });
+          return Array.from(dateMap.entries())
+            .sort((a, b) => b[0].localeCompare(a[0]))
+            .map(([date, count]) => ({
+              date,
+              label: new Date(date).toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: 'numeric' }),
+              count,
+            }));
+        })()}
+        onSelectByDate={(date) => {
+          const matchingIds = filteredMedia
+            .filter(m => new Date(m.uploaded_at).toISOString().split('T')[0] === date)
+            .map(m => m.id);
+          setSelectedItems(prev => {
+            const newSet = new Set(prev);
+            matchingIds.forEach(id => newSet.add(id));
+            return newSet;
+          });
+        }}
       />
 
       {/* Shared Album Button for Multi-Select */}
