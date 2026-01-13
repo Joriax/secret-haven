@@ -1794,6 +1794,7 @@ export default function Files() {
       {/* Multi-select action bar */}
       <MultiSelectBar
         selectedCount={selectedItems.size}
+        totalCount={filteredFiles.length}
         onClear={() => {
           setSelectedItems(new Set());
           setIsMultiSelectMode(false);
@@ -1802,6 +1803,10 @@ export default function Files() {
         onTag={() => setShowBulkTagManager(true)}
         onFavorite={handleBulkFavorite}
         onMove={() => setShowAlbumPicker(true)}
+        onSelectAll={() => {
+          const allIds = new Set(filteredFiles.map(f => f.id));
+          setSelectedItems(allIds);
+        }}
       />
 
       {/* Shared Album Button for Multi-Select */}

@@ -5,8 +5,14 @@ import { useTags, Tag as TagType } from '@/hooks/useTags';
 import { cn } from '@/lib/utils';
 
 const PRESET_COLORS = [
+  // Primary colors
   '#ef4444', '#f97316', '#eab308', '#22c55e', 
-  '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899'
+  '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899',
+  // Extended palette
+  '#f43f5e', '#fb923c', '#facc15', '#4ade80',
+  '#2dd4bf', '#60a5fa', '#a855f7', '#f472b6',
+  // Neutral tones
+  '#64748b', '#78716c', '#71717a', '#737373',
 ];
 
 interface TagManagerProps {
@@ -116,8 +122,8 @@ export const TagManager: React.FC<TagManagerProps> = ({
               {/* Color Picker */}
               <div className="flex items-center gap-2">
                 <Palette className="w-4 h-4 text-white/50" />
-                <div className="flex gap-1">
-                  {PRESET_COLORS.map((color) => (
+                <div className="flex gap-1 flex-wrap">
+                  {PRESET_COLORS.slice(0, 16).map((color) => (
                     <button
                       key={color}
                       onClick={() => setNewTagColor(color)}
