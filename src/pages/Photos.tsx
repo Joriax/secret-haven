@@ -127,11 +127,14 @@ interface Album {
   id: string;
   name: string;
   created_at: string;
+  parent_id?: string | null;
   cover_url?: string;
   count?: number;
   is_pinned?: boolean;
   color?: string;
   icon?: string;
+  children?: Album[];
+  depth?: number;
 }
 
 type ViewMode = 'all' | 'photos' | 'videos' | 'albums';
@@ -149,6 +152,7 @@ export default function Photos() {
   const [newAlbumName, setNewAlbumName] = useState('');
   const [newAlbumColor, setNewAlbumColor] = useState('#6366f1');
   const [newAlbumIcon, setNewAlbumIcon] = useState('folder');
+  const [newAlbumParentId, setNewAlbumParentId] = useState<string | null>(null);
   const [editingAlbum, setEditingAlbum] = useState<Album | null>(null);
   const [showEditAlbumModal, setShowEditAlbumModal] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('all');
@@ -232,13 +236,31 @@ export default function Photos() {
         })
       );
 
-      // Get album cover and count
+      // Get album cover and count - prefer images for cover, or use video thumbnail
       const albumsWithCovers = await Promise.all(
         (albumsRes.data || []).map(async (album) => {
           const albumPhotos = photosWithUrls.filter(p => p.album_id === album.id);
+          // Find a suitable cover: prefer first image, otherwise use video thumbnail
+          let cover_url: string | undefined;
+          const firstImage = albumPhotos.find(p => p.type === 'photo');
+          const firstVideoItem = albumPhotos.find(p => p.type === 'video');
+          
+          if (firstImage) {
+            cover_url = firstImage.url;
+          } else if (firstVideoItem) {
+            // Try to get video thumbnail from DB record
+            const photo = photosRes.data?.find(p => p.id === firstVideoItem.id);
+            if (photo?.thumbnail_filename) {
+              const { data: thumbData } = await supabase.storage
+                .from('photos')
+                .createSignedUrl(`${userId}/thumbnails/${photo.thumbnail_filename}`, 3600);
+              cover_url = thumbData?.signedUrl;
+            }
+          }
+          
           return {
             ...album,
-            cover_url: albumPhotos[0]?.url,
+            cover_url,
             count: albumPhotos.length
           };
         })
@@ -452,7 +474,7 @@ export default function Photos() {
     }
   };
 
-  const createAlbum = async () => {
+  const createAlbum = async (parentId?: string | null) => {
     if (!newAlbumName.trim() || !userId) return;
 
     try {
@@ -463,6 +485,7 @@ export default function Photos() {
           name: newAlbumName.trim(),
           color: newAlbumColor,
           icon: newAlbumIcon,
+          parent_id: parentId ?? newAlbumParentId ?? null,
         })
         .select()
         .single();
@@ -473,8 +496,9 @@ export default function Photos() {
       setNewAlbumName('');
       setNewAlbumColor('#6366f1');
       setNewAlbumIcon('folder');
+      setNewAlbumParentId(null);
       setShowNewAlbumModal(false);
-      toast.success('Album erstellt');
+      toast.success(parentId || newAlbumParentId ? 'Unteralbum erstellt' : 'Album erstellt');
     } catch (error) {
       console.error('Error creating album:', error);
       toast.error('Fehler beim Erstellen');
@@ -1998,7 +2022,7 @@ export default function Photos() {
                   Abbrechen
                 </button>
                 <button
-                  onClick={createAlbum}
+                  onClick={() => createAlbum()}
                   disabled={!newAlbumName.trim()}
                   className="flex-1 px-4 py-3 rounded-xl bg-gradient-primary text-primary-foreground hover:shadow-glow transition-all disabled:opacity-50"
                 >

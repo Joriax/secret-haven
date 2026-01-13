@@ -75,7 +75,7 @@ const itemVariants = {
 
 export default function Links() {
   const { links, isLoading, createLink, updateLink, deleteLink, toggleFavorite, moveToFolder } = useLinks();
-  const { folders, createFolder, updateFolder, deleteFolder } = useLinkFolders();
+  const { folders, hierarchicalFolders, flattenedFolders, createFolder, updateFolder, deleteFolder, getDescendantIds } = useLinkFolders();
   const { recordView } = useViewHistory();
   const { sessionToken, supabaseClient: supabase } = useAuth();
 
@@ -100,10 +100,12 @@ export default function Links() {
   const [newFolderColor, setNewFolderColor] = useState(FOLDER_COLORS[0]);
   const [editingFolder, setEditingFolder] = useState<LinkFolder | null>(null);
 
-  // Filter links
+  // Filter links - include sub-folder items when parent folder is selected
   const filteredLinks = useMemo(() => {
     return links.filter((link) => {
-      const matchesFolder = selectedFolderId === null || link.folder_id === selectedFolderId;
+      // If a folder is selected, include items from that folder AND all sub-folders
+      const matchesFolder = selectedFolderId === null || 
+        (selectedFolderId && getDescendantIds(selectedFolderId).includes(link.folder_id || ''));
       const matchesSearch =
         searchQuery === '' ||
         link.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -112,7 +114,7 @@ export default function Links() {
       const matchesFavorite = !filterFavorites || link.is_favorite;
       return matchesFolder && matchesSearch && matchesFavorite;
     });
-  }, [links, selectedFolderId, searchQuery, filterFavorites]);
+  }, [links, selectedFolderId, searchQuery, filterFavorites, getDescendantIds]);
 
   // Fetch metadata when URL changes
   const fetchMetadata = async (url: string) => {
