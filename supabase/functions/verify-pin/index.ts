@@ -593,6 +593,37 @@ serve(async (req) => {
         );
       }
 
+      // Check if new PIN is already used by another user (security: generic error message)
+      const { data: allUsers } = await supabase
+        .from('vault_users')
+        .select('id, pin_hash, decoy_pin_hash')
+        .neq('id', authenticatedUser.userId);
+
+      if (allUsers) {
+        for (const otherUser of allUsers) {
+          // Check against main PIN
+          const matchesMain = await verifyPin(newPin, otherUser.pin_hash);
+          if (matchesMain) {
+            await logSecurityEvent(supabase, authenticatedUser.userId, 'pin_change_failed', { reason: 'pin_collision' }, req);
+            return new Response(
+              JSON.stringify({ success: false, error: 'PIN-Änderung nicht möglich. Bitte wähle einen anderen PIN.' }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+            );
+          }
+          // Check against decoy PIN
+          if (otherUser.decoy_pin_hash) {
+            const matchesDecoy = await verifyPin(newPin, otherUser.decoy_pin_hash);
+            if (matchesDecoy) {
+              await logSecurityEvent(supabase, authenticatedUser.userId, 'pin_change_failed', { reason: 'pin_collision' }, req);
+              return new Response(
+                JSON.stringify({ success: false, error: 'PIN-Änderung nicht möglich. Bitte wähle einen anderen PIN.' }),
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+              );
+            }
+          }
+        }
+      }
+
       const newHash = await hashPin(newPin);
       const { error: updateError } = await supabase
         .from('vault_users')
