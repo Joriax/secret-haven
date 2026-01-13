@@ -69,7 +69,7 @@ export const MultiSelectBar: React.FC<MultiSelectBarProps> = ({
           exit={{ opacity: 0, y: 20 }}
           className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40"
         >
-          <div className="glass-card flex items-center gap-3 px-4 py-3">
+          <div className="glass-card flex items-center gap-2 md:gap-3 px-3 md:px-4 py-3 max-w-[95vw] overflow-x-auto">
             <div className="flex items-center gap-2">
               <span className="w-8 h-8 rounded-full bg-purple-500 flex items-center justify-center text-white font-medium text-sm">
                 {selectedCount}
@@ -97,15 +97,14 @@ export const MultiSelectBar: React.FC<MultiSelectBarProps> = ({
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button
-                      className="flex items-center gap-2 px-3 py-2 rounded-lg transition-colors text-sm text-white/80 hover:bg-white/10"
+                      className="flex items-center gap-2 px-2 md:px-3 py-2 rounded-lg transition-colors text-sm text-white/80 hover:bg-white/10"
                       title="Schnellauswahl"
                     >
                       <Tag className="w-4 h-4" />
-                      <span className="hidden md:inline">Schnellauswahl</span>
                       <ChevronDown className="w-3 h-3" />
                     </button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-56 max-h-80 overflow-y-auto">
+                  <DropdownMenuContent align="end" side="top" className="w-56 max-h-80 overflow-y-auto">
                     {onSelectByTag && availableTags.length > 0 && (
                       <>
                         <DropdownMenuLabel className="flex items-center gap-2">
