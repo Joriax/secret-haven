@@ -52,6 +52,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { useLocation } from 'react-router-dom';
 import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
+import { AlbumDeleteConfirmDialog } from '@/components/AlbumDeleteConfirmDialog';
 import { RenameDialog } from '@/components/RenameDialog';
 import { MultiSelectBar } from '@/components/MultiSelect';
 import { TagManager } from '@/components/TagManager';
@@ -59,6 +60,7 @@ import { SharedAlbumButton } from '@/components/SharedAlbumButton';
 import { ShareToAlbumDialog } from '@/components/ShareToAlbumDialog';
 import { toast } from 'sonner';
 import { useSecurityLogs } from '@/hooks/useSecurityLogs';
+import { useHierarchicalAlbums, HierarchicalAlbum } from '@/hooks/useHierarchicalAlbums';
 import { resumableStorageUpload } from '@/lib/resumableStorageUpload';
 
 // Video file extensions and MIME types
@@ -157,6 +159,7 @@ export default function Photos() {
   const [showEditAlbumModal, setShowEditAlbumModal] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('all');
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; item: MediaItem | null; isMulti?: boolean }>({ isOpen: false, item: null });
+  const [albumDeleteConfirm, setAlbumDeleteConfirm] = useState<{ isOpen: boolean; album: Album | null }>({ isOpen: false, album: null });
   const [renameDialog, setRenameDialog] = useState<{ isOpen: boolean; item: MediaItem | null }>({ isOpen: false, item: null });
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
@@ -212,7 +215,7 @@ export default function Photos() {
       setIsLoading(true);
       const [photosRes, albumsRes] = await Promise.all([
         supabase.from('photos').select('*').eq('user_id', userId).is('deleted_at', null).order('uploaded_at', { ascending: false }),
-        supabase.from('albums').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
+        supabase.from('albums').select('*').eq('user_id', userId).order('is_pinned', { ascending: false, nullsFirst: false }).order('created_at', { ascending: false }),
       ]);
 
       if (photosRes.error) throw photosRes.error;
@@ -537,28 +540,81 @@ export default function Photos() {
     setShowEditAlbumModal(true);
   };
 
-  const deleteAlbum = async (albumId: string) => {
-    if (!userId) return;
+  const handleDeleteAlbumWithItems = async () => {
+    const album = albumDeleteConfirm.album;
+    if (!userId || !album) return;
 
     try {
-      // First, move all photos in this album to "no album"
-      await supabase
-        .from('photos')
-        .update({ album_id: null })
-        .eq('album_id', albumId);
+      // Get all photos in this album
+      const albumPhotos = media.filter(m => m.album_id === album.id);
+      
+      // Delete the photos (move to trash)
+      if (albumPhotos.length > 0) {
+        await supabase
+          .from('photos')
+          .update({ deleted_at: new Date().toISOString() })
+          .eq('album_id', album.id);
+      }
+
+      // Delete sub-albums first (move their items to no album)
+      const childAlbums = albums.filter(a => a.parent_id === album.id);
+      for (const child of childAlbums) {
+        await supabase.from('photos').update({ album_id: null }).eq('album_id', child.id);
+        await supabase.from('albums').delete().eq('id', child.id);
+      }
 
       // Then delete the album
       const { error } = await supabase
         .from('albums')
         .delete()
-        .eq('id', albumId);
+        .eq('id', album.id);
 
       if (error) throw error;
 
-      setAlbums(prev => prev.filter(a => a.id !== albumId));
-      if (selectedAlbum?.id === albumId) {
+      if (selectedAlbum?.id === album.id) {
         setSelectedAlbum(null);
       }
+      setAlbumDeleteConfirm({ isOpen: false, album: null });
+      fetchData();
+      toast.success('Album und Inhalte gelöscht');
+    } catch (error) {
+      console.error('Error deleting album:', error);
+      toast.error('Fehler beim Löschen');
+    }
+  };
+
+  const handleDeleteAlbumKeepItems = async () => {
+    const album = albumDeleteConfirm.album;
+    if (!userId || !album) return;
+
+    try {
+      // Move all photos in this album to "no album"
+      await supabase
+        .from('photos')
+        .update({ album_id: null })
+        .eq('album_id', album.id);
+
+      // Move child albums to parent of deleted album
+      const childAlbums = albums.filter(a => a.parent_id === album.id);
+      if (childAlbums.length > 0) {
+        await supabase
+          .from('albums')
+          .update({ parent_id: album.parent_id || null })
+          .eq('parent_id', album.id);
+      }
+
+      // Then delete the album
+      const { error } = await supabase
+        .from('albums')
+        .delete()
+        .eq('id', album.id);
+
+      if (error) throw error;
+
+      if (selectedAlbum?.id === album.id) {
+        setSelectedAlbum(null);
+      }
+      setAlbumDeleteConfirm({ isOpen: false, album: null });
       fetchData();
       toast.success('Album gelöscht');
     } catch (error) {
@@ -1533,6 +1589,17 @@ export default function Photos() {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
+                    setNewAlbumParentId(album.id);
+                    setShowNewAlbumModal(true);
+                  }}
+                  className="p-1.5 rounded-lg bg-black/40 opacity-0 group-hover:opacity-100 hover:bg-black/60 transition-all"
+                  title="Unteralbum erstellen"
+                >
+                  <FolderPlus className="w-3.5 h-3.5 text-white" />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
                     openEditAlbumModal(album);
                   }}
                   className="p-1.5 rounded-lg bg-black/40 opacity-0 group-hover:opacity-100 hover:bg-black/60 transition-all"
@@ -1557,7 +1624,7 @@ export default function Photos() {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    deleteAlbum(album.id);
+                    setAlbumDeleteConfirm({ isOpen: true, album });
                   }}
                   className="p-1.5 rounded-lg bg-black/40 opacity-0 group-hover:opacity-100 hover:bg-destructive/80 transition-all"
                   title="Album löschen"
@@ -1985,6 +2052,21 @@ export default function Photos() {
                 autoFocus
                 onKeyDown={(e) => e.key === 'Enter' && createAlbum()}
               />
+
+              {/* Parent Album Selection */}
+              <div className="mb-4">
+                <p className="text-sm text-muted-foreground mb-2">Übergeordnetes Album (optional)</p>
+                <select
+                  value={newAlbumParentId || ''}
+                  onChange={(e) => setNewAlbumParentId(e.target.value || null)}
+                  className="w-full px-4 py-3 rounded-xl vault-input text-foreground bg-muted border border-border"
+                >
+                  <option value="">Kein übergeordnetes Album</option>
+                  {albums.filter(a => !a.parent_id).map(album => (
+                    <option key={album.id} value={album.id}>{album.name}</option>
+                  ))}
+                </select>
+              </div>
               
               {/* Color Selection */}
               <div className="mb-4">
@@ -2149,6 +2231,16 @@ export default function Photos() {
         onClose={() => setDeleteConfirm({ isOpen: false, item: null })}
         onConfirm={deleteConfirm.isMulti ? handleMultiDelete : handleDelete}
         itemName={deleteConfirm.isMulti ? `${selectedItems.size} Elemente` : (deleteConfirm.item?.caption || deleteConfirm.item?.filename.replace(/^\d+-/, ''))}
+      />
+
+      {/* Album Delete Confirmation */}
+      <AlbumDeleteConfirmDialog
+        isOpen={albumDeleteConfirm.isOpen}
+        albumName={albumDeleteConfirm.album?.name || ''}
+        itemCount={albumDeleteConfirm.album ? media.filter(m => m.album_id === albumDeleteConfirm.album?.id).length : 0}
+        onClose={() => setAlbumDeleteConfirm({ isOpen: false, album: null })}
+        onDeleteWithItems={handleDeleteAlbumWithItems}
+        onDeleteKeepItems={handleDeleteAlbumKeepItems}
       />
 
       {/* Rename Dialog */}
