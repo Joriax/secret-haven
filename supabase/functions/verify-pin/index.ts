@@ -335,7 +335,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const body = await req.json();
-    const { action, pin, newPin, recoveryKey, targetUserId, sessionToken, role } = body;
+    const { action, pin, newPin, recoveryKey, targetUserId, sessionToken, role, username, newUsername } = body;
     const ipAddress = getClientIP(req);
     
     console.log(`PIN action requested: ${action} from IP: ${ipAddress}`);
@@ -346,7 +346,7 @@ serve(async (req) => {
       authenticatedUser = await validateSession(supabase, sessionToken);
     }
 
-    // ========== VERIFY PIN ==========
+    // ========== VERIFY PIN (with username) ==========
     if (action === 'verify') {
       // Check rate limiting first
       const rateLimitCheck = await checkRateLimit(supabase, ipAddress);
@@ -367,6 +367,13 @@ serve(async (req) => {
         );
       }
 
+      if (!username || !username.trim()) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Benutzername erforderlich' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
+      }
+
       if (!pin || pin.length !== 6) {
         return new Response(
           JSON.stringify({ success: false, error: 'PIN muss 6 Ziffern haben' }),
@@ -374,85 +381,63 @@ serve(async (req) => {
         );
       }
 
-      const { data: users, error: fetchError } = await supabase
+      // Find user by username
+      const { data: user, error: fetchError } = await supabase
         .from('vault_users')
-        .select('id, pin_hash, decoy_pin_hash');
+        .select('id, pin_hash, decoy_pin_hash, username')
+        .eq('username', username.trim().toLowerCase())
+        .maybeSingle();
 
       if (fetchError) {
         console.error('Database error:', fetchError);
         throw fetchError;
       }
 
-      // Create default user if none exists
-      if (!users || users.length === 0) {
-        console.log('No user found, creating default user');
-        const defaultHash = await hashPin('123456');
-
-        const { data: newUser, error: createError } = await supabase
-          .from('vault_users')
-          .insert({ pin_hash: defaultHash })
-          .select()
-          .single();
-
-        if (createError) throw createError;
-
-        if (pin === '123456') {
-          await recordLoginAttempt(supabase, ipAddress, true);
-          await logSecurityEvent(supabase, newUser.id, 'login_success', { method: 'pin', isNewUser: true }, req);
-          const token = await createSessionWithHistory(supabase, newUser.id, false, req);
-          return new Response(
-            JSON.stringify({ success: true, userId: newUser.id, isDecoy: false, sessionToken: token }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
+      if (!user) {
         await recordLoginAttempt(supabase, ipAddress, false);
         return new Response(
           JSON.stringify({ 
             success: false, 
-            error: 'Falscher PIN',
+            error: 'Benutzername oder PIN falsch',
             remainingAttempts: rateLimitCheck.remainingAttempts - 1
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      // Find matching user
-      for (const user of users) {
-        // Check decoy PIN first
-        if (user.decoy_pin_hash) {
-          const isDecoy = await verifyPin(pin, user.decoy_pin_hash);
-          if (isDecoy) {
-            await recordLoginAttempt(supabase, ipAddress, true);
-            await logSecurityEvent(supabase, user.id, 'decoy_login', { method: 'pin' }, req);
-            const token = await createSessionWithHistory(supabase, user.id, true, req);
-            return new Response(
-              JSON.stringify({ success: true, userId: user.id, isDecoy: true, sessionToken: token }),
-              { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
-          }
-        }
-
-        const isMain = await verifyPin(pin, user.pin_hash);
-        if (isMain) {
+      // Check decoy PIN first
+      if (user.decoy_pin_hash) {
+        const isDecoy = await verifyPin(pin, user.decoy_pin_hash);
+        if (isDecoy) {
           await recordLoginAttempt(supabase, ipAddress, true);
-          await logSecurityEvent(supabase, user.id, 'login_success', { method: 'pin' }, req);
-          const token = await createSessionWithHistory(supabase, user.id, false, req);
+          await logSecurityEvent(supabase, user.id, 'decoy_login', { method: 'pin', username: user.username }, req);
+          const token = await createSessionWithHistory(supabase, user.id, true, req);
           return new Response(
-            JSON.stringify({ success: true, userId: user.id, isDecoy: false, sessionToken: token }),
+            JSON.stringify({ success: true, userId: user.id, isDecoy: true, sessionToken: token }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
       }
 
+      const isMain = await verifyPin(pin, user.pin_hash);
+      if (isMain) {
+        await recordLoginAttempt(supabase, ipAddress, true);
+        await logSecurityEvent(supabase, user.id, 'login_success', { method: 'pin', username: user.username }, req);
+        const token = await createSessionWithHistory(supabase, user.id, false, req);
+        return new Response(
+          JSON.stringify({ success: true, userId: user.id, isDecoy: false, sessionToken: token }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       // Failed login
       await recordLoginAttempt(supabase, ipAddress, false);
-      await logSecurityEvent(supabase, users[0].id, 'login_failed', { method: 'pin' }, req);
+      await logSecurityEvent(supabase, user.id, 'login_failed', { method: 'pin', username: user.username }, req);
       
       return new Response(
         JSON.stringify({ 
           success: false, 
-          error: 'Falscher PIN',
+          error: 'Benutzername oder PIN falsch',
           remainingAttempts: rateLimitCheck.remainingAttempts - 1
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -481,7 +466,7 @@ serve(async (req) => {
 
       const { data: candidates, error: fetchError } = await supabase
         .from('vault_users')
-        .select('id, recovery_key')
+        .select('id, recovery_key, username')
         .not('recovery_key', 'is', null);
 
       if (fetchError) throw fetchError;
@@ -504,7 +489,7 @@ serve(async (req) => {
       const token = await createSessionWithHistory(supabase, matched.id, false, req);
       
       return new Response(
-        JSON.stringify({ success: true, userId: matched.id, isDecoy: false, sessionToken: token }),
+        JSON.stringify({ success: true, userId: matched.id, isDecoy: false, sessionToken: token, username: matched.username }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -692,6 +677,22 @@ serve(async (req) => {
         );
       }
 
+      if (!username || !username.trim()) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Benutzername erforderlich' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
+      }
+
+      // Validate username format (alphanumeric, underscores, 3-20 chars)
+      const usernameClean = username.trim().toLowerCase();
+      if (!/^[a-z0-9_]{3,20}$/.test(usernameClean)) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Benutzername muss 3-20 Zeichen haben (nur Buchstaben, Zahlen, Unterstriche)' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
+      }
+
       if (!pin || pin.length !== 6) {
         return new Response(
           JSON.stringify({ success: false, error: 'PIN muss 6 Ziffern haben' }),
@@ -699,30 +700,18 @@ serve(async (req) => {
         );
       }
 
-      // Check if PIN is already in use
-      const { data: existingUsers } = await supabase
+      // Check if username is already in use
+      const { data: existingUsername } = await supabase
         .from('vault_users')
-        .select('id, pin_hash, decoy_pin_hash');
+        .select('id')
+        .eq('username', usernameClean)
+        .maybeSingle();
 
-      if (existingUsers) {
-        for (const user of existingUsers) {
-          const isMainPin = await verifyPin(pin, user.pin_hash);
-          if (isMainPin) {
-            return new Response(
-              JSON.stringify({ success: false, error: 'Dieser PIN wird bereits verwendet' }),
-              { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-            );
-          }
-          if (user.decoy_pin_hash) {
-            const isDecoyPin = await verifyPin(pin, user.decoy_pin_hash);
-            if (isDecoyPin) {
-              return new Response(
-                JSON.stringify({ success: false, error: 'Dieser PIN wird bereits als Fake-Vault PIN verwendet' }),
-                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-              );
-            }
-          }
-        }
+      if (existingUsername) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Dieser Benutzername ist bereits vergeben' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
       }
 
       const generatedRecoveryKey = `${crypto.randomUUID().slice(0, 4)}-${crypto.randomUUID().slice(0, 4)}-${crypto.randomUUID().slice(0, 4)}-${crypto.randomUUID().slice(0, 4)}`.toUpperCase();
@@ -730,16 +719,77 @@ serve(async (req) => {
       
       const { data: newUser, error: createError } = await supabase
         .from('vault_users')
-        .insert({ pin_hash: pinHash, recovery_key: generatedRecoveryKey })
+        .insert({ username: usernameClean, pin_hash: pinHash, recovery_key: generatedRecoveryKey })
         .select()
         .single();
 
       if (createError) throw createError;
 
-      await logSecurityEvent(supabase, authenticatedUser.userId, 'user_created', { newUserId: newUser.id }, req);
+      await logSecurityEvent(supabase, authenticatedUser.userId, 'user_created', { newUserId: newUser.id, username: usernameClean }, req);
       
       return new Response(
-        JSON.stringify({ success: true, userId: newUser.id, recoveryKey: generatedRecoveryKey }),
+        JSON.stringify({ success: true, userId: newUser.id, username: usernameClean, recoveryKey: generatedRecoveryKey }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // ========== ADMIN UPDATE USERNAME ==========
+    else if (action === 'admin-update-username') {
+      if (!authenticatedUser) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Nicht autorisiert' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+        );
+      }
+
+      const isAdmin = await isUserAdmin(supabase, authenticatedUser.userId);
+      if (!isAdmin) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Keine Admin-Berechtigung' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+        );
+      }
+
+      if (!targetUserId || !newUsername) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Ungültige Parameter' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
+      }
+
+      const usernameClean = newUsername.trim().toLowerCase();
+      if (!/^[a-z0-9_]{3,20}$/.test(usernameClean)) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Benutzername muss 3-20 Zeichen haben (nur Buchstaben, Zahlen, Unterstriche)' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
+      }
+
+      // Check if username is already in use by another user
+      const { data: existingUsername } = await supabase
+        .from('vault_users')
+        .select('id')
+        .eq('username', usernameClean)
+        .neq('id', targetUserId)
+        .maybeSingle();
+
+      if (existingUsername) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Dieser Benutzername ist bereits vergeben' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
+      }
+
+      const { error: updateError } = await supabase
+        .from('vault_users')
+        .update({ username: usernameClean, updated_at: new Date().toISOString() })
+        .eq('id', targetUserId);
+
+      if (updateError) throw updateError;
+
+      await logSecurityEvent(supabase, authenticatedUser.userId, 'username_updated', { targetUserId, newUsername: usernameClean }, req);
+      return new Response(
+        JSON.stringify({ success: true, username: usernameClean }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

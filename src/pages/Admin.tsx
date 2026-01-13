@@ -38,7 +38,8 @@ import {
   Smartphone,
   Monitor,
   XCircle,
-  LogOut
+  LogOut,
+  User
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -52,6 +53,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface VaultUser {
   id: string;
+  username: string | null;
   created_at: string;
   recovery_key: string | null;
   admin_notes: string | null;
@@ -120,6 +122,7 @@ export default function Admin() {
   const [isLoading, setIsLoading] = useState(true);
   const [showAddUser, setShowAddUser] = useState(false);
   const [newUserPin, setNewUserPin] = useState('');
+  const [newUserUsername, setNewUserUsername] = useState('');
   const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
   const [resetPinUser, setResetPinUser] = useState<string | null>(null);
@@ -131,6 +134,9 @@ export default function Admin() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [terminatingSession, setTerminatingSession] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [editingUsername, setEditingUsername] = useState<string | null>(null);
+  const [newUsernameValue, setNewUsernameValue] = useState('');
+  const [isUpdatingUsername, setIsUpdatingUsername] = useState(false);
   const { userId, sessionToken } = useAuth();
   const { isAdmin, isLoading: rolesLoading, roles, fetchRoles } = useUserRoles();
 
@@ -185,6 +191,14 @@ export default function Admin() {
   }, [isAdmin, fetchData]);
 
   const handleCreateUser = async () => {
+    if (!newUserUsername.trim()) {
+      toast.error('Benutzername erforderlich');
+      return;
+    }
+    if (!/^[a-zA-Z0-9_]{3,20}$/.test(newUserUsername.trim())) {
+      toast.error('Benutzername muss 3-20 Zeichen haben (nur Buchstaben, Zahlen, Unterstriche)');
+      return;
+    }
     if (!newUserPin || newUserPin.length !== 6) {
       toast.error('PIN muss 6 Ziffern haben');
       return;
@@ -193,19 +207,20 @@ export default function Admin() {
     setIsCreatingUser(true);
     try {
       const { data, error } = await supabase.functions.invoke('verify-pin', {
-        body: { action: 'create-user', pin: newUserPin, sessionToken }
+        body: { action: 'create-user', username: newUserUsername.trim(), pin: newUserPin, sessionToken }
       });
 
       if (error) throw error;
       if (data?.success) {
         toast.success(
           <div>
-            <p className="font-medium">Benutzer erstellt!</p>
+            <p className="font-medium">Benutzer "{data.username}" erstellt!</p>
             <p className="text-xs mt-1 font-mono">Recovery-Key: {data.recoveryKey}</p>
           </div>,
           { duration: 10000 }
         );
         setNewUserPin('');
+        setNewUserUsername('');
         setShowAddUser(false);
         fetchData();
       } else {
@@ -215,6 +230,38 @@ export default function Admin() {
       toast.error(error.message || 'Fehler beim Erstellen');
     } finally {
       setIsCreatingUser(false);
+    }
+  };
+
+  const handleUpdateUsername = async (targetUserId: string) => {
+    if (!newUsernameValue.trim()) {
+      toast.error('Benutzername erforderlich');
+      return;
+    }
+    if (!/^[a-zA-Z0-9_]{3,20}$/.test(newUsernameValue.trim())) {
+      toast.error('Benutzername muss 3-20 Zeichen haben (nur Buchstaben, Zahlen, Unterstriche)');
+      return;
+    }
+
+    setIsUpdatingUsername(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('verify-pin', {
+        body: { action: 'admin-update-username', targetUserId, newUsername: newUsernameValue.trim(), sessionToken }
+      });
+
+      if (error) throw error;
+      if (data?.success) {
+        toast.success(`Benutzername geändert zu "${data.username}"`);
+        setEditingUsername(null);
+        setNewUsernameValue('');
+        fetchData();
+      } else {
+        throw new Error(data?.error || 'Fehler beim Ändern');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Fehler beim Ändern');
+    } finally {
+      setIsUpdatingUsername(false);
     }
   };
 
@@ -539,29 +586,42 @@ export default function Admin() {
                   exit={{ opacity: 0, height: 0 }}
                   className="space-y-4"
                 >
-                  <div className="p-4 rounded-xl bg-muted/50 border border-border">
-                    <label className="block text-sm font-medium text-foreground mb-2">
-                      6-stelliger PIN für den neuen Benutzer
-                    </label>
-                    <div className="flex gap-3">
+                  <div className="p-4 rounded-xl bg-muted/50 border border-border space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2">
+                        Benutzername (einzigartig, 3-20 Zeichen)
+                      </label>
+                      <input
+                        type="text"
+                        value={newUserUsername}
+                        onChange={(e) => setNewUserUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 20))}
+                        placeholder="benutzername"
+                        className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground"
+                        maxLength={20}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2">
+                        6-stelliger PIN
+                      </label>
                       <input
                         type="text"
                         inputMode="numeric"
                         value={newUserPin}
                         onChange={(e) => setNewUserPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
                         placeholder="000000"
-                        className="flex-1 px-4 py-3 rounded-xl bg-background border border-border text-foreground text-center text-xl tracking-[0.5em] font-mono"
+                        className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground text-center text-xl tracking-[0.5em] font-mono"
                         maxLength={6}
                       />
-                      <button
-                        onClick={handleCreateUser}
-                        disabled={newUserPin.length !== 6 || isCreatingUser}
-                        className="px-6 py-3 rounded-xl bg-primary text-primary-foreground disabled:opacity-50 flex items-center gap-2"
-                      >
-                        {isCreatingUser ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
-                        Erstellen
-                      </button>
                     </div>
+                    <button
+                      onClick={handleCreateUser}
+                      disabled={newUserUsername.length < 3 || newUserPin.length !== 6 || isCreatingUser}
+                      className="w-full px-6 py-3 rounded-xl bg-primary text-primary-foreground disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {isCreatingUser ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+                      Benutzer erstellen
+                    </button>
                   </div>
                 </motion.div>
               )}
@@ -608,7 +668,13 @@ export default function Admin() {
                         </div>
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
-                            <p className="font-medium text-foreground font-mono">{user.id.slice(0, 8)}...</p>
+                            <p className="font-medium text-foreground">
+                              {user.username ? (
+                                <span className="text-primary">@{user.username}</span>
+                              ) : (
+                                <span className="text-muted-foreground italic">Kein Benutzername</span>
+                              )}
+                            </p>
                             {isCurrentUser && <span className="text-xs px-2 py-0.5 rounded-full bg-primary text-primary-foreground font-medium">Du</span>}
                             {role === 'admin' && <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-500 font-medium">Admin</span>}
                             {userSessions.length > 0 && (
@@ -618,6 +684,7 @@ export default function Admin() {
                             )}
                           </div>
                           <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
+                            <span className="font-mono">{user.id.slice(0, 8)}...</span>
                             <span className="flex items-center gap-1">
                               <Calendar className="w-3 h-3" />
                               {new Date(user.created_at).toLocaleDateString('de-DE')}
@@ -673,6 +740,48 @@ export default function Admin() {
                                   </div>
                                 ))}
                               </div>
+                            </div>
+
+                            {/* Username Management */}
+                            <div className="p-3 rounded-xl bg-blue-500/5 border border-blue-500/20">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-sm font-medium text-foreground flex items-center gap-2">
+                                  <User className="w-4 h-4 text-blue-500" />
+                                  Benutzername
+                                </span>
+                              </div>
+                              
+                              {editingUsername === user.id ? (
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="text"
+                                    value={newUsernameValue}
+                                    onChange={(e) => setNewUsernameValue(e.target.value.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 20))}
+                                    placeholder="neuer_username"
+                                    className="flex-1 px-3 py-2 rounded-lg bg-background border border-border text-foreground font-mono"
+                                    maxLength={20}
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleUpdateUsername(user.id); }}
+                                    disabled={newUsernameValue.length < 3 || isUpdatingUsername}
+                                    className="px-4 py-2 rounded-lg bg-blue-500 text-white text-sm disabled:opacity-50"
+                                  >
+                                    {isUpdatingUsername ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setEditingUsername(null); setNewUsernameValue(''); }}
+                                    className="px-4 py-2 rounded-lg border border-border text-sm hover:bg-muted"
+                                  >✕</button>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setEditingUsername(user.id); setNewUsernameValue(user.username || ''); }}
+                                  className="w-full px-4 py-2 rounded-lg bg-muted hover:bg-muted/80 text-sm transition-colors text-left"
+                                >
+                                  {user.username ? `@${user.username} ändern...` : 'Benutzername vergeben...'}
+                                </button>
+                              )}
                             </div>
 
                             {/* Session Info */}

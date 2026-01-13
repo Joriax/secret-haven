@@ -1067,6 +1067,7 @@ export type Database = {
           pin_hash: string
           recovery_key: string | null
           updated_at: string | null
+          username: string | null
         }
         Insert: {
           admin_notes?: string | null
@@ -1079,6 +1080,7 @@ export type Database = {
           pin_hash: string
           recovery_key?: string | null
           updated_at?: string | null
+          username?: string | null
         }
         Update: {
           admin_notes?: string | null
@@ -1091,6 +1093,7 @@ export type Database = {
           pin_hash?: string
           recovery_key?: string | null
           updated_at?: string | null
+          username?: string | null
         }
         Relationships: []
       }

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Shield, Lock, AlertCircle, Loader2, Key, ArrowLeft, Fingerprint } from 'lucide-react';
+import { Shield, Lock, AlertCircle, Loader2, Key, ArrowLeft, Fingerprint, User } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
@@ -13,6 +13,7 @@ const MAX_ATTEMPTS = 5;
 const LOCKOUT_DURATION = 10 * 60 * 1000;
 
 export default function Login() {
+  const [username, setUsername] = useState('');
   const [pin, setPin] = useState<string[]>(Array(PIN_LENGTH).fill(''));
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -23,6 +24,7 @@ export default function Login() {
   const [recoveryKey, setRecoveryKey] = useState('');
   const [isBiometricLoading, setIsBiometricLoading] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const usernameInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const { login, isAuthenticated } = useAuth();
   const { isAvailable: biometricAvailable, isEnabled: biometricEnabled, authenticate: authenticateBiometric } = useBiometric();
@@ -48,6 +50,12 @@ export default function Login() {
     if (storedAttempts) {
       setAttempts(parseInt(storedAttempts));
     }
+
+    // Load saved username
+    const savedUsername = localStorage.getItem('vault_username');
+    if (savedUsername) {
+      setUsername(savedUsername);
+    }
   }, []);
 
   useEffect(() => {
@@ -66,20 +74,20 @@ export default function Login() {
 
   useEffect(() => {
     const tryBiometric = async () => {
-      if (biometricEnabled && !isAuthenticated && !lockoutUntil) {
+      if (biometricEnabled && !isAuthenticated && !lockoutUntil && username) {
         setIsBiometricLoading(true);
         try {
           const storedUserId = await authenticateBiometric();
           if (storedUserId) {
-            // Get a real session token from the server
             const response = await supabase.functions.invoke('verify-pin', {
-              body: { action: 'biometric-login', userId: storedUserId }
+              body: { action: 'biometric-login', userId: storedUserId, username }
             });
             
             const data = response.data;
             if (data?.success && data?.sessionToken) {
               localStorage.removeItem('vault_attempts');
               localStorage.removeItem('vault_lockout');
+              localStorage.setItem('vault_username', username);
               login(storedUserId, data.isDecoy || false, data.sessionToken);
               toast.success('Biometrische Anmeldung erfolgreich');
               navigate('/dashboard', { replace: true });
@@ -97,10 +105,16 @@ export default function Login() {
     
     const timeout = setTimeout(tryBiometric, 500);
     return () => clearTimeout(timeout);
-  }, [biometricEnabled, isAuthenticated, lockoutUntil]);
+  }, [biometricEnabled, isAuthenticated, lockoutUntil, username]);
 
   const handleBiometricLogin = async () => {
-    if (!biometricEnabled || lockoutUntil) return;
+    if (!biometricEnabled || lockoutUntil || !username.trim()) {
+      if (!username.trim()) {
+        setError('Bitte Benutzername eingeben');
+        return;
+      }
+      return;
+    }
     
     setIsBiometricLoading(true);
     setError('');
@@ -108,15 +122,15 @@ export default function Login() {
     try {
       const storedUserId = await authenticateBiometric();
       if (storedUserId) {
-        // Get a real session token from the server
         const response = await supabase.functions.invoke('verify-pin', {
-          body: { action: 'biometric-login', userId: storedUserId }
+          body: { action: 'biometric-login', userId: storedUserId, username }
         });
         
         const data = response.data;
         if (data?.success && data?.sessionToken) {
           localStorage.removeItem('vault_attempts');
           localStorage.removeItem('vault_lockout');
+          localStorage.setItem('vault_username', username);
           login(storedUserId, data.isDecoy || false, data.sessionToken);
           toast.success('Biometrische Anmeldung erfolgreich');
           navigate('/dashboard', { replace: true });
@@ -164,6 +178,12 @@ export default function Login() {
   };
 
   const handleSubmit = async (pinValue: string) => {
+    if (!username.trim()) {
+      setError('Bitte Benutzername eingeben');
+      usernameInputRef.current?.focus();
+      return;
+    }
+
     if (lockoutUntil && new Date() < lockoutUntil) {
       return;
     }
@@ -173,16 +193,14 @@ export default function Login() {
 
     try {
       const response = await supabase.functions.invoke('verify-pin', {
-        body: { action: 'verify', pin: pinValue }
+        body: { action: 'verify', username: username.trim(), pin: pinValue }
       });
 
-      // supabase.functions.invoke always returns data (even on HTTP errors); parse error from JSON body
       const data = response.data;
       const invokeError = response.error;
 
       if (invokeError) {
         console.error('Edge function error:', invokeError);
-        // Try to extract message from context or body
         const errMsg = (invokeError as any)?.context?.body
           ? JSON.parse((invokeError as any).context.body)?.error
           : null;
@@ -192,10 +210,11 @@ export default function Login() {
       if (data?.success && data?.userId && data?.sessionToken) {
         localStorage.removeItem('vault_attempts');
         localStorage.removeItem('vault_lockout');
+        localStorage.setItem('vault_username', username.trim());
         login(data.userId, data.isDecoy || false, data.sessionToken);
         navigate('/dashboard', { replace: true });
       } else {
-        throw new Error(data?.error || 'Falscher PIN');
+        throw new Error(data?.error || 'Falscher Benutzername oder PIN');
       }
 
     } catch (err: any) {
@@ -211,7 +230,7 @@ export default function Login() {
         localStorage.setItem('vault_lockout', lockout.toISOString());
         setError(`Zu viele Versuche. Gesperrt für 10 Minuten.`);
       } else {
-        setError(err.message || `Falscher PIN. ${MAX_ATTEMPTS - newAttempts} Versuche übrig.`);
+        setError(err.message || `Falscher Benutzername oder PIN. ${MAX_ATTEMPTS - newAttempts} Versuche übrig.`);
       }
 
       setShake(true);
@@ -251,6 +270,9 @@ export default function Login() {
       if (data?.success && data?.userId && data?.sessionToken) {
         localStorage.removeItem('vault_attempts');
         localStorage.removeItem('vault_lockout');
+        if (data.username) {
+          localStorage.setItem('vault_username', data.username);
+        }
         login(data.userId, false, data.sessionToken);
         navigate('/dashboard', { replace: true });
       } else {
@@ -312,13 +334,34 @@ export default function Login() {
               exit={{ opacity: 0, x: 10 }}
             >
               {/* Title */}
-              <div className="text-center mb-8">
+              <div className="text-center mb-6">
                 <h1 className="text-xl font-display font-semibold text-foreground mb-1">
                   Private Vault
                 </h1>
                 <p className="text-sm text-muted-foreground">
-                  Gib deinen 6-stelligen PIN ein
+                  Benutzername und 6-stelligen PIN eingeben
                 </p>
+              </div>
+
+              {/* Username Input */}
+              <div className="mb-4">
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <input
+                    ref={usernameInputRef}
+                    type="text"
+                    value={username}
+                    onChange={(e) => {
+                      setUsername(e.target.value);
+                      setError('');
+                    }}
+                    placeholder="Benutzername"
+                    disabled={isLoading || !!lockoutUntil}
+                    className="w-full pl-11 pr-4 py-3 rounded-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none transition-all"
+                    autoComplete="username"
+                    autoFocus
+                  />
+                </div>
               </div>
 
               {/* PIN Input */}
@@ -340,7 +383,6 @@ export default function Login() {
                       "focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none",
                       digit && "border-primary/50"
                     )}
-                    autoFocus={index === 0}
                   />
                 ))}
               </div>
@@ -380,7 +422,7 @@ export default function Login() {
               {biometricEnabled && !lockoutUntil && (
                 <button
                   onClick={handleBiometricLogin}
-                  disabled={isBiometricLoading || isLoading}
+                  disabled={isBiometricLoading || isLoading || !username.trim()}
                   className="w-full py-3 mb-4 rounded-xl bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {isBiometricLoading ? (
@@ -484,9 +526,11 @@ export default function Login() {
         </AnimatePresence>
 
         {/* Security Badge */}
-        <div className="flex items-center justify-center gap-1.5 text-muted-foreground text-xs mt-8">
-          <Lock className="w-3 h-3" />
-          <span>Ende-zu-Ende verschlüsselt</span>
+        <div className="mt-8 flex justify-center">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Lock className="w-3 h-3" />
+            <span>Ende-zu-Ende verschlüsselt</span>
+          </div>
         </div>
       </motion.div>
     </div>
