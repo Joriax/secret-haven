@@ -22,6 +22,7 @@ export type Database = {
           id: string
           is_pinned: boolean | null
           name: string
+          parent_id: string | null
           user_id: string
         }
         Insert: {
@@ -31,6 +32,7 @@ export type Database = {
           id?: string
           is_pinned?: boolean | null
           name: string
+          parent_id?: string | null
           user_id: string
         }
         Update: {
@@ -40,9 +42,17 @@ export type Database = {
           id?: string
           is_pinned?: boolean | null
           name?: string
+          parent_id?: string | null
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "albums_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "albums"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "albums_user_id_fkey"
             columns: ["user_id"]
@@ -183,6 +193,7 @@ export type Database = {
           id: string
           is_pinned: boolean | null
           name: string
+          parent_id: string | null
           user_id: string
         }
         Insert: {
@@ -192,6 +203,7 @@ export type Database = {
           id?: string
           is_pinned?: boolean | null
           name: string
+          parent_id?: string | null
           user_id: string
         }
         Update: {
@@ -201,9 +213,18 @@ export type Database = {
           id?: string
           is_pinned?: boolean | null
           name?: string
+          parent_id?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "file_albums_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "file_albums"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       files: {
         Row: {
@@ -266,6 +287,7 @@ export type Database = {
           icon: string | null
           id: string
           name: string
+          parent_id: string | null
           user_id: string
         }
         Insert: {
@@ -274,6 +296,7 @@ export type Database = {
           icon?: string | null
           id?: string
           name: string
+          parent_id?: string | null
           user_id: string
         }
         Update: {
@@ -282,9 +305,18 @@ export type Database = {
           icon?: string | null
           id?: string
           name?: string
+          parent_id?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "link_folders_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "link_folders"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       links: {
         Row: {
@@ -411,6 +443,7 @@ export type Database = {
           icon: string | null
           id: string
           name: string
+          parent_id: string | null
           user_id: string
         }
         Insert: {
@@ -419,6 +452,7 @@ export type Database = {
           icon?: string | null
           id?: string
           name: string
+          parent_id?: string | null
           user_id: string
         }
         Update: {
@@ -427,9 +461,18 @@ export type Database = {
           icon?: string | null
           id?: string
           name?: string
+          parent_id?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "note_folders_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "note_folders"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       note_versions: {
         Row: {
@@ -539,6 +582,7 @@ export type Database = {
           is_favorite: boolean | null
           tags: string[] | null
           taken_at: string | null
+          thumbnail_filename: string | null
           uploaded_at: string | null
           user_id: string
         }
@@ -551,6 +595,7 @@ export type Database = {
           is_favorite?: boolean | null
           tags?: string[] | null
           taken_at?: string | null
+          thumbnail_filename?: string | null
           uploaded_at?: string | null
           user_id: string
         }
@@ -563,6 +608,7 @@ export type Database = {
           is_favorite?: boolean | null
           tags?: string[] | null
           taken_at?: string | null
+          thumbnail_filename?: string | null
           uploaded_at?: string | null
           user_id?: string
         }
@@ -869,6 +915,7 @@ export type Database = {
           icon: string | null
           id: string
           name: string
+          parent_id: string | null
           user_id: string
         }
         Insert: {
@@ -877,6 +924,7 @@ export type Database = {
           icon?: string | null
           id?: string
           name: string
+          parent_id?: string | null
           user_id: string
         }
         Update: {
@@ -885,9 +933,18 @@ export type Database = {
           icon?: string | null
           id?: string
           name?: string
+          parent_id?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "tiktok_folders_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "tiktok_folders"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       tiktok_videos: {
         Row: {

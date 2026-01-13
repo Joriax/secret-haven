@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -9,7 +9,10 @@ export interface LinkFolder {
   name: string;
   color: string;
   icon: string;
+  parent_id: string | null;
   created_at: string;
+  children?: LinkFolder[];
+  depth?: number;
 }
 
 export function useLinkFolders() {
@@ -48,7 +51,37 @@ export function useLinkFolders() {
     fetchFolders();
   }, [fetchFolders]);
 
-  const createFolder = async (name: string, color: string = '#6366f1', icon: string = 'folder') => {
+  // Build hierarchical tree from flat list
+  const hierarchicalFolders = useMemo(() => {
+    const buildTree = (items: LinkFolder[], parentId: string | null = null, depth: number = 0): LinkFolder[] => {
+      return items
+        .filter(item => item.parent_id === parentId)
+        .map(item => ({
+          ...item,
+          depth,
+          children: buildTree(items, item.id, depth + 1)
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    };
+    return buildTree(folders);
+  }, [folders]);
+
+  // Flatten tree for display (with depth info)
+  const flattenedFolders = useMemo(() => {
+    const flatten = (items: LinkFolder[]): LinkFolder[] => {
+      const result: LinkFolder[] = [];
+      for (const item of items) {
+        result.push(item);
+        if (item.children && item.children.length > 0) {
+          result.push(...flatten(item.children));
+        }
+      }
+      return result;
+    };
+    return flatten(hierarchicalFolders);
+  }, [hierarchicalFolders]);
+
+  const createFolder = async (name: string, color: string = '#6366f1', icon: string = 'folder', parentId: string | null = null) => {
     if (!userId || !sessionToken) return null;
 
     try {
@@ -56,7 +89,7 @@ export function useLinkFolders() {
         body: {
           action: 'create-link-folder',
           sessionToken,
-          data: { name, color, icon }
+          data: { name, color, icon, parent_id: parentId }
         }
       });
 
@@ -64,7 +97,7 @@ export function useLinkFolders() {
       if (!data.success) throw new Error(data.error);
       
       setFolders(prev => [...prev, data.data].sort((a, b) => a.name.localeCompare(b.name)));
-      toast.success('Ordner erstellt');
+      toast.success(parentId ? 'Unterordner erstellt' : 'Ordner erstellt');
       return data.data;
     } catch (error) {
       console.error('Error creating folder:', error);
@@ -73,8 +106,24 @@ export function useLinkFolders() {
     }
   };
 
-  const updateFolder = async (id: string, updates: Partial<Pick<LinkFolder, 'name' | 'color' | 'icon'>>) => {
+  const updateFolder = async (id: string, updates: Partial<Pick<LinkFolder, 'name' | 'color' | 'icon' | 'parent_id'>>) => {
     if (!sessionToken) return;
+
+    // Prevent moving folder into itself or descendants
+    if (updates.parent_id) {
+      const isDescendant = (folderId: string, targetId: string): boolean => {
+        const folder = folders.find(f => f.id === folderId);
+        if (!folder) return false;
+        if (folder.parent_id === targetId) return true;
+        if (folder.parent_id) return isDescendant(folder.parent_id, targetId);
+        return false;
+      };
+
+      if (updates.parent_id === id || isDescendant(updates.parent_id, id)) {
+        toast.error('Ordner kann nicht in sich selbst verschoben werden');
+        return;
+      }
+    }
     
     try {
       const { data, error } = await supabase.functions.invoke('vault-data', {
@@ -98,6 +147,23 @@ export function useLinkFolders() {
 
   const deleteFolder = async (id: string) => {
     if (!sessionToken) return;
+
+    // Move children to parent of deleted folder
+    const folder = folders.find(f => f.id === id);
+    const childFolders = folders.filter(f => f.parent_id === id);
+
+    if (childFolders.length > 0) {
+      // Update children's parent_id before deleting
+      for (const child of childFolders) {
+        await supabase.functions.invoke('vault-data', {
+          body: {
+            action: 'update-link-folder',
+            sessionToken,
+            data: { id: child.id, updates: { parent_id: folder?.parent_id || null } }
+          }
+        });
+      }
+    }
     
     try {
       const { data, error } = await supabase.functions.invoke('vault-data', {
@@ -111,7 +177,12 @@ export function useLinkFolders() {
       if (error) throw error;
       if (!data.success) throw new Error(data.error);
       
-      setFolders(prev => prev.filter(f => f.id !== id));
+      setFolders(prev => {
+        // Update children's parent and remove deleted folder
+        return prev
+          .map(f => f.parent_id === id ? { ...f, parent_id: folder?.parent_id || null } : f)
+          .filter(f => f.id !== id);
+      });
       toast.success('Ordner gelöscht');
     } catch (error) {
       console.error('Error deleting folder:', error);
@@ -119,12 +190,25 @@ export function useLinkFolders() {
     }
   };
 
+  // Get all descendant IDs (for filtering links in folder + sub-folders)
+  const getDescendantIds = useCallback((folderId: string): string[] => {
+    const result: string[] = [folderId];
+    const children = folders.filter(f => f.parent_id === folderId);
+    for (const child of children) {
+      result.push(...getDescendantIds(child.id));
+    }
+    return result;
+  }, [folders]);
+
   return {
     folders,
+    hierarchicalFolders,
+    flattenedFolders,
     isLoading,
     createFolder,
     updateFolder,
     deleteFolder,
+    getDescendantIds,
     refetch: fetchFolders,
   };
 }
