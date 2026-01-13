@@ -7,9 +7,22 @@ import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
 import { toast } from 'sonner';
 
 const colorOptions = [
-  '#6366f1', '#8b5cf6', '#a855f7', '#d946ef', '#ec4899',
-  '#f43f5e', '#ef4444', '#f97316', '#eab308', '#84cc16',
-  '#22c55e', '#14b8a6', '#06b6d4', '#0ea5e9', '#3b82f6',
+  // Purple & Violet
+  '#6366f1', '#8b5cf6', '#a855f7', '#d946ef', 
+  // Pink & Rose
+  '#ec4899', '#f43f5e', '#fb7185', '#f472b6',
+  // Red & Orange
+  '#ef4444', '#f97316', '#fb923c', '#fbbf24',
+  // Yellow & Lime
+  '#eab308', '#facc15', '#a3e635', '#84cc16',
+  // Green
+  '#22c55e', '#4ade80', '#10b981', '#34d399',
+  // Teal & Cyan
+  '#14b8a6', '#2dd4bf', '#06b6d4', '#22d3ee',
+  // Blue
+  '#0ea5e9', '#3b82f6', '#6366f1', '#60a5fa',
+  // Neutral & Special
+  '#64748b', '#78716c', '#71717a', '#737373',
 ];
 
 export default function TagsManagement() {
@@ -118,7 +131,7 @@ export default function TagsManagement() {
           
           <div className="flex items-center gap-2">
             <div className="flex gap-1 flex-wrap">
-              {colorOptions.slice(0, 8).map((color) => (
+              {colorOptions.slice(0, 12).map((color) => (
                 <button
                   key={color}
                   onClick={() => setNewTagColor(color)}
@@ -189,8 +202,8 @@ export default function TagsManagement() {
                         className="flex-1 px-3 py-1 rounded-lg bg-background border border-border focus:border-primary outline-none text-foreground"
                         autoFocus
                       />
-                      <div className="flex gap-1">
-                        {colorOptions.slice(0, 6).map((color) => (
+                      <div className="flex gap-1 flex-wrap">
+                        {colorOptions.slice(0, 10).map((color) => (
                           <button
                             key={color}
                             onClick={() => setEditColor(color)}

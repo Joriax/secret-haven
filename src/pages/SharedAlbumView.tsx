@@ -173,9 +173,11 @@ export default function SharedAlbumView() {
           const { data } = await supabase.from('photos').select('*').eq('id', item.photo_id).single();
           itemData = data;
           itemType = 'photo';
-          // Get signed URL for the photo
-          if (data?.filename) {
-            const { data: urlData } = await supabase.storage.from('photos').createSignedUrl(data.filename, 3600);
+          // Get signed URL for the photo - include user_id in path
+          if (data?.filename && data?.user_id) {
+            const { data: urlData } = await supabase.storage
+              .from('photos')
+              .createSignedUrl(`${data.user_id}/${data.filename}`, 3600);
             signedUrl = urlData?.signedUrl;
           }
         } else if (item.note_id) {
@@ -186,9 +188,11 @@ export default function SharedAlbumView() {
           const { data } = await supabase.from('files').select('*').eq('id', item.file_id).single();
           itemData = data;
           itemType = 'file';
-          // Get signed URL for the file
-          if (data?.filename) {
-            const { data: urlData } = await supabase.storage.from('files').createSignedUrl(data.filename, 3600);
+          // Get signed URL for the file - include user_id in path
+          if (data?.filename && data?.user_id) {
+            const { data: urlData } = await supabase.storage
+              .from('files')
+              .createSignedUrl(`${data.user_id}/${data.filename}`, 3600);
             signedUrl = urlData?.signedUrl;
           }
         } else if (item.link_id) {
@@ -286,17 +290,23 @@ export default function SharedAlbumView() {
     try {
       const bucket = item.type === 'photo' ? 'photos' : 'files';
       const filename = item.data.filename;
+      const ownerId = item.data.user_id;
+      
+      // Build full path with user_id prefix
+      const fullPath = ownerId ? `${ownerId}/${filename}` : filename;
       
       const { data, error } = await supabase.storage
         .from(bucket)
-        .download(filename);
+        .download(fullPath);
       
       if (error) throw error;
       
       const url = URL.createObjectURL(data);
       const a = document.createElement('a');
       a.href = url;
-      a.download = filename.split('/').pop() || filename;
+      // Remove timestamp prefix from filename for cleaner download name
+      const cleanFilename = filename.replace(/^\d+-/, '');
+      a.download = cleanFilename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

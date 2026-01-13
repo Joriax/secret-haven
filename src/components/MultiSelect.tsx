@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Trash2, Tag, FolderOpen, Star, RotateCcw, Share2 } from 'lucide-react';
+import { X, Trash2, Tag, FolderOpen, Star, RotateCcw, Share2, CheckCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface MultiSelectBarProps {
@@ -12,6 +12,8 @@ interface MultiSelectBarProps {
   onFavorite?: () => void;
   onRestore?: () => void;
   onShare?: () => void;
+  onSelectAll?: () => void;
+  totalCount?: number;
   isTrash?: boolean;
 }
 
@@ -24,6 +26,8 @@ export const MultiSelectBar: React.FC<MultiSelectBarProps> = ({
   onFavorite,
   onRestore,
   onShare,
+  onSelectAll,
+  totalCount,
   isTrash = false
 }) => {
   return (
@@ -40,12 +44,24 @@ export const MultiSelectBar: React.FC<MultiSelectBarProps> = ({
               <span className="w-8 h-8 rounded-full bg-purple-500 flex items-center justify-center text-white font-medium text-sm">
                 {selectedCount}
               </span>
-              <span className="text-white/80 text-sm">ausgewählt</span>
+              <span className="text-white/80 text-sm">
+                ausgewählt{totalCount ? ` / ${totalCount}` : ''}
+              </span>
             </div>
 
             <div className="h-6 w-px bg-white/20" />
 
             <div className="flex items-center gap-1">
+              {/* Select All Button */}
+              {onSelectAll && totalCount && selectedCount < totalCount && (
+                <ActionButton 
+                  icon={CheckCheck} 
+                  label="Alle auswählen" 
+                  onClick={onSelectAll} 
+                  variant="primary" 
+                />
+              )}
+              
               {isTrash ? (
                 <>
                   {onRestore && (

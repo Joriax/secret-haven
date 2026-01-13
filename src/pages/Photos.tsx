@@ -1151,20 +1151,15 @@ export default function Photos() {
     }
   };
 
+  // Track if current video is playing in slideshow
+  const [slideshowVideoPlaying, setSlideshowVideoPlaying] = useState(false);
+
   // Slideshow functions
   const startSlideshow = async () => {
     if (filteredMedia.length === 0) return;
     
-    // Only photos for slideshow
-    const photosOnly = filteredMedia.filter(m => m.type === 'photo');
-    if (photosOnly.length === 0) {
-      toast.error('Keine Fotos für Slideshow verfügbar');
-      return;
-    }
-    
     if (lightboxIndex === null) {
-      const firstPhotoIndex = filteredMedia.findIndex(m => m.type === 'photo');
-      setLightboxIndex(firstPhotoIndex >= 0 ? firstPhotoIndex : 0);
+      setLightboxIndex(0);
     }
     
     // Request wake lock to prevent screen from sleeping
@@ -1176,41 +1171,51 @@ export default function Photos() {
 
   const stopSlideshow = async () => {
     setIsSlideshow(false);
+    setSlideshowVideoPlaying(false);
     if (slideshowTimerRef.current) {
-      clearInterval(slideshowTimerRef.current);
+      clearTimeout(slideshowTimerRef.current);
       slideshowTimerRef.current = null;
     }
     // Release wake lock
     await releaseWakeLock();
   };
 
-  // Slideshow timer
-  useEffect(() => {
+  // Handle video ended in slideshow - move to next
+  const handleSlideshowVideoEnded = useCallback(() => {
     if (isSlideshow && lightboxIndex !== null) {
-      slideshowTimerRef.current = setInterval(() => {
-        setLightboxIndex(prev => {
-          if (prev === null) return null;
-          // Find next photo (skip videos)
-          let nextIndex = prev + 1;
-          while (nextIndex < filteredMedia.length && filteredMedia[nextIndex]?.type === 'video') {
-            nextIndex++;
-          }
-          if (nextIndex >= filteredMedia.length) {
-            // Loop back to first photo
-            nextIndex = filteredMedia.findIndex(m => m.type === 'photo');
-            if (nextIndex === -1) nextIndex = 0;
-          }
-          return nextIndex;
-        });
-      }, slideshowInterval);
-
-      return () => {
-        if (slideshowTimerRef.current) {
-          clearInterval(slideshowTimerRef.current);
-        }
-      };
+      setSlideshowVideoPlaying(false);
+      // Move to next item
+      const nextIndex = (lightboxIndex + 1) % filteredMedia.length;
+      setLightboxIndex(nextIndex);
     }
-  }, [isSlideshow, slideshowInterval, filteredMedia.length]);
+  }, [isSlideshow, lightboxIndex, filteredMedia.length]);
+
+  // Slideshow timer - now handles both photos and videos
+  useEffect(() => {
+    if (!isSlideshow || lightboxIndex === null) return;
+    
+    const currentItem = filteredMedia[lightboxIndex];
+    
+    // For videos, don't use timer - wait for video to end
+    if (currentItem?.type === 'video') {
+      setSlideshowVideoPlaying(true);
+      // Auto-play will be handled by the video element
+      return;
+    }
+    
+    // For photos, use the interval timer
+    setSlideshowVideoPlaying(false);
+    slideshowTimerRef.current = setTimeout(() => {
+      const nextIndex = (lightboxIndex + 1) % filteredMedia.length;
+      setLightboxIndex(nextIndex);
+    }, slideshowInterval);
+
+    return () => {
+      if (slideshowTimerRef.current) {
+        clearTimeout(slideshowTimerRef.current);
+      }
+    };
+  }, [isSlideshow, lightboxIndex, slideshowInterval, filteredMedia]);
 
   // Cleanup slideshow and wake lock on unmount
   useEffect(() => {
@@ -1889,19 +1894,32 @@ export default function Photos() {
                         ref={videoRef}
                         src={currentLightboxItem.url}
                         className="max-w-full max-h-[80vh] rounded-lg shadow-2xl"
-                        controls
+                        controls={!isSlideshow}
                         controlsList="nodownload"
                         autoPlay
                         playsInline
-                        muted={isMuted}
+                        muted={isSlideshow ? false : isMuted}
                         onClick={(e) => e.stopPropagation()}
                         onPlay={() => setIsVideoPlaying(true)}
                         onPause={() => setIsVideoPlaying(false)}
-                        onEnded={() => setIsVideoPlaying(false)}
+                        onEnded={() => {
+                          setIsVideoPlaying(false);
+                          // In slideshow mode, move to next when video ends
+                          if (isSlideshow) {
+                            handleSlideshowVideoEnded();
+                          }
+                        }}
                       >
                         <source src={currentLightboxItem.url} type={currentLightboxItem.mime_type || 'video/mp4'} />
                         Dein Browser unterstützt dieses Videoformat nicht.
                       </video>
+                      {/* Slideshow indicator for videos */}
+                      {isSlideshow && slideshowVideoPlaying && (
+                        <div className="absolute top-4 left-1/2 -translate-x-1/2 px-3 py-1 bg-black/60 rounded-full text-white text-xs flex items-center gap-2">
+                          <Film className="w-3 h-3" />
+                          Video wird abgespielt...
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <img
@@ -2145,6 +2163,7 @@ export default function Photos() {
       {/* Multi-select action bar */}
       <MultiSelectBar
         selectedCount={selectedItems.size}
+        totalCount={filteredMedia.length}
         onClear={() => {
           setSelectedItems(new Set());
           setIsMultiSelectMode(false);
@@ -2153,6 +2172,10 @@ export default function Photos() {
         onTag={() => setShowBulkTagManager(true)}
         onFavorite={handleBulkFavorite}
         onMove={() => setShowAlbumPicker(true)}
+        onSelectAll={() => {
+          const allIds = new Set(filteredMedia.map(m => m.id));
+          setSelectedItems(allIds);
+        }}
       />
 
       {/* Shared Album Button for Multi-Select */}
