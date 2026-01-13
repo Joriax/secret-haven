@@ -135,7 +135,7 @@ export default function Files() {
   const location = useLocation();
   const { tags } = useTags();
   const { recordView } = useViewHistory();
-  const { albums, createAlbum, deleteAlbum, togglePin, updateAlbum } = useFileAlbums();
+  const { albums, createAlbum, deleteAlbum, togglePin, updateAlbum, fetchAlbums } = useFileAlbums();
 
   const fetchFiles = useCallback(async () => {
     if (!userId) return;
@@ -156,10 +156,13 @@ export default function Files() {
 
       if (error) throw error;
 
-      // Get signed URLs for previewable files
+      // Get signed URLs for previewable files (images, videos, PDFs)
       const filesWithUrls = await Promise.all(
         (data || []).map(async (file) => {
-          if (file.mime_type.startsWith('image/') || file.mime_type.startsWith('video/')) {
+          const isPreviewable = file.mime_type.startsWith('image/') || 
+                                file.mime_type.startsWith('video/') || 
+                                file.mime_type === 'application/pdf';
+          if (isPreviewable) {
             const { data: urlData } = await supabase.storage
               .from('files')
               .createSignedUrl(`${userId}/${file.filename}`, 3600);
@@ -181,19 +184,28 @@ export default function Files() {
     fetchFiles();
   }, [fetchFiles]);
 
-  // Real-time updates
+  // Real-time updates for files and albums
   useEffect(() => {
     if (!userId) return;
 
-    const channel = supabase
+    const filesChannel = supabase
       .channel('files-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'files' }, fetchFiles)
       .subscribe();
 
+    const albumsChannel = supabase
+      .channel('file-albums-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'file_albums' }, () => {
+        // Refetch albums when they change
+        fetchAlbums();
+      })
+      .subscribe();
+
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(filesChannel);
+      supabase.removeChannel(albumsChannel);
     };
-  }, [userId, fetchFiles]);
+  }, [userId, fetchFiles, fetchAlbums]);
 
   useEffect(() => {
     if (location.state?.action === 'upload-file') {
@@ -1806,6 +1818,39 @@ export default function Files() {
         onSelectAll={() => {
           const allIds = new Set(filteredFiles.map(f => f.id));
           setSelectedItems(allIds);
+        }}
+        availableTags={tags}
+        onSelectByTag={(tagId) => {
+          const matchingIds = filteredFiles.filter(f => f.tags?.includes(tagId)).map(f => f.id);
+          setSelectedItems(prev => {
+            const newSet = new Set(prev);
+            matchingIds.forEach(id => newSet.add(id));
+            return newSet;
+          });
+        }}
+        availableDates={(() => {
+          const dateMap = new Map<string, number>();
+          filteredFiles.forEach(f => {
+            const date = new Date(f.uploaded_at).toISOString().split('T')[0];
+            dateMap.set(date, (dateMap.get(date) || 0) + 1);
+          });
+          return Array.from(dateMap.entries())
+            .sort((a, b) => b[0].localeCompare(a[0]))
+            .map(([date, count]) => ({
+              date,
+              label: new Date(date).toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: 'numeric' }),
+              count,
+            }));
+        })()}
+        onSelectByDate={(date) => {
+          const matchingIds = filteredFiles
+            .filter(f => new Date(f.uploaded_at).toISOString().split('T')[0] === date)
+            .map(f => f.id);
+          setSelectedItems(prev => {
+            const newSet = new Set(prev);
+            matchingIds.forEach(id => newSet.add(id));
+            return newSet;
+          });
         }}
       />
 

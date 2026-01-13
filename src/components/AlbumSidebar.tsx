@@ -1,7 +1,13 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { FolderPlus, ChevronRight, ChevronLeft, Image as ImageIcon, Trash2, Pin, PinOff, Pencil, Folder, Star, Heart, Video, Music } from 'lucide-react';
+import { FolderPlus, ChevronRight, ChevronLeft, Trash2, Pencil, Folder, Star, Heart, Video, Music, MoreVertical, Pin, PinOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface Album {
   id: string;
@@ -17,7 +23,6 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   folder: Folder,
   star: Star,
   heart: Heart,
-  image: Image as any,
   video: Video,
   music: Music,
 };
@@ -53,7 +58,7 @@ export function AlbumSidebar({
   selectedAlbum,
   onSelectAlbum,
 }: AlbumSidebarProps) {
-  // Sort albums: pinned first
+  // Sort albums: pinned first, then by creation date
   const sortedAlbums = [...albums].sort((a, b) => {
     if (a.is_pinned !== b.is_pinned) return b.is_pinned ? 1 : -1;
     return 0;
@@ -103,8 +108,28 @@ export function AlbumSidebar({
           </p>
         </div>
 
+        {/* All Items Option */}
+        <div className="p-2 border-b border-border">
+          <button
+            onClick={() => onSelectAlbum?.(null)}
+            className={cn(
+              "w-full flex items-center gap-3 p-2 rounded-xl transition-all",
+              !selectedAlbum 
+                ? "bg-primary/10 ring-1 ring-primary/50"
+                : "hover:bg-muted/50"
+            )}
+          >
+            <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
+              <Folder className="w-5 h-5 text-muted-foreground" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="font-medium text-foreground text-sm">Alle Medien</p>
+            </div>
+          </button>
+        </div>
+
         {/* Albums List */}
-        <div className="flex-1 overflow-y-auto p-2 space-y-2">
+        <div className="flex-1 overflow-y-auto p-2 space-y-1">
           {sortedAlbums.length === 0 ? (
             <div className="text-center py-8">
               <FolderPlus className="w-10 h-10 mx-auto mb-2 text-muted-foreground/30" />
@@ -125,7 +150,7 @@ export function AlbumSidebar({
                 onDrop={(e) => onDrop(e, album.id)}
                 onClick={() => onSelectAlbum?.(album)}
                 className={cn(
-                  "rounded-xl overflow-hidden transition-all cursor-pointer group",
+                  "rounded-xl overflow-hidden transition-all cursor-pointer group relative",
                   selectedAlbum?.id === album.id 
                     ? "bg-primary/10 ring-1 ring-primary/50"
                     : dragOverAlbum === album.id 
@@ -136,7 +161,7 @@ export function AlbumSidebar({
                 <div className="flex items-center gap-3 p-2">
                   {/* Album Thumbnail */}
                   <div 
-                    className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center"
+                    className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center relative"
                     style={{ backgroundColor: album.color || '#6366f1' }}
                   >
                     {album.cover_url ? (
@@ -151,66 +176,67 @@ export function AlbumSidebar({
                         return <IconComponent className="w-5 h-5 text-white" />;
                       })()
                     )}
+                    {/* Pinned indicator - subtle corner badge */}
+                    {album.is_pinned && (
+                      <div className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 bg-primary rounded-full flex items-center justify-center shadow-sm">
+                        <Pin className="w-2 h-2 text-primary-foreground" />
+                      </div>
+                    )}
                   </div>
 
                   {/* Album Info */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1">
-                      {album.is_pinned && (
-                        <Pin className="w-3 h-3 text-primary" />
-                      )}
-                      <p className="font-medium text-foreground text-sm truncate">
-                        {album.name}
-                      </p>
-                    </div>
+                    <p className="font-medium text-foreground text-sm truncate">
+                      {album.name}
+                    </p>
                     <p className="text-xs text-muted-foreground">
                       {album.count || 0} Elemente
                     </p>
                   </div>
 
-                  {/* Actions */}
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                    {onEditAlbum && (
+                  {/* Context Menu */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onEditAlbum(album);
-                        }}
-                        className="p-1.5 rounded-lg hover:bg-muted transition-all"
-                        title="Album bearbeiten"
+                        onClick={(e) => e.stopPropagation()}
+                        className="p-1.5 rounded-lg hover:bg-muted transition-all opacity-0 group-hover:opacity-100"
                       >
-                        <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+                        <MoreVertical className="w-4 h-4 text-muted-foreground" />
                       </button>
-                    )}
-                    {onTogglePin && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onTogglePin(album.id);
-                        }}
-                        className="p-1.5 rounded-lg hover:bg-muted transition-all"
-                        title={album.is_pinned ? 'Loslösen' : 'Anpinnen'}
-                      >
-                        {album.is_pinned ? (
-                          <PinOff className="w-3.5 h-3.5 text-muted-foreground" />
-                        ) : (
-                          <Pin className="w-3.5 h-3.5 text-muted-foreground" />
-                        )}
-                      </button>
-                    )}
-                    {onDeleteAlbum && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDeleteAlbum(album.id);
-                        }}
-                        className="p-1.5 rounded-lg hover:bg-destructive/20 transition-all"
-                        title="Album löschen"
-                      >
-                        <Trash2 className="w-3.5 h-3.5 text-destructive" />
-                      </button>
-                    )}
-                  </div>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-40">
+                      {onEditAlbum && (
+                        <DropdownMenuItem onClick={() => onEditAlbum(album)}>
+                          <Pencil className="w-4 h-4 mr-2" />
+                          Bearbeiten
+                        </DropdownMenuItem>
+                      )}
+                      {onTogglePin && (
+                        <DropdownMenuItem onClick={() => onTogglePin(album.id)}>
+                          {album.is_pinned ? (
+                            <>
+                              <PinOff className="w-4 h-4 mr-2" />
+                              Loslösen
+                            </>
+                          ) : (
+                            <>
+                              <Pin className="w-4 h-4 mr-2" />
+                              Anpinnen
+                            </>
+                          )}
+                        </DropdownMenuItem>
+                      )}
+                      {onDeleteAlbum && (
+                        <DropdownMenuItem 
+                          onClick={() => onDeleteAlbum(album.id)}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Löschen
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
 
                 {/* Drop Indicator */}
