@@ -251,10 +251,15 @@ export default function Admin() {
 
       if (error) throw error;
       if (data?.success) {
+        // Update local state immediately without needing to refetch
+        setUsers(prev => prev.map(user => 
+          user.id === targetUserId 
+            ? { ...user, username: data.username } 
+            : user
+        ));
         toast.success(`Benutzername geändert zu "${data.username}"`);
         setEditingUsername(null);
         setNewUsernameValue('');
-        fetchData();
       } else {
         throw new Error(data?.error || 'Fehler beim Ändern');
       }
