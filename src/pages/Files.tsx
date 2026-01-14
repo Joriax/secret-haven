@@ -37,7 +37,11 @@ import {
   Image as ImageIcon,
   Inbox,
   Layers,
-  Package
+  Package,
+  ArrowUpDown,
+  Pin,
+  PinOff,
+  MoreVertical
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTags } from '@/hooks/useTags';
@@ -74,6 +78,7 @@ interface FileItem {
 
 type ViewMode = 'grid' | 'list';
 type FilterMode = 'all' | 'images' | 'videos' | 'documents' | 'audio';
+type SortMode = 'date-desc' | 'date-asc' | 'name-asc' | 'name-desc' | 'size-desc' | 'size-asc' | 'favorites';
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
@@ -111,18 +116,22 @@ export default function Files() {
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const [showBulkTagManager, setShowBulkTagManager] = useState(false);
   const [selectedAlbum, setSelectedAlbum] = useState<FileAlbum | null>(null);
-  const [deleteAlbumConfirm, setDeleteAlbumConfirm] = useState<{ isOpen: boolean; album: FileAlbum | null }>({
+  const [deleteAlbumConfirm, setDeleteAlbumConfirm] = useState<{ isOpen: boolean; album: FileAlbum | null; deleteContents?: boolean }>({
     isOpen: false,
     album: null,
+    deleteContents: false,
   });
   const [showNewAlbumModal, setShowNewAlbumModal] = useState(false);
   const [newAlbumName, setNewAlbumName] = useState('');
   const [newAlbumColor, setNewAlbumColor] = useState('#6366f1');
   const [newAlbumIcon, setNewAlbumIcon] = useState('folder');
+  const [newAlbumParentId, setNewAlbumParentId] = useState<string | null>(null);
   const [showAlbumPicker, setShowAlbumPicker] = useState(false);
   const [singleFileAlbumPicker, setSingleFileAlbumPicker] = useState<FileItem | null>(null);
   const [editingAlbum, setEditingAlbum] = useState<FileAlbum | null>(null);
   const [showEditAlbumModal, setShowEditAlbumModal] = useState(false);
+  const [sortMode, setSortMode] = useState<SortMode>('date-desc');
+  const [showSortMenu, setShowSortMenu] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ isOpen: boolean; file: FileItem | null; position: { x: number; y: number } }>({
     isOpen: false,
     file: null,
@@ -135,7 +144,16 @@ export default function Files() {
   const location = useLocation();
   const { tags } = useTags();
   const { recordView } = useViewHistory();
-  const { albums, createAlbum, deleteAlbum, togglePin, updateAlbum, fetchAlbums } = useFileAlbums();
+  const { 
+    albums, 
+    createAlbum, 
+    deleteAlbum, 
+    togglePin, 
+    updateAlbum, 
+    fetchAlbums, 
+    getChildAlbums, 
+    getBreadcrumb 
+  } = useFileAlbums();
 
   const fetchFiles = useCallback(async () => {
     if (!userId) return;
@@ -495,7 +513,7 @@ export default function Files() {
     handleUpload(e.dataTransfer.files);
   }, [userId]);
 
-  // Filter files
+  // Filter and sort files
   const filteredFiles = useMemo(() => {
     let result = files;
 
@@ -527,8 +545,43 @@ export default function Files() {
       );
     }
 
+    // Sort
+    result = [...result].sort((a, b) => {
+      switch (sortMode) {
+        case 'date-desc':
+          return new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime();
+        case 'date-asc':
+          return new Date(a.uploaded_at).getTime() - new Date(b.uploaded_at).getTime();
+        case 'name-asc':
+          return a.filename.localeCompare(b.filename);
+        case 'name-desc':
+          return b.filename.localeCompare(a.filename);
+        case 'size-desc':
+          return b.size - a.size;
+        case 'size-asc':
+          return a.size - b.size;
+        case 'favorites':
+          if (a.is_favorite && !b.is_favorite) return -1;
+          if (!a.is_favorite && b.is_favorite) return 1;
+          return new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime();
+        default:
+          return 0;
+      }
+    });
+
     return result;
-  }, [files, filterMode, selectedTagFilter, searchQuery, selectedAlbum]);
+  }, [files, filterMode, selectedTagFilter, searchQuery, selectedAlbum, sortMode]);
+
+  // Get child albums for current view
+  const currentChildAlbums = useMemo(() => {
+    return getChildAlbums(selectedAlbum?.id || null);
+  }, [getChildAlbums, selectedAlbum]);
+
+  // Breadcrumb for navigation
+  const breadcrumb = useMemo(() => {
+    if (!selectedAlbum) return [];
+    return getBreadcrumb(selectedAlbum.id);
+  }, [getBreadcrumb, selectedAlbum]);
 
   // Calculate file counts per album
   const fileCounts = useMemo(() => {
@@ -545,12 +598,37 @@ export default function Files() {
 
   const handleCreateAlbum = async () => {
     if (!newAlbumName.trim()) return;
-    await createAlbum(newAlbumName, newAlbumColor, newAlbumIcon);
+    await createAlbum(newAlbumName, newAlbumColor, newAlbumIcon, newAlbumParentId);
     setNewAlbumName('');
     setNewAlbumColor('#6366f1');
     setNewAlbumIcon('folder');
+    setNewAlbumParentId(null);
     setShowNewAlbumModal(false);
   };
+
+  const handleDeleteAlbum = async (deleteContents: boolean) => {
+    const album = deleteAlbumConfirm.album;
+    if (!album) return;
+    
+    await deleteAlbum(album.id, deleteContents);
+    
+    if (selectedAlbum?.id === album.id) {
+      // Navigate to parent or root
+      const parentAlbum = album.parent_id ? albums.find(a => a.id === album.parent_id) : null;
+      setSelectedAlbum(parentAlbum || null);
+    }
+    setDeleteAlbumConfirm({ isOpen: false, album: null });
+  };
+
+  const sortOptions = [
+    { id: 'date-desc', label: 'Neueste zuerst' },
+    { id: 'date-asc', label: 'Älteste zuerst' },
+    { id: 'name-asc', label: 'Name (A-Z)' },
+    { id: 'name-desc', label: 'Name (Z-A)' },
+    { id: 'size-desc', label: 'Größe (absteigend)' },
+    { id: 'size-asc', label: 'Größe (aufsteigend)' },
+    { id: 'favorites', label: 'Favoriten zuerst' },
+  ] as const;
 
   const handleBulkMoveToAlbum = async (albumId: string | null) => {
     if (selectedItems.size === 0) return;
@@ -820,6 +898,25 @@ export default function Files() {
                 </div>
               </div>
               
+              {/* Parent Album Selection */}
+              {albums.length > 0 && (
+                <div className="mb-4">
+                  <p className="text-sm text-muted-foreground mb-2">Überordner (optional)</p>
+                  <select
+                    value={newAlbumParentId || ''}
+                    onChange={(e) => setNewAlbumParentId(e.target.value || null)}
+                    className="w-full px-3 py-2 rounded-xl bg-muted border border-border text-foreground"
+                  >
+                    <option value="">Kein Überordner (Hauptebene)</option>
+                    {albums.map((album) => (
+                      <option key={album.id} value={album.id}>
+                        {album.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              
               <div className="flex gap-2">
                 <button
                   onClick={() => {
@@ -827,6 +924,7 @@ export default function Files() {
                     setNewAlbumName('');
                     setNewAlbumColor('#6366f1');
                     setNewAlbumIcon('folder');
+                    setNewAlbumParentId(null);
                   }}
                   className="flex-1 px-4 py-2 rounded-xl border border-border hover:bg-muted transition-colors"
                 >
@@ -1092,6 +1190,52 @@ export default function Files() {
         )}
       </AnimatePresence>
 
+      {/* Delete Album Confirm Dialog */}
+      {deleteAlbumConfirm.isOpen && deleteAlbumConfirm.album && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setDeleteAlbumConfirm({ isOpen: false, album: null })}
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            className="bg-card border border-border rounded-2xl p-6 w-full max-w-md"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-foreground mb-2">Ordner löschen</h3>
+            <p className="text-muted-foreground mb-6">
+              Wie soll mit den Dateien in "{deleteAlbumConfirm.album.name}" verfahren werden?
+            </p>
+            <div className="space-y-2">
+              <button
+                onClick={() => handleDeleteAlbum(false)}
+                className="w-full px-4 py-3 rounded-xl border border-border hover:bg-muted transition-colors text-left"
+              >
+                <p className="font-medium text-foreground">Nur Ordner löschen</p>
+                <p className="text-sm text-muted-foreground">Dateien bleiben erhalten und werden in die Hauptebene verschoben</p>
+              </button>
+              <button
+                onClick={() => handleDeleteAlbum(true)}
+                className="w-full px-4 py-3 rounded-xl border border-destructive/50 hover:bg-destructive/10 transition-colors text-left"
+              >
+                <p className="font-medium text-destructive">Ordner und alle Inhalte löschen</p>
+                <p className="text-sm text-muted-foreground">Alle Dateien werden in den Papierkorb verschoben</p>
+              </button>
+              <button
+                onClick={() => setDeleteAlbumConfirm({ isOpen: false, album: null })}
+                className="w-full px-4 py-2 rounded-xl border border-border hover:bg-muted transition-colors mt-4"
+              >
+                Abbrechen
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
@@ -1100,76 +1244,92 @@ export default function Files() {
       >
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
+            {/* Breadcrumb Navigation */}
+            {selectedAlbum ? (
+              <div className="flex items-center gap-2 flex-wrap mb-1">
+                <button
+                  onClick={() => setSelectedAlbum(null)}
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Dateien
+                </button>
+                {breadcrumb.map((item, index) => (
+                  <React.Fragment key={item.id}>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                    <button
+                      onClick={() => setSelectedAlbum(item)}
+                      className={cn(
+                        "text-sm transition-colors",
+                        index === breadcrumb.length - 1 
+                          ? "text-foreground font-medium" 
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {item.name}
+                    </button>
+                  </React.Fragment>
+                ))}
+              </div>
+            ) : null}
+            
             <h1 className="text-2xl md:text-3xl font-bold text-foreground">
               {selectedAlbum ? selectedAlbum.name : 'Dateien'}
             </h1>
             <p className="text-muted-foreground text-sm">
               {filteredFiles.length} Dateien • {formatFileSize(filteredFiles.reduce((acc, f) => acc + f.size, 0))} gesamt
+              {currentChildAlbums.length > 0 && ` • ${currentChildAlbums.length} Unterordner`}
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* Album Filter */}
-            <DropdownMenu>
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Sort dropdown */}
+            <DropdownMenu open={showSortMenu} onOpenChange={setShowSortMenu}>
               <DropdownMenuTrigger asChild>
-                <button
-                  className={cn(
-                    "flex items-center gap-2 px-3 py-2 rounded-xl border border-border bg-card hover:bg-muted transition-colors text-sm max-w-[14rem]",
-                    albums.length === 0 && "opacity-60"
-                  )}
-                >
-                  <Folder className="w-4 h-4 text-muted-foreground" />
-                  <span className="hidden sm:inline truncate">
-                    {selectedAlbum ? selectedAlbum.name : 'Alle Dateien'}
-                  </span>
-                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                <button className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border hover:bg-muted transition-all text-sm">
+                  <ArrowUpDown className="w-4 h-4" />
+                  <span className="hidden sm:inline">Sortieren</span>
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-72">
-                <DropdownMenuLabel>Album-Filter</DropdownMenuLabel>
-                <DropdownMenuItem onSelect={() => setSelectedAlbum(null)}>
-                  Alle Dateien
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                {albums.length === 0 ? (
-                  <DropdownMenuItem disabled>Keine Alben</DropdownMenuItem>
-                ) : (
-                  albums.map((album) => (
-                    <DropdownMenuItem key={album.id} onSelect={() => setSelectedAlbum(album)}>
-                      <span className="truncate">{album.name}</span>
-                      <span className="ml-auto text-xs text-muted-foreground">
-                        {fileCounts[album.id] || 0}
-                      </span>
-                    </DropdownMenuItem>
-                  ))
-                )}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => setShowNewAlbumModal(true)}>
-                  <FolderPlus className="mr-2 h-4 w-4" />
-                  Neues Album…
-                </DropdownMenuItem>
-                {selectedAlbum && (
-                  <>
-                    <DropdownMenuItem
-                      onSelect={() => {
-                        setEditingAlbum({ ...selectedAlbum });
-                        setShowEditAlbumModal(true);
-                      }}
-                    >
-                      <Pencil className="mr-2 h-4 w-4" />
-                      Album bearbeiten…
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      className="text-destructive focus:text-destructive"
-                      onSelect={() => setDeleteAlbumConfirm({ isOpen: true, album: selectedAlbum })}
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Album löschen…
-                    </DropdownMenuItem>
-                  </>
-                )}
+              <DropdownMenuContent align="end" className="w-48">
+                {sortOptions.map(option => (
+                  <DropdownMenuItem
+                    key={option.id}
+                    onClick={() => setSortMode(option.id)}
+                    className={cn(sortMode === option.id && "bg-primary/10 text-primary")}
+                  >
+                    {option.label}
+                  </DropdownMenuItem>
+                ))}
               </DropdownMenuContent>
             </DropdownMenu>
+
+            {/* Back button when in album */}
+            {selectedAlbum && (
+              <button
+                onClick={() => {
+                  const parentAlbum = selectedAlbum.parent_id 
+                    ? albums.find(a => a.id === selectedAlbum.parent_id) 
+                    : null;
+                  setSelectedAlbum(parentAlbum || null);
+                }}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border hover:bg-muted transition-all text-sm"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span className="hidden sm:inline">Zurück</span>
+              </button>
+            )}
+
+            {/* New Folder button */}
+            <button
+              onClick={() => {
+                setNewAlbumParentId(selectedAlbum?.id || null);
+                setShowNewAlbumModal(true);
+              }}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border hover:bg-muted transition-all text-sm"
+            >
+              <FolderPlus className="w-4 h-4" />
+              <span className="hidden sm:inline">{selectedAlbum ? 'Unterordner' : 'Ordner'}</span>
+            </button>
 
             {/* Multi-select toggle */}
             <button
@@ -1219,8 +1379,6 @@ export default function Files() {
             </button>
           </div>
         </div>
-
-        {/* Filter Tabs */}
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
           {[
             { id: 'all', label: 'Alle', icon: File },
