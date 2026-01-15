@@ -177,6 +177,7 @@ export default function Photos() {
   const [newAlbumColor, setNewAlbumColor] = useState('#6366f1');
   const [newAlbumIcon, setNewAlbumIcon] = useState('folder');
   const [newAlbumParentId, setNewAlbumParentId] = useState<string | null>(null);
+  const [isCreatingAlbum, setIsCreatingAlbum] = useState(false);
   const [editingAlbum, setEditingAlbum] = useState<Album | null>(null);
   const [showEditAlbumModal, setShowEditAlbumModal] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('all');
@@ -500,8 +501,9 @@ export default function Photos() {
   };
 
   const createAlbum = async (parentId?: string | null) => {
-    if (!newAlbumName.trim() || !userId) return;
+    if (!newAlbumName.trim() || !userId || isCreatingAlbum) return;
 
+    setIsCreatingAlbum(true);
     try {
       const { data, error } = await supabase
         .from('albums')
@@ -527,6 +529,8 @@ export default function Photos() {
     } catch (error) {
       console.error('Error creating album:', error);
       toast.error('Fehler beim Erstellen');
+    } finally {
+      setIsCreatingAlbum(false);
     }
   };
 
@@ -1434,6 +1438,22 @@ export default function Photos() {
               </div>
             )}
 
+            {/* Back button when in album - FIRST on the left */}
+            {selectedAlbum && (
+              <button
+                onClick={() => {
+                  const parentAlbum = selectedAlbum.parent_id 
+                    ? albums.find(a => a.id === selectedAlbum.parent_id) 
+                    : null;
+                  setSelectedAlbum(parentAlbum || null);
+                }}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-muted hover:bg-muted/80 transition-all text-sm order-first"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span className="hidden sm:inline">Zurück</span>
+              </button>
+            )}
+
             {/* Multi-select toggle */}
             <button
               onClick={() => {
@@ -1450,22 +1470,6 @@ export default function Photos() {
               <CheckSquare className="w-5 h-5" />
               <span className="hidden sm:inline">Auswählen</span>
             </button>
-
-            {/* Back button when in album */}
-            {selectedAlbum && (
-              <button
-                onClick={() => {
-                  const parentAlbum = selectedAlbum.parent_id 
-                    ? albums.find(a => a.id === selectedAlbum.parent_id) 
-                    : null;
-                  setSelectedAlbum(parentAlbum || null);
-                }}
-                className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border hover:bg-muted transition-all text-sm"
-              >
-                <ChevronLeft className="w-4 h-4" />
-                <span className="hidden sm:inline">Zurück</span>
-              </button>
-            )}
 
             <button
               onClick={() => {
@@ -1766,9 +1770,9 @@ export default function Photos() {
             </motion.div>
           ) : (
             <>
-              {/* Child Albums Grid - shown when in an album */}
+              {/* Child Albums Grid - shown when in an album - with full functionality */}
               {selectedAlbum && currentChildAlbums.length > 0 && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3 mb-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4 mb-6">
                   {currentChildAlbums.map((album) => (
                     <motion.div
                       key={album.id}
@@ -1784,20 +1788,87 @@ export default function Photos() {
                         dragOverAlbum === album.id && "ring-2 ring-primary scale-105"
                       )}
                     >
-                      <div 
-                        className="w-full h-full flex items-center justify-center"
-                        style={{ backgroundColor: album.color || '#6366f1' }}
-                      >
-                        <Folder className="w-10 h-10 text-white/80" />
-                      </div>
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
-                      
-                      {/* Pin indicator */}
-                      {album.is_pinned && (
-                        <div className="absolute top-2 right-2 p-1.5 rounded-lg bg-primary/80">
-                          <Pin className="w-3 h-3 text-white" />
+                      {album.cover_url ? (
+                        <img
+                          src={album.cover_url}
+                          alt={album.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div 
+                          className="w-full h-full flex items-center justify-center"
+                          style={{ backgroundColor: album.color || '#6366f1' }}
+                        >
+                          {(() => {
+                            const iconName = album.icon || 'folder';
+                            const icons: Record<string, React.ComponentType<{ className?: string }>> = {
+                              folder: Folder,
+                              star: Star,
+                              heart: Heart,
+                              image: ImageIcon,
+                              video: Video,
+                              music: Music,
+                            };
+                            const IconComponent = icons[iconName] || Folder;
+                            return <IconComponent className="w-10 h-10 text-white/80" />;
+                          })()}
                         </div>
                       )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+                      
+                      {/* Pin indicator & actions - same as main albums view */}
+                      <div className="absolute top-2 right-2 flex items-center gap-1">
+                        {album.is_pinned && (
+                          <div className="p-1.5 rounded-lg bg-primary/80">
+                            <Pin className="w-3 h-3 text-white" />
+                          </div>
+                        )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setNewAlbumParentId(album.id);
+                            setShowNewAlbumModal(true);
+                          }}
+                          className="p-1.5 rounded-lg bg-black/40 opacity-0 group-hover:opacity-100 hover:bg-black/60 transition-all"
+                          title="Unteralbum erstellen"
+                        >
+                          <FolderPlus className="w-3.5 h-3.5 text-white" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEditAlbumModal(album);
+                          }}
+                          className="p-1.5 rounded-lg bg-black/40 opacity-0 group-hover:opacity-100 hover:bg-black/60 transition-all"
+                          title="Album bearbeiten"
+                        >
+                          <Pencil className="w-3.5 h-3.5 text-white" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleAlbumPin(album.id);
+                          }}
+                          className="p-1.5 rounded-lg bg-black/40 opacity-0 group-hover:opacity-100 hover:bg-black/60 transition-all"
+                          title={album.is_pinned ? 'Loslösen' : 'Anpinnen'}
+                        >
+                          {album.is_pinned ? (
+                            <PinOff className="w-3.5 h-3.5 text-white" />
+                          ) : (
+                            <Pin className="w-3.5 h-3.5 text-white" />
+                          )}
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAlbumDeleteConfirm({ isOpen: true, album });
+                          }}
+                          className="p-1.5 rounded-lg bg-black/40 opacity-0 group-hover:opacity-100 hover:bg-destructive/80 transition-all"
+                          title="Album löschen"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-white" />
+                        </button>
+                      </div>
                       
                       <div className="absolute bottom-0 left-0 right-0 p-3">
                         <h3 className="font-semibold text-white truncate text-sm">{album.name}</h3>
@@ -2244,10 +2315,10 @@ export default function Photos() {
                 </button>
                 <button
                   onClick={() => createAlbum()}
-                  disabled={!newAlbumName.trim()}
+                  disabled={!newAlbumName.trim() || isCreatingAlbum}
                   className="flex-1 px-4 py-3 rounded-xl bg-gradient-primary text-primary-foreground hover:shadow-glow transition-all disabled:opacity-50"
                 >
-                  Erstellen
+                  {isCreatingAlbum ? 'Wird erstellt...' : 'Erstellen'}
                 </button>
               </div>
             </motion.div>
