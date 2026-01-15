@@ -142,6 +142,28 @@ interface Album {
 type ViewMode = 'all' | 'photos' | 'videos' | 'albums';
 type SortMode = 'date-desc' | 'date-asc' | 'name-asc' | 'name-desc' | 'favorites';
 
+// Helper functions for hierarchical albums
+const getChildAlbums = (albums: Album[], parentId: string | null): Album[] => {
+  return albums
+    .filter(a => (a.parent_id || null) === parentId)
+    .sort((a, b) => {
+      if (a.is_pinned !== b.is_pinned) return b.is_pinned ? 1 : -1;
+      return a.name.localeCompare(b.name);
+    });
+};
+
+const getBreadcrumb = (albums: Album[], albumId: string): Album[] => {
+  const path: Album[] = [];
+  let current = albums.find(a => a.id === albumId);
+  
+  while (current) {
+    path.unshift(current);
+    current = current.parent_id ? albums.find(a => a.id === current!.parent_id) : undefined;
+  }
+  
+  return path;
+};
+
 export default function Photos() {
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [albums, setAlbums] = useState<Album[]>([]);
@@ -950,6 +972,17 @@ export default function Photos() {
     return result;
   }, [media, selectedAlbum, viewMode, selectedTagFilter, searchQuery, sortMode]);
 
+  // Get child albums for current view
+  const currentChildAlbums = useMemo(() => {
+    return getChildAlbums(albums, selectedAlbum?.id || null);
+  }, [albums, selectedAlbum]);
+
+  // Breadcrumb for navigation
+  const breadcrumb = useMemo(() => {
+    if (!selectedAlbum) return [];
+    return getBreadcrumb(albums, selectedAlbum.id);
+  }, [albums, selectedAlbum]);
+
   // Drag and drop handlers
   const handleDragStart = (e: React.DragEvent, item: MediaItem) => {
     setDraggedItem(item);
@@ -1306,29 +1339,47 @@ export default function Photos() {
       >
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
+            {/* Breadcrumb Navigation */}
             {selectedAlbum ? (
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 flex-wrap mb-1">
                 <button
                   onClick={() => setSelectedAlbum(null)}
-                  className="p-2 hover:bg-muted rounded-lg transition-colors"
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  <ChevronLeft className="w-5 h-5 text-muted-foreground" />
+                  Fotos & Videos
                 </button>
-                <div>
-                  <h1 className="text-2xl md:text-3xl font-bold text-foreground">{selectedAlbum.name}</h1>
-                  <p className="text-muted-foreground text-sm">
-                    {filteredMedia.length} Elemente
-                  </p>
-                </div>
+                {breadcrumb.map((item, index) => (
+                  <React.Fragment key={item.id}>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                    <button
+                      onClick={() => setSelectedAlbum(item)}
+                      className={cn(
+                        "text-sm transition-colors",
+                        index === breadcrumb.length - 1 
+                          ? "text-foreground font-medium" 
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {item.name}
+                    </button>
+                  </React.Fragment>
+                ))}
               </div>
-            ) : (
-              <div>
-                <h1 className="text-2xl md:text-3xl font-bold text-foreground">Fotos & Videos</h1>
-                <p className="text-muted-foreground text-sm">
-                  {media.filter(m => m.type === 'photo').length} Fotos • {media.filter(m => m.type === 'video').length} Videos • {albums.length} Alben
-                </p>
-              </div>
-            )}
+            ) : null}
+            
+            <h1 className="text-2xl md:text-3xl font-bold text-foreground">
+              {selectedAlbum ? selectedAlbum.name : 'Fotos & Videos'}
+            </h1>
+            <p className="text-muted-foreground text-sm">
+              {selectedAlbum ? (
+                <>
+                  {filteredMedia.length} Elemente
+                  {currentChildAlbums.length > 0 && ` • ${currentChildAlbums.length} Unteralben`}
+                </>
+              ) : (
+                <>{media.filter(m => m.type === 'photo').length} Fotos • {media.filter(m => m.type === 'video').length} Videos • {albums.length} Alben</>
+              )}
+            </p>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
@@ -1400,12 +1451,31 @@ export default function Photos() {
               <span className="hidden sm:inline">Auswählen</span>
             </button>
 
+            {/* Back button when in album */}
+            {selectedAlbum && (
+              <button
+                onClick={() => {
+                  const parentAlbum = selectedAlbum.parent_id 
+                    ? albums.find(a => a.id === selectedAlbum.parent_id) 
+                    : null;
+                  setSelectedAlbum(parentAlbum || null);
+                }}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border hover:bg-muted transition-all text-sm"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span className="hidden sm:inline">Zurück</span>
+              </button>
+            )}
+
             <button
-              onClick={() => setShowNewAlbumModal(true)}
+              onClick={() => {
+                setNewAlbumParentId(selectedAlbum?.id || null);
+                setShowNewAlbumModal(true);
+              }}
               className="flex items-center justify-center gap-2 min-h-[44px] min-w-[44px] px-3 py-2 rounded-xl border border-border hover:bg-muted transition-all text-sm"
             >
               <FolderPlus className="w-5 h-5" />
-              <span className="hidden sm:inline">Album</span>
+              <span className="hidden sm:inline">{selectedAlbum ? 'Unteralbum' : 'Album'}</span>
             </button>
             
             <button
@@ -1533,10 +1603,10 @@ export default function Photos() {
         </motion.div>
       )}
 
-      {/* Albums View */}
-      {viewMode === 'albums' && !selectedAlbum && (
+      {/* Albums View - Show only root-level albums when not in an album, or child albums when in an album */}
+      {viewMode === 'albums' && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-          {albums.map((album) => (
+          {currentChildAlbums.map((album) => (
             <motion.div
               key={album.id}
               initial={{ opacity: 0, scale: 0.9 }}
@@ -1645,7 +1715,7 @@ export default function Photos() {
             </motion.div>
           ))}
 
-          {albums.length === 0 && (
+          {currentChildAlbums.length === 0 && !selectedAlbum && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -1673,7 +1743,7 @@ export default function Photos() {
             <div className="flex items-center justify-center py-20">
               <Loader2 className="w-8 h-8 text-primary animate-spin" />
             </div>
-          ) : filteredMedia.length === 0 ? (
+          ) : filteredMedia.length === 0 && currentChildAlbums.length === 0 ? (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -1695,7 +1765,57 @@ export default function Photos() {
               </button>
             </motion.div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3">
+            <>
+              {/* Child Albums Grid - shown when in an album */}
+              {selectedAlbum && currentChildAlbums.length > 0 && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3 mb-4">
+                  {currentChildAlbums.map((album) => (
+                    <motion.div
+                      key={album.id}
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      whileHover={{ scale: 1.02 }}
+                      onClick={() => setSelectedAlbum(album)}
+                      onDragOver={(e) => handleAlbumDragOver(e, album.id)}
+                      onDragLeave={handleAlbumDragLeave}
+                      onDrop={(e) => handleAlbumDrop(e, album.id)}
+                      className={cn(
+                        "glass-card-hover overflow-hidden cursor-pointer aspect-square relative group transition-all",
+                        dragOverAlbum === album.id && "ring-2 ring-primary scale-105"
+                      )}
+                    >
+                      <div 
+                        className="w-full h-full flex items-center justify-center"
+                        style={{ backgroundColor: album.color || '#6366f1' }}
+                      >
+                        <Folder className="w-10 h-10 text-white/80" />
+                      </div>
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+                      
+                      {/* Pin indicator */}
+                      {album.is_pinned && (
+                        <div className="absolute top-2 right-2 p-1.5 rounded-lg bg-primary/80">
+                          <Pin className="w-3 h-3 text-white" />
+                        </div>
+                      )}
+                      
+                      <div className="absolute bottom-0 left-0 right-0 p-3">
+                        <h3 className="font-semibold text-white truncate text-sm">{album.name}</h3>
+                        <p className="text-white/70 text-xs">{album.count} Elemente</p>
+                      </div>
+                      
+                      {dragOverAlbum === album.id && (
+                        <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
+                          <p className="text-white font-medium text-sm">Hierher ziehen</p>
+                        </div>
+                      )}
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+              
+              {/* Media Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3">
               {filteredMedia.map((item, index) => (
                 <div key={item.id} className="relative">
                   <LazyMediaItem
@@ -1785,6 +1905,7 @@ export default function Photos() {
                 </div>
               ))}
             </div>
+            </>
           )}
         </>
       )}
