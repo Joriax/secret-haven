@@ -1288,6 +1288,34 @@ serve(async (req) => {
       );
     }
 
+    // ========== GET RECOVERY KEY (for authenticated users) ==========
+    else if (action === 'get-recovery-key') {
+      if (!authenticatedUser) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Nicht autorisiert' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+        );
+      }
+
+      const { data: user, error: fetchError } = await supabase
+        .from('vault_users')
+        .select('recovery_key')
+        .eq('id', authenticatedUser.userId)
+        .single();
+
+      if (fetchError) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Benutzer nicht gefunden' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, recoveryKey: user.recovery_key || null }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // ========== GENERATE RECOVERY KEY (Server-side, PIN protected) ==========
     else if (action === 'generate-recovery-key') {
       if (!authenticatedUser) {
