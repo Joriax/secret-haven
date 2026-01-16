@@ -33,7 +33,8 @@ import {
   EyeOff,
   CheckSquare,
   Folder,
-  Share2
+  Share2,
+  Scan
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -50,6 +51,7 @@ import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
 import { NoteFolderSidebar } from '@/components/NoteFolderSidebar';
 import { NoteAttachmentsPanel } from '@/components/NoteAttachmentsPanel';
 import { ShareToAlbumDialog } from '@/components/ShareToAlbumDialog';
+import { OCRScanner } from '@/components/OCRScanner';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1013,6 +1015,23 @@ export default function Notes() {
                       <action.icon className="w-4 h-4" />
                     </button>
                   ))}
+                  
+                  {/* OCR Scanner Button */}
+                  <OCRScanner 
+                    onTextExtracted={(text) => {
+                      setEditContent(prev => prev + (prev ? '\n\n' : '') + text);
+                      toast.success('Text eingefügt');
+                    }}
+                    trigger={
+                      <button
+                        className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                        title="Text aus Bild (OCR)"
+                      >
+                        <Scan className="w-4 h-4" />
+                      </button>
+                    }
+                  />
+                  
                   <div className="flex-1" />
                   <button
                     onClick={() => setShowPreview(!showPreview)}
