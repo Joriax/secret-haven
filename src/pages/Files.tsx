@@ -61,6 +61,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
+import { DocumentPreview, isOfficeDocument, isOfficeDocumentByExtension } from '@/components/DocumentPreview';
 
 interface FileItem {
   id: string;
@@ -171,12 +172,14 @@ export default function Files() {
 
       if (error) throw error;
 
-      // Get signed URLs for previewable files (images, videos, PDFs)
+      // Get signed URLs for previewable files (images, videos, PDFs, Office docs)
       const filesWithUrls = await Promise.all(
         (data || []).map(async (file) => {
           const isPreviewable = file.mime_type.startsWith('image/') || 
                                 file.mime_type.startsWith('video/') || 
-                                file.mime_type === 'application/pdf';
+                                file.mime_type === 'application/pdf' ||
+                                isOfficeDocument(file.mime_type) ||
+                                isOfficeDocumentByExtension(file.filename);
           if (isPreviewable) {
             const { data: urlData } = await supabase.storage
               .from('files')
@@ -656,7 +659,13 @@ export default function Files() {
 
   // Previewable files for lightbox
   const previewableFiles = useMemo(() => 
-    filteredFiles.filter(f => f.mime_type.startsWith('image/') || f.mime_type.startsWith('video/') || f.mime_type === 'application/pdf'),
+    filteredFiles.filter(f => 
+      f.mime_type.startsWith('image/') || 
+      f.mime_type.startsWith('video/') || 
+      f.mime_type === 'application/pdf' ||
+      isOfficeDocument(f.mime_type) ||
+      isOfficeDocumentByExtension(f.filename)
+    ),
     [filteredFiles]
   );
 
@@ -706,10 +715,12 @@ export default function Files() {
     });
   };
 
-  const canPreview = (mimeType: string) => {
+  const canPreview = (mimeType: string, filename?: string) => {
     return mimeType.startsWith('image/') || 
            mimeType.startsWith('video/') || 
-           mimeType === 'application/pdf';
+           mimeType === 'application/pdf' ||
+           isOfficeDocument(mimeType) ||
+           (filename ? isOfficeDocumentByExtension(filename) : false);
   };
 
   const currentPreviewFile = previewIndex !== null ? previewableFiles[previewIndex] : null;
@@ -1600,7 +1611,7 @@ export default function Files() {
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
               {filteredFiles.map((file, index) => {
                 const FileIcon = getFileIcon(file.mime_type);
-                const isPreviewable = canPreview(file.mime_type);
+                const isPreviewable = canPreview(file.mime_type, file.filename);
                 const previewIdx = isPreviewable ? previewableFiles.findIndex(f => f.id === file.id) : -1;
 
             return (
@@ -1971,6 +1982,14 @@ export default function Files() {
                       src={currentPreviewFile.url}
                       className="w-[90vw] h-[80vh] rounded-lg bg-white"
                     />
+                  ) : (isOfficeDocument(currentPreviewFile.mime_type) || isOfficeDocumentByExtension(currentPreviewFile.filename)) ? (
+                    <div className="w-[90vw] h-[80vh]">
+                      <iframe
+                        src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(currentPreviewFile.url || '')}`}
+                        className="w-full h-full rounded-lg bg-white"
+                        title={currentPreviewFile.filename}
+                      />
+                    </div>
                   ) : null}
                 </motion.div>
               </AnimatePresence>
