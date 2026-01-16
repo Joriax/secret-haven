@@ -25,8 +25,11 @@ import {
   Map,
   Download,
   FileText,
-  Calendar as CalendarIcon
+  Calendar as CalendarIcon,
+  Search,
+  X
 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import { format, subDays, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { Calendar } from '@/components/ui/calendar';
@@ -135,6 +138,7 @@ export default function SecurityLogs() {
   const [filter, setFilter] = useState<FilterType>('all');
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const [dateRange, setDateRange] = useState<{ from: Date | undefined; to: Date | undefined }>({
     from: subDays(new Date(), 30),
     to: new Date()
@@ -527,9 +531,36 @@ export default function SecurityLogs() {
     }
   };
 
+  // Apply search filter
+  const searchFilteredLogs = useMemo(() => {
+    if (!searchQuery.trim()) return dateFilteredLogs;
+    
+    const query = searchQuery.toLowerCase().trim();
+    return dateFilteredLogs.filter(log => {
+      // Search in event type label
+      const eventLabel = eventTypeConfig[log.event_type]?.label?.toLowerCase() || log.event_type.toLowerCase();
+      if (eventLabel.includes(query)) return true;
+      
+      // Search in IP address
+      if (log.ip_address?.toLowerCase().includes(query)) return true;
+      
+      // Search in location
+      if (log.city?.toLowerCase().includes(query)) return true;
+      if (log.country?.toLowerCase().includes(query)) return true;
+      if (log.region?.toLowerCase().includes(query)) return true;
+      
+      // Search in browser/OS/device
+      if (log.browser?.toLowerCase().includes(query)) return true;
+      if (log.os?.toLowerCase().includes(query)) return true;
+      if (log.device_type?.toLowerCase().includes(query)) return true;
+      
+      return false;
+    });
+  }, [dateFilteredLogs, searchQuery]);
+
   const filteredLogs = filter === 'all' 
-    ? dateFilteredLogs 
-    : dateFilteredLogs.filter(log => filterEventTypes[filter].includes(log.event_type));
+    ? searchFilteredLogs 
+    : searchFilteredLogs.filter(log => filterEventTypes[filter].includes(log.event_type));
 
   // Group logs by date
   const groupedLogs = filteredLogs.reduce((acc, log) => {
@@ -648,7 +679,25 @@ export default function SecurityLogs() {
             </PopoverContent>
           </Popover>
 
-          <div className="flex-1" />
+          {/* Search Input */}
+          <div className="relative flex-1 max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Suchen: Event, IP, Standort..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 pr-8 h-9 text-sm"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
 
           {/* Export Buttons */}
           <Button variant="outline" size="sm" onClick={exportToCSV} className="gap-2">
