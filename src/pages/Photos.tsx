@@ -62,6 +62,12 @@ import { toast } from 'sonner';
 import { useSecurityLogs } from '@/hooks/useSecurityLogs';
 import { useHierarchicalAlbums, HierarchicalAlbum } from '@/hooks/useHierarchicalAlbums';
 import { resumableStorageUpload } from '@/lib/resumableStorageUpload';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 // Video file extensions and MIME types
 const VIDEO_EXTENSIONS = /\.(mp4|mov|webm|avi|mkv|m4v|3gp|ogv|wmv|flv)$/i;
@@ -1387,57 +1393,6 @@ export default function Photos() {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Slideshow button */}
-            {viewMode !== 'albums' && filteredMedia.filter(m => m.type === 'photo').length > 0 && (
-              <button
-                onClick={startSlideshow}
-                className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border hover:bg-muted transition-all text-sm"
-              >
-                <PlayCircle className="w-4 h-4" />
-                <span className="hidden sm:inline">Slideshow</span>
-              </button>
-            )}
-
-            {/* Sort dropdown */}
-            {viewMode !== 'albums' && (
-              <div className="relative">
-                <button
-                  onClick={() => setShowSortMenu(!showSortMenu)}
-                  className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border hover:bg-muted transition-all text-sm"
-                >
-                  <ArrowUpDown className="w-4 h-4" />
-                  <span className="hidden sm:inline">Sortieren</span>
-                </button>
-                {showSortMenu && (
-                  <>
-                    <div 
-                      className="fixed inset-0 z-40" 
-                      onClick={() => setShowSortMenu(false)}
-                    />
-                    <div className="absolute top-full right-0 mt-2 w-48 bg-card border border-border shadow-xl rounded-xl p-2 z-50">
-                      {sortOptions.map(option => (
-                        <button
-                          key={option.id}
-                          onClick={() => {
-                            setSortMode(option.id);
-                            setShowSortMenu(false);
-                          }}
-                          className={cn(
-                            "w-full px-3 py-2 rounded-lg text-left text-sm transition-all",
-                            sortMode === option.id 
-                              ? "bg-primary/20 text-primary" 
-                              : "hover:bg-muted text-foreground"
-                          )}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-
             {/* Back button when in album - FIRST on the left */}
             {selectedAlbum && (
               <button
@@ -1447,11 +1402,45 @@ export default function Photos() {
                     : null;
                   setSelectedAlbum(parentAlbum || null);
                 }}
-                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-muted hover:bg-muted/80 transition-all text-sm order-first"
+                className="flex items-center justify-center gap-2 h-10 px-3 rounded-xl bg-muted hover:bg-muted/80 transition-all text-sm order-first"
               >
                 <ChevronLeft className="w-4 h-4" />
                 <span className="hidden sm:inline">Zurück</span>
               </button>
+            )}
+
+            {/* Slideshow button */}
+            {viewMode !== 'albums' && filteredMedia.filter(m => m.type === 'photo').length > 0 && (
+              <button
+                onClick={startSlideshow}
+                className="flex items-center justify-center gap-2 h-10 px-3 rounded-xl border border-border hover:bg-muted transition-all text-sm"
+              >
+                <PlayCircle className="w-4 h-4" />
+                <span className="hidden sm:inline">Slideshow</span>
+              </button>
+            )}
+
+            {/* Sort dropdown */}
+            {viewMode !== 'albums' && (
+              <DropdownMenu open={showSortMenu} onOpenChange={setShowSortMenu}>
+                <DropdownMenuTrigger asChild>
+                  <button className="flex items-center justify-center gap-2 h-10 px-3 rounded-xl border border-border hover:bg-muted transition-all text-sm">
+                    <ArrowUpDown className="w-4 h-4" />
+                    <span className="hidden sm:inline">Sortieren</span>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  {sortOptions.map(option => (
+                    <DropdownMenuItem
+                      key={option.id}
+                      onClick={() => setSortMode(option.id)}
+                      className={cn(sortMode === option.id && "bg-primary/10 text-primary")}
+                    >
+                      {option.label}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
 
             {/* Multi-select toggle */}
@@ -1461,13 +1450,13 @@ export default function Photos() {
                 setSelectedItems(new Set());
               }}
               className={cn(
-                "flex items-center justify-center gap-2 min-h-[44px] min-w-[44px] px-3 py-2 rounded-xl border transition-all text-sm",
+                "flex items-center justify-center gap-2 h-10 px-3 rounded-xl border transition-all text-sm",
                 isMultiSelectMode 
                   ? "bg-primary text-primary-foreground border-primary" 
                   : "border-border hover:bg-muted"
               )}
             >
-              <CheckSquare className="w-5 h-5" />
+              <CheckSquare className="w-4 h-4" />
               <span className="hidden sm:inline">Auswählen</span>
             </button>
 
@@ -1476,25 +1465,25 @@ export default function Photos() {
                 setNewAlbumParentId(selectedAlbum?.id || null);
                 setShowNewAlbumModal(true);
               }}
-              className="flex items-center justify-center gap-2 min-h-[44px] min-w-[44px] px-3 py-2 rounded-xl border border-border hover:bg-muted transition-all text-sm"
+              className="flex items-center justify-center gap-2 h-10 px-3 rounded-xl border border-border hover:bg-muted transition-all text-sm"
             >
-              <FolderPlus className="w-5 h-5" />
+              <FolderPlus className="w-4 h-4" />
               <span className="hidden sm:inline">{selectedAlbum ? 'Unteralbum' : 'Album'}</span>
             </button>
             
             <button
               onClick={() => cameraInputRef.current?.click()}
-              className="flex items-center justify-center gap-2 min-h-[44px] min-w-[44px] px-3 py-2 rounded-xl border border-border hover:bg-muted transition-all text-sm"
+              className="flex items-center justify-center gap-2 h-10 px-3 rounded-xl border border-border hover:bg-muted transition-all text-sm"
             >
-              <Camera className="w-5 h-5" />
+              <Camera className="w-4 h-4" />
               <span className="hidden sm:inline">Kamera</span>
             </button>
 
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="flex items-center justify-center gap-2 min-h-[44px] px-4 py-2 rounded-xl bg-primary text-primary-foreground hover:opacity-90 transition-all text-sm"
+              className="flex items-center justify-center gap-2 h-10 px-4 rounded-xl bg-primary text-primary-foreground hover:opacity-90 transition-all text-sm"
             >
-              <Plus className="w-5 h-5" />
+              <Plus className="w-4 h-4" />
               <span>Hochladen</span>
             </button>
           </div>
