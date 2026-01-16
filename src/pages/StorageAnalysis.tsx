@@ -638,33 +638,44 @@ export default function StorageAnalysis() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
-                    {data.largestFiles.map((file, index) => {
-                      const Icon = file.type === 'photo' ? Image : FileText;
-                      return (
-                        <div
-                          key={file.id}
-                          className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 text-primary font-bold text-sm">
-                              {index + 1}
-                            </div>
-                            <Icon className="w-4 h-4 text-muted-foreground" />
-                            <div>
-                              <p className="text-sm font-medium capitalize">
-                                {file.type === 'photo' ? 'Foto' : file.type === 'file' ? 'Datei' : 'Anhang'}
-                              </p>
-                              {file.albumName && (
-                                <p className="text-xs text-muted-foreground">
-                                  Album: {file.albumName}
+                    {data.largestFiles.length === 0 ? (
+                      <p className="text-muted-foreground text-sm text-center py-4">
+                        Keine Dateien gefunden
+                      </p>
+                    ) : (
+                      data.largestFiles.map((file, index) => {
+                        const Icon = file.type === 'photo' ? Image : FileText;
+                        const typeLabel = file.type === 'photo' ? 'Foto' : file.type === 'file' ? 'Datei' : 'Anhang';
+                        return (
+                          <div
+                            key={file.id}
+                            className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
+                          >
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 text-primary font-bold text-sm flex-shrink-0">
+                                {index + 1}
+                              </div>
+                              <Icon className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium truncate" title={file.name}>
+                                  {file.name}
                                 </p>
-                              )}
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                  <span>{typeLabel}</span>
+                                  {file.albumName && (
+                                    <>
+                                      <span>•</span>
+                                      <span className="truncate">{file.albumName}</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
                             </div>
+                            <span className="font-medium flex-shrink-0 ml-3">{formatBytes(file.size)}</span>
                           </div>
-                          <span className="font-medium">{formatBytes(file.size)}</span>
-                        </div>
-                      );
-                    })}
+                        );
+                      })
+                    )}
                   </div>
                 </CardContent>
               </Card>
