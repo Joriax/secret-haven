@@ -40,7 +40,11 @@ import {
   ArrowUpDown,
   Pin,
   PinOff,
-  MoreVertical
+  MoreVertical,
+  QrCode,
+  Clock,
+  Link2,
+  Share2
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTags } from '@/hooks/useTags';
@@ -53,6 +57,9 @@ import { RenameDialog } from '@/components/RenameDialog';
 import { MultiSelectBar } from '@/components/MultiSelect';
 import { TagManager } from '@/components/TagManager';
 import { SharedAlbumButton } from '@/components/SharedAlbumButton';
+import { QRCodeGenerator } from '@/components/QRCodeGenerator';
+import { TemporaryShareLink } from '@/components/TemporaryShareLink';
+import { useDuplicatePrevention } from '@/hooks/useDuplicatePrevention';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -142,6 +149,8 @@ export default function Files() {
   const location = useLocation();
   const { tags } = useTags();
   const { recordView } = useViewHistory();
+  const { checkForDuplicate, showDuplicateWarning, registerUpload, loadExistingHashes } = useDuplicatePrevention();
+  const [shareFile, setShareFile] = useState<FileItem | null>(null);
   const { 
     albums, 
     createAlbum, 
@@ -201,7 +210,8 @@ export default function Files() {
 
   useEffect(() => {
     fetchFiles();
-  }, [fetchFiles]);
+    loadExistingHashes();
+  }, [fetchFiles, loadExistingHashes]);
 
   // Real-time updates for files and albums
   useEffect(() => {
@@ -247,6 +257,19 @@ export default function Files() {
     try {
       for (let i = 0; i < filesToUpload.length; i++) {
         const file = filesToUpload[i];
+        
+        // Check for duplicates
+        const duplicateCheck = await checkForDuplicate(file);
+        if (duplicateCheck.isDuplicate && duplicateCheck.existingItem) {
+          showDuplicateWarning(
+            file, 
+            duplicateCheck.existingItem.filename,
+            () => {}, // User can still proceed manually
+            () => {}
+          );
+          // Continue anyway - just show warning
+        }
+        
         const filename = `${Date.now()}-${file.name}`;
 
         const { error: uploadError } = await supabase.storage
@@ -254,6 +277,9 @@ export default function Files() {
           .upload(`${userId}/${filename}`, file);
 
         if (uploadError) throw uploadError;
+        
+        // Register upload for future duplicate detection
+        registerUpload(filename, '', 'file');
 
         const { data, error: dbError } = await supabase
           .from('files')
@@ -1740,6 +1766,14 @@ export default function Files() {
                       >
                         <Download className="w-4 h-4 text-white" />
                       </button>
+                      {/* Share Button */}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setShareFile(file); }}
+                        className="p-1.5 hover:bg-white/20 rounded-lg transition-colors"
+                        title="Teilen"
+                      >
+                        <Share2 className="w-4 h-4 text-white" />
+                      </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); setRenameDialog({ isOpen: true, file }); }}
                         className="p-1.5 hover:bg-white/20 rounded-lg transition-colors"
@@ -2244,6 +2278,52 @@ export default function Files() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Share File Dialog */}
+      {shareFile && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShareFile(null)}>
+          <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+              <Share2 className="w-5 h-5 text-primary" />
+              Datei teilen
+            </h3>
+            <p className="text-muted-foreground text-sm mb-4">
+              "{shareFile.filename.replace(/^\d+-/, '')}"
+            </p>
+            <div className="space-y-3">
+              {shareFile.url && (
+                <QRCodeGenerator
+                  url={shareFile.url}
+                  title={`QR für ${shareFile.filename.replace(/^\d+-/, '')}`}
+                  trigger={
+                    <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-border hover:bg-muted transition-colors">
+                      <QrCode className="w-5 h-5 text-primary" />
+                      <span className="text-foreground">QR-Code generieren</span>
+                    </button>
+                  }
+                />
+              )}
+              <TemporaryShareLink
+                itemId={shareFile.id}
+                itemType="file"
+                itemName={shareFile.filename.replace(/^\d+-/, '')}
+                trigger={
+                  <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-border hover:bg-muted transition-colors">
+                    <Clock className="w-5 h-5 text-primary" />
+                    <span className="text-foreground">Temporären Link erstellen</span>
+                  </button>
+                }
+              />
+            </div>
+            <button
+              onClick={() => setShareFile(null)}
+              className="w-full mt-4 px-4 py-2 rounded-xl border border-border hover:bg-muted transition-colors text-muted-foreground"
+            >
+              Schließen
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -42,6 +42,9 @@ import {
   FileText,
   Palette,
   Share2,
+  QrCode,
+  Clock,
+  Link2,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTags } from '@/hooks/useTags';
@@ -58,6 +61,9 @@ import { MultiSelectBar } from '@/components/MultiSelect';
 import { TagManager } from '@/components/TagManager';
 import { SharedAlbumButton } from '@/components/SharedAlbumButton';
 import { ShareToAlbumDialog } from '@/components/ShareToAlbumDialog';
+import { QRCodeGenerator } from '@/components/QRCodeGenerator';
+import { TemporaryShareLink } from '@/components/TemporaryShareLink';
+import { useDuplicatePrevention } from '@/hooks/useDuplicatePrevention';
 import { toast } from 'sonner';
 import { useSecurityLogs } from '@/hooks/useSecurityLogs';
 import { useHierarchicalAlbums, HierarchicalAlbum } from '@/hooks/useHierarchicalAlbums';
@@ -231,6 +237,8 @@ export default function Photos() {
   const { recordView } = useViewHistory();
   const { generateThumbnail } = useVideoThumbnail();
   const isMobile = useIsMobile();
+  const { checkForDuplicate, showDuplicateWarning, registerUpload, loadExistingHashes } = useDuplicatePrevention();
+  const [shareItem, setShareItem] = useState<MediaItem | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!userId) return;
@@ -311,7 +319,8 @@ export default function Photos() {
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+    loadExistingHashes();
+  }, [fetchData, loadExistingHashes]);
 
   // Real-time updates for photos and albums
   useEffect(() => {
@@ -375,6 +384,18 @@ export default function Photos() {
           toast.error(`${file.name} ist zu groß (max. ${isVideo ? '500MB' : '50MB'})`);
           skipped++;
           continue;
+        }
+
+        // Check for duplicates
+        const duplicateCheck = await checkForDuplicate(file);
+        if (duplicateCheck.isDuplicate && duplicateCheck.existingItem) {
+          showDuplicateWarning(
+            file, 
+            duplicateCheck.existingItem.filename,
+            () => {}, // User can still proceed manually
+            () => { skipped++; }
+          );
+          // Continue anyway - just show warning
         }
 
         const timestamp = Date.now();
@@ -479,6 +500,9 @@ export default function Photos() {
         }
 
         const mediaType = isVideo ? 'video' as const : 'photo' as const;
+
+        // Register upload for future duplicate detection
+        registerUpload(filename, photoData.id, 'photo');
 
         setMedia(prev => [{
           ...photoData, 
@@ -2106,6 +2130,32 @@ export default function Photos() {
                 >
                   <Download className="w-5 h-5 text-white" />
                 </button>
+                
+                {/* QR Code Button */}
+                {currentLightboxItem.url && (
+                  <QRCodeGenerator
+                    url={currentLightboxItem.url}
+                    title={`QR für ${currentLightboxItem.filename.replace(/^\d+-/, '')}`}
+                    trigger={
+                      <button className="p-2 hover:bg-white/10 rounded-full transition-colors hidden sm:flex min-h-[44px] min-w-[44px] items-center justify-center">
+                        <QrCode className="w-5 h-5 text-white" />
+                      </button>
+                    }
+                  />
+                )}
+                
+                {/* Temporary Share Link */}
+                <TemporaryShareLink
+                  itemId={currentLightboxItem.id}
+                  itemType="photo"
+                  itemName={currentLightboxItem.filename.replace(/^\d+-/, '')}
+                  trigger={
+                    <button className="p-2 hover:bg-white/10 rounded-full transition-colors hidden sm:flex min-h-[44px] min-w-[44px] items-center justify-center">
+                      <Clock className="w-5 h-5 text-white" />
+                    </button>
+                  }
+                />
+                
                 <button
                   onClick={() => setRenameDialog({ isOpen: true, item: currentLightboxItem })}
                   className="p-2 hover:bg-white/10 rounded-full transition-colors hidden sm:flex min-h-[44px] min-w-[44px] items-center justify-center"
