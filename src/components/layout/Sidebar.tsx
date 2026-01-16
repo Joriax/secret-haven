@@ -55,6 +55,14 @@ const secondaryNavItems = [
   { icon: HardDrive, label: 'Speicheranalyse', path: '/storage-analysis' },
 ];
 
+import { Activity, BarChart3, Cloud } from 'lucide-react';
+
+const analyticsNavItems = [
+  { icon: Activity, label: 'Aktivität', path: '/activity' },
+  { icon: BarChart3, label: 'Statistiken', path: '/usage-stats' },
+  { icon: Cloud, label: 'Tag-Cloud', path: '/tag-cloud' },
+];
+
 const securityNavItems = [
   { icon: Lock, label: 'Geheimer Safe', path: '/secret-texts' },
   { icon: Shield, label: 'Sicherheit', path: '/security-logs' },
@@ -196,6 +204,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onSearchOpen
               Sammlungen
             </p>
             {secondaryNavItems.map((item) => (
+              <NavItem 
+                key={item.path} 
+                item={item} 
+                isActive={location.pathname === item.path} 
+              />
+            ))}
+          </div>
+
+          {/* Analytics */}
+          <div className="space-y-1">
+            <p className="px-3 text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
+              Analyse
+            </p>
+            {analyticsNavItems.map((item) => (
               <NavItem 
                 key={item.path} 
                 item={item} 
