@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
@@ -24,6 +24,7 @@ export interface UseHierarchicalAlbumsOptions {
 export function useHierarchicalAlbums({ tableName }: UseHierarchicalAlbumsOptions) {
   const [albums, setAlbums] = useState<HierarchicalAlbum[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const createAlbumLockRef = useRef(false);
   const { userId, isDecoyMode, supabaseClient: supabase } = useAuth();
 
   const fetchAlbums = useCallback(async () => {
@@ -93,14 +94,18 @@ export function useHierarchicalAlbums({ tableName }: UseHierarchicalAlbumsOption
     color: string = '#6366f1', 
     icon: string = 'folder'
   ): Promise<HierarchicalAlbum | null> => {
-    if (!userId) return null;
+    const trimmed = name.trim();
+    if (!userId || !trimmed || isDecoyMode) return null;
+
+    if (createAlbumLockRef.current) return null;
+    createAlbumLockRef.current = true;
 
     try {
       const { data, error } = await supabase
         .from(tableName)
         .insert({
           user_id: userId,
-          name,
+          name: trimmed,
           parent_id: parentId,
           color,
           icon,
@@ -109,14 +114,25 @@ export function useHierarchicalAlbums({ tableName }: UseHierarchicalAlbumsOption
         .single();
 
       if (error) throw error;
-      
-      setAlbums(prev => [...prev, data as HierarchicalAlbum]);
+
+      setAlbums((prev) => {
+        const next = [...prev, data as HierarchicalAlbum];
+        const seen = new Set<string>();
+        return next.filter((a) => {
+          if (seen.has(a.id)) return false;
+          seen.add(a.id);
+          return true;
+        });
+      });
+
       toast.success(parentId ? 'Unterordner erstellt' : 'Ordner erstellt');
       return data as HierarchicalAlbum;
     } catch (error) {
       console.error('Error creating album:', error);
       toast.error('Fehler beim Erstellen');
       return null;
+    } finally {
+      createAlbumLockRef.current = false;
     }
   };
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
@@ -19,6 +19,7 @@ export interface FileAlbum {
 export function useFileAlbums() {
   const [albums, setAlbums] = useState<FileAlbum[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const createAlbumLockRef = useRef(false);
   const { userId, isDecoyMode, supabaseClient: supabase } = useAuth();
 
   const fetchAlbums = useCallback(async () => {
@@ -107,14 +108,18 @@ export function useFileAlbums() {
     icon?: string, 
     parentId?: string | null
   ): Promise<FileAlbum | null> => {
-    if (!userId) return null;
+    const trimmed = name.trim();
+    if (!userId || !trimmed || isDecoyMode) return null;
+
+    if (createAlbumLockRef.current) return null;
+    createAlbumLockRef.current = true;
 
     try {
       const { data, error } = await supabase
         .from('file_albums')
         .insert({
           user_id: userId,
-          name: name.trim(),
+          name: trimmed,
           color: color || '#6366f1',
           icon: icon || 'folder',
           parent_id: parentId ?? null,
@@ -124,13 +129,24 @@ export function useFileAlbums() {
 
       if (error) throw error;
 
-      setAlbums(prev => [{ ...data, count: 0 } as FileAlbum, ...prev]);
+      setAlbums((prev) => {
+        const next = [{ ...data, count: 0 } as FileAlbum, ...prev];
+        const seen = new Set<string>();
+        return next.filter((a) => {
+          if (seen.has(a.id)) return false;
+          seen.add(a.id);
+          return true;
+        });
+      });
+
       toast.success(parentId ? 'Unterordner erstellt' : 'Ordner erstellt');
       return data as FileAlbum;
     } catch (error) {
       console.error('Error creating album:', error);
       toast.error('Fehler beim Erstellen');
       return null;
+    } finally {
+      createAlbumLockRef.current = false;
     }
   };
 

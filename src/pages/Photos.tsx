@@ -222,6 +222,7 @@ export default function Photos() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const createAlbumLockRef = useRef(false);
   const touchStartX = useRef<number | null>(null);
   const { userId, isDecoyMode, sessionToken, supabaseClient: supabase } = useAuth();
   const location = useLocation();
@@ -508,15 +509,20 @@ export default function Photos() {
   };
 
   const createAlbum = async (parentId?: string | null) => {
-    if (!newAlbumName.trim() || !userId || isCreatingAlbum) return;
+    const name = newAlbumName.trim();
+    if (!name || !userId) return;
 
+    // Prevent duplicate inserts when multiple events fire in the same tick (Enter + click / double tap)
+    if (createAlbumLockRef.current) return;
+    createAlbumLockRef.current = true;
     setIsCreatingAlbum(true);
+
     try {
       const { data, error } = await supabase
         .from('albums')
         .insert({
           user_id: userId,
-          name: newAlbumName.trim(),
+          name,
           color: newAlbumColor,
           icon: newAlbumIcon,
           parent_id: parentId ?? newAlbumParentId ?? null,
@@ -526,7 +532,16 @@ export default function Photos() {
 
       if (error) throw error;
 
-      setAlbums([{ ...data, count: 0 }, ...albums]);
+      setAlbums((prev) => {
+        const next = [{ ...data, count: 0 }, ...prev];
+        const seen = new Set<string>();
+        return next.filter((a) => {
+          if (seen.has(a.id)) return false;
+          seen.add(a.id);
+          return true;
+        });
+      });
+
       setNewAlbumName('');
       setNewAlbumColor('#6366f1');
       setNewAlbumIcon('folder');
@@ -537,6 +552,7 @@ export default function Photos() {
       console.error('Error creating album:', error);
       toast.error('Fehler beim Erstellen');
     } finally {
+      createAlbumLockRef.current = false;
       setIsCreatingAlbum(false);
     }
   };
@@ -1778,7 +1794,7 @@ export default function Photos() {
           ) : (
             <>
               {/* Child Albums Grid - shown when in an album - Apple Files style */}
-              {selectedAlbum && currentChildAlbums.length > 0 && (
+              {selectedAlbum && viewMode !== 'albums' && currentChildAlbums.length > 0 && (
                 <div className="mb-6">
                   <h3 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
                     <Folder className="w-4 h-4" />
@@ -2234,7 +2250,12 @@ export default function Photos() {
                 placeholder="Album Name..."
                 className="w-full px-4 py-3 rounded-xl vault-input text-foreground placeholder:text-muted-foreground mb-4"
                 autoFocus
-                onKeyDown={(e) => e.key === 'Enter' && createAlbum()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    createAlbum();
+                  }
+                }}
               />
 
               {/* Parent Album Selection */}
