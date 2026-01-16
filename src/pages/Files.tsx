@@ -61,7 +61,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
-import { DocumentPreview, isOfficeDocument, isOfficeDocumentByExtension } from '@/components/DocumentPreview';
+import { DocumentPreview, isOfficeDocument, isOfficeDocumentByExtension, isTextFile } from '@/components/DocumentPreview';
 
 interface FileItem {
   id: string;
@@ -172,14 +172,15 @@ export default function Files() {
 
       if (error) throw error;
 
-      // Get signed URLs for previewable files (images, videos, PDFs, Office docs)
+      // Get signed URLs for previewable files (images, videos, PDFs, Office docs, text files)
       const filesWithUrls = await Promise.all(
         (data || []).map(async (file) => {
           const isPreviewable = file.mime_type.startsWith('image/') || 
                                 file.mime_type.startsWith('video/') || 
                                 file.mime_type === 'application/pdf' ||
                                 isOfficeDocument(file.mime_type) ||
-                                isOfficeDocumentByExtension(file.filename);
+                                isOfficeDocumentByExtension(file.filename) ||
+                                isTextFile(file.mime_type, file.filename);
           if (isPreviewable) {
             const { data: urlData } = await supabase.storage
               .from('files')
@@ -664,7 +665,8 @@ export default function Files() {
       f.mime_type.startsWith('video/') || 
       f.mime_type === 'application/pdf' ||
       isOfficeDocument(f.mime_type) ||
-      isOfficeDocumentByExtension(f.filename)
+      isOfficeDocumentByExtension(f.filename) ||
+      isTextFile(f.mime_type, f.filename)
     ),
     [filteredFiles]
   );
@@ -720,7 +722,8 @@ export default function Files() {
            mimeType.startsWith('video/') || 
            mimeType === 'application/pdf' ||
            isOfficeDocument(mimeType) ||
-           (filename ? isOfficeDocumentByExtension(filename) : false);
+           (filename ? isOfficeDocumentByExtension(filename) : false) ||
+           (filename ? isTextFile(mimeType, filename) : false);
   };
 
   const currentPreviewFile = previewIndex !== null ? previewableFiles[previewIndex] : null;
@@ -1982,14 +1985,18 @@ export default function Files() {
                       src={currentPreviewFile.url}
                       className="w-[90vw] h-[80vh] rounded-lg bg-white"
                     />
-                  ) : (isOfficeDocument(currentPreviewFile.mime_type) || isOfficeDocumentByExtension(currentPreviewFile.filename)) ? (
-                    <div className="w-[90vw] h-[80vh]">
-                      <iframe
-                        src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(currentPreviewFile.url || '')}`}
-                        className="w-full h-full rounded-lg bg-white"
-                        title={currentPreviewFile.filename}
-                      />
-                    </div>
+                  ) : (isOfficeDocument(currentPreviewFile.mime_type) || isOfficeDocumentByExtension(currentPreviewFile.filename) || isTextFile(currentPreviewFile.mime_type, currentPreviewFile.filename)) ? (
+                    <DocumentPreview
+                      url={currentPreviewFile.url || ''}
+                      filename={currentPreviewFile.filename}
+                      mimeType={currentPreviewFile.mime_type}
+                      onClose={() => setPreviewIndex(null)}
+                      onPrevious={previewIndex! > 0 ? () => navigatePreview('prev') : undefined}
+                      onNext={previewIndex! < previewableFiles.length - 1 ? () => navigatePreview('next') : undefined}
+                      hasPrevious={previewIndex! > 0}
+                      hasNext={previewIndex! < previewableFiles.length - 1}
+                      onDownload={() => downloadFile(currentPreviewFile)}
+                    />
                   ) : null}
                 </motion.div>
               </AnimatePresence>
