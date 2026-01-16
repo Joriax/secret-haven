@@ -1437,8 +1437,8 @@ export default function Photos() {
               </button>
             )}
 
-            {/* Sort dropdown */}
-            {viewMode !== 'albums' && (
+            {/* Sort dropdown - show when viewing media (not album-only view at root) */}
+            {(viewMode !== 'albums' || selectedAlbum) && (
               <DropdownMenu open={showSortMenu} onOpenChange={setShowSortMenu}>
                 <DropdownMenuTrigger asChild>
                   <button className="flex items-center justify-center gap-2 h-9 px-3 rounded-lg border border-border hover:bg-muted transition-all text-sm font-medium">
@@ -1446,7 +1446,7 @@ export default function Photos() {
                     <span className="hidden sm:inline">Sortieren</span>
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuContent align="start" side="bottom" className="w-48 z-50">
                   {sortOptions.map(option => (
                     <DropdownMenuItem
                       key={option.id}
