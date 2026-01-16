@@ -97,24 +97,91 @@ function parseUserAgent(ua: string | null): { browser: string; os: string; devic
   let os = 'Unbekannt';
   let deviceType = 'Desktop';
   
-  // Detect browser
-  if (ua.includes('Firefox/')) browser = 'Firefox';
-  else if (ua.includes('Edg/')) browser = 'Edge';
-  else if (ua.includes('Chrome/')) browser = 'Chrome';
-  else if (ua.includes('Safari/') && !ua.includes('Chrome')) browser = 'Safari';
-  else if (ua.includes('Opera/') || ua.includes('OPR/')) browser = 'Opera';
+  // FIRST: Detect device type and OS (order matters - check mobile first!)
+  const isIPhone = ua.includes('iPhone');
+  const isIPad = ua.includes('iPad');
+  const isAndroid = ua.includes('Android');
+  const isMobile = ua.includes('Mobile') || isIPhone;
   
-  // Detect OS
-  if (ua.includes('Windows NT 10')) os = 'Windows 10/11';
-  else if (ua.includes('Windows NT')) os = 'Windows';
-  else if (ua.includes('Mac OS X')) os = 'macOS';
-  else if (ua.includes('iPhone')) { os = 'iOS'; deviceType = 'Mobile'; }
-  else if (ua.includes('iPad')) { os = 'iPadOS'; deviceType = 'Tablet'; }
-  else if (ua.includes('Android')) { 
-    os = 'Android'; 
-    deviceType = ua.includes('Mobile') ? 'Mobile' : 'Tablet';
+  // Detect OS based on device
+  if (isIPhone) {
+    os = 'iOS';
+    deviceType = 'Mobile';
+    // Extract iOS version if available
+    const iosMatch = ua.match(/iPhone OS (\d+)[_\.](\d+)/);
+    if (iosMatch) {
+      os = `iOS ${iosMatch[1]}.${iosMatch[2]}`;
+    }
+  } else if (isIPad) {
+    os = 'iPadOS';
+    deviceType = 'Tablet';
+    const iosMatch = ua.match(/CPU OS (\d+)[_\.](\d+)/);
+    if (iosMatch) {
+      os = `iPadOS ${iosMatch[1]}.${iosMatch[2]}`;
+    }
+  } else if (isAndroid) {
+    const androidMatch = ua.match(/Android (\d+(\.\d+)?)/);
+    os = androidMatch ? `Android ${androidMatch[1]}` : 'Android';
+    deviceType = isMobile ? 'Mobile' : 'Tablet';
+  } else if (ua.includes('Windows NT 10')) {
+    os = 'Windows 10/11';
+  } else if (ua.includes('Windows NT 6.3')) {
+    os = 'Windows 8.1';
+  } else if (ua.includes('Windows NT 6.2')) {
+    os = 'Windows 8';
+  } else if (ua.includes('Windows NT 6.1')) {
+    os = 'Windows 7';
+  } else if (ua.includes('Windows NT')) {
+    os = 'Windows';
+  } else if (ua.includes('Mac OS X') && !isIPhone && !isIPad) {
+    const macMatch = ua.match(/Mac OS X (\d+)[_\.](\d+)/);
+    os = macMatch ? `macOS ${macMatch[1]}.${macMatch[2]}` : 'macOS';
+  } else if (ua.includes('Linux')) {
+    os = 'Linux';
+  } else if (ua.includes('CrOS')) {
+    os = 'Chrome OS';
   }
-  else if (ua.includes('Linux')) os = 'Linux';
+  
+  // Detect browser (order matters - more specific first)
+  if (ua.includes('CriOS/')) {
+    // Chrome on iOS
+    browser = 'Chrome (iOS)';
+    const match = ua.match(/CriOS\/(\d+)/);
+    if (match) browser = `Chrome ${match[1]} (iOS)`;
+  } else if (ua.includes('FxiOS/')) {
+    // Firefox on iOS
+    browser = 'Firefox (iOS)';
+    const match = ua.match(/FxiOS\/(\d+)/);
+    if (match) browser = `Firefox ${match[1]} (iOS)`;
+  } else if (ua.includes('EdgiOS/')) {
+    // Edge on iOS
+    browser = 'Edge (iOS)';
+  } else if (ua.includes('SamsungBrowser/')) {
+    const match = ua.match(/SamsungBrowser\/(\d+)/);
+    browser = match ? `Samsung Browser ${match[1]}` : 'Samsung Browser';
+  } else if (ua.includes('OPR/') || ua.includes('Opera/')) {
+    const match = ua.match(/OPR\/(\d+)|Opera\/(\d+)/);
+    browser = match ? `Opera ${match[1] || match[2]}` : 'Opera';
+  } else if (ua.includes('Edg/')) {
+    const match = ua.match(/Edg\/(\d+)/);
+    browser = match ? `Edge ${match[1]}` : 'Edge';
+  } else if (ua.includes('Firefox/')) {
+    const match = ua.match(/Firefox\/(\d+)/);
+    browser = match ? `Firefox ${match[1]}` : 'Firefox';
+  } else if (ua.includes('Chrome/') && !ua.includes('Chromium')) {
+    const match = ua.match(/Chrome\/(\d+)/);
+    browser = match ? `Chrome ${match[1]}` : 'Chrome';
+  } else if (ua.includes('Safari/') && !ua.includes('Chrome') && !ua.includes('Chromium')) {
+    // Safari (make sure it's not Chrome/Chromium pretending)
+    if (ua.includes('Version/')) {
+      const match = ua.match(/Version\/(\d+(\.\d+)?)/);
+      browser = match ? `Safari ${match[1]}` : 'Safari';
+    } else {
+      browser = 'Safari';
+    }
+  } else if (ua.includes('MSIE') || ua.includes('Trident/')) {
+    browser = 'Internet Explorer';
+  }
   
   return { browser, os, deviceType };
 }
@@ -1369,6 +1436,91 @@ serve(async (req) => {
 
       return new Response(
         JSON.stringify({ success: true, recoveryKey: newKey }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // ========== DELETE SECURITY LOGS ==========
+    else if (action === 'delete-security-logs') {
+      if (!authenticatedUser) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Nicht autorisiert' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+        );
+      }
+
+      const { logIds, deleteAll, olderThan } = body;
+      
+      let query = supabase
+        .from('security_logs')
+        .delete()
+        .eq('user_id', authenticatedUser.userId);
+      
+      if (deleteAll) {
+        // Delete all logs for user
+      } else if (olderThan) {
+        // Delete logs older than specified date
+        query = query.lt('created_at', olderThan);
+      } else if (logIds && Array.isArray(logIds) && logIds.length > 0) {
+        // Delete specific logs
+        query = query.in('id', logIds);
+      } else {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Keine Logs zum Löschen angegeben' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
+      }
+      
+      const { error: deleteError, count } = await query;
+      
+      if (deleteError) {
+        console.error('Error deleting logs:', deleteError);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Fehler beim Löschen der Logs' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        );
+      }
+      
+      await logSecurityEvent(supabase, authenticatedUser.userId, 'logs_deleted', { 
+        deleteAll, 
+        olderThan, 
+        logIdsCount: logIds?.length 
+      }, req);
+      
+      return new Response(
+        JSON.stringify({ success: true, deletedCount: count }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // ========== GET SECURITY LOGS (with configurable limit) ==========
+    else if (action === 'get-security-logs') {
+      if (!authenticatedUser) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Nicht autorisiert' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+        );
+      }
+
+      const { limit = 100, offset = 0 } = body;
+      const safeLimit = Math.min(Math.max(1, limit), 1000); // Max 1000 logs
+      
+      const { data: logs, error: logsError, count } = await supabase
+        .from('security_logs')
+        .select('*', { count: 'exact' })
+        .eq('user_id', authenticatedUser.userId)
+        .order('created_at', { ascending: false })
+        .range(offset, offset + safeLimit - 1);
+      
+      if (logsError) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Fehler beim Laden der Logs' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        );
+      }
+      
+      return new Response(
+        JSON.stringify({ success: true, logs, totalCount: count }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
