@@ -1282,10 +1282,26 @@ export default function Files() {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            {/* Back button when in album - FIRST on the left */}
+            {selectedAlbum && (
+              <button
+                onClick={() => {
+                  const parentAlbum = selectedAlbum.parent_id 
+                    ? albums.find(a => a.id === selectedAlbum.parent_id) 
+                    : null;
+                  setSelectedAlbum(parentAlbum || null);
+                }}
+                className="flex items-center justify-center gap-2 h-10 px-3 rounded-xl bg-muted hover:bg-muted/80 transition-all text-sm order-first"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span className="hidden sm:inline">Zurück</span>
+              </button>
+            )}
+
             {/* Sort dropdown */}
             <DropdownMenu open={showSortMenu} onOpenChange={setShowSortMenu}>
               <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border hover:bg-muted transition-all text-sm">
+                <button className="flex items-center justify-center gap-2 h-10 px-3 rounded-xl border border-border hover:bg-muted transition-all text-sm">
                   <ArrowUpDown className="w-4 h-4" />
                   <span className="hidden sm:inline">Sortieren</span>
                 </button>
@@ -1303,29 +1319,13 @@ export default function Files() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Back button when in album */}
-            {selectedAlbum && (
-              <button
-                onClick={() => {
-                  const parentAlbum = selectedAlbum.parent_id 
-                    ? albums.find(a => a.id === selectedAlbum.parent_id) 
-                    : null;
-                  setSelectedAlbum(parentAlbum || null);
-                }}
-                className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border hover:bg-muted transition-all text-sm"
-              >
-                <ChevronLeft className="w-4 h-4" />
-                <span className="hidden sm:inline">Zurück</span>
-              </button>
-            )}
-
             {/* New Folder button */}
             <button
               onClick={() => {
                 setNewAlbumParentId(selectedAlbum?.id || null);
                 setShowNewAlbumModal(true);
               }}
-              className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border hover:bg-muted transition-all text-sm"
+              className="flex items-center justify-center gap-2 h-10 px-3 rounded-xl border border-border hover:bg-muted transition-all text-sm"
             >
               <FolderPlus className="w-4 h-4" />
               <span className="hidden sm:inline">{selectedAlbum ? 'Unterordner' : 'Ordner'}</span>
@@ -1338,7 +1338,7 @@ export default function Files() {
                 setSelectedItems(new Set());
               }}
               className={cn(
-                "flex items-center gap-2 px-3 py-2 rounded-xl border transition-all text-sm",
+                "flex items-center justify-center gap-2 h-10 px-3 rounded-xl border transition-all text-sm",
                 isMultiSelectMode 
                   ? "bg-primary text-primary-foreground border-primary" 
                   : "border-border hover:bg-muted"
@@ -1349,11 +1349,11 @@ export default function Files() {
             </button>
 
             {/* View Mode Toggle */}
-            <div className="flex items-center border border-border rounded-xl overflow-hidden">
+            <div className="flex items-center h-10 border border-border rounded-xl overflow-hidden">
               <button
                 onClick={() => setViewMode('grid')}
                 className={cn(
-                  "p-2 transition-colors",
+                  "h-full px-3 transition-colors flex items-center justify-center",
                   viewMode === 'grid' ? "bg-primary text-primary-foreground" : "hover:bg-muted"
                 )}
               >
@@ -1362,7 +1362,7 @@ export default function Files() {
               <button
                 onClick={() => setViewMode('list')}
                 className={cn(
-                  "p-2 transition-colors",
+                  "h-full px-3 transition-colors flex items-center justify-center",
                   viewMode === 'list' ? "bg-primary text-primary-foreground" : "hover:bg-muted"
                 )}
               >
@@ -1372,10 +1372,10 @@ export default function Files() {
 
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-primary hover:shadow-glow transition-all text-primary-foreground"
+              className="flex items-center justify-center gap-2 h-10 px-4 rounded-xl bg-primary text-primary-foreground hover:opacity-90 transition-all text-sm"
             >
               <Plus className="w-4 h-4" />
-              <span className="text-sm">Hochladen</span>
+              <span>Hochladen</span>
             </button>
           </div>
         </div>
@@ -1511,24 +1511,145 @@ export default function Files() {
         <div className="flex items-center justify-center py-20">
           <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </div>
-      ) : filteredFiles.length === 0 ? (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="glass-card p-12 text-center"
-        >
-          <File className="w-16 h-16 mx-auto mb-4 text-muted-foreground/30" />
-          <h3 className="text-lg font-medium text-foreground mb-2">Keine Dateien</h3>
-          <p className="text-muted-foreground">
-            Lade deine ersten Dateien hoch
-          </p>
-        </motion.div>
-      ) : viewMode === 'grid' ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-          {filteredFiles.map((file, index) => {
-            const FileIcon = getFileIcon(file.mime_type);
-            const isPreviewable = canPreview(file.mime_type);
-            const previewIdx = isPreviewable ? previewableFiles.findIndex(f => f.id === file.id) : -1;
+      ) : (
+        <>
+          {/* Child Albums Grid - Apple Files style: folders always shown first */}
+          {currentChildAlbums.length > 0 && (
+            <div className="mb-6">
+              <h3 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
+                <Folder className="w-4 h-4" />
+                Ordner ({currentChildAlbums.length})
+              </h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                {currentChildAlbums.map((album) => {
+                  const albumFileCount = files.filter(f => f.album_id === album.id).length;
+                  const iconName = album.icon || 'folder';
+                  const icons: Record<string, React.ReactNode> = {
+                    folder: <Folder className="w-8 h-8" style={{ color: album.color }} />,
+                    music: <Music className="w-8 h-8" style={{ color: album.color }} />,
+                    book: <BookOpen className="w-8 h-8" style={{ color: album.color }} />,
+                    archive: <Archive className="w-8 h-8" style={{ color: album.color }} />,
+                    briefcase: <Briefcase className="w-8 h-8" style={{ color: album.color }} />,
+                    camera: <Camera className="w-8 h-8" style={{ color: album.color }} />,
+                    film: <Film className="w-8 h-8" style={{ color: album.color }} />,
+                    heart: <Heart className="w-8 h-8" style={{ color: album.color }} />,
+                    home: <Home className="w-8 h-8" style={{ color: album.color }} />,
+                    image: <ImageIcon className="w-8 h-8" style={{ color: album.color }} />,
+                    inbox: <Inbox className="w-8 h-8" style={{ color: album.color }} />,
+                    layers: <Layers className="w-8 h-8" style={{ color: album.color }} />,
+                    package: <Package className="w-8 h-8" style={{ color: album.color }} />,
+                  };
+                  
+                  return (
+                    <motion.div
+                      key={album.id}
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      whileHover={{ scale: 1.02 }}
+                      onClick={() => setSelectedAlbum(album)}
+                      className="glass-card-hover overflow-hidden cursor-pointer p-4 relative group"
+                    >
+                      <div className="flex flex-col items-center text-center">
+                        <div 
+                          className="w-16 h-16 rounded-xl flex items-center justify-center mb-2"
+                          style={{ backgroundColor: `${album.color}20` }}
+                        >
+                          {icons[iconName] || icons.folder}
+                        </div>
+                        <h4 className="text-sm font-medium text-foreground truncate w-full">{album.name}</h4>
+                        <p className="text-xs text-muted-foreground">{albumFileCount} Dateien</p>
+                      </div>
+                      
+                      {/* Pin indicator */}
+                      {album.is_pinned && (
+                        <div className="absolute top-2 left-2">
+                          <Pin className="w-3.5 h-3.5 text-primary" />
+                        </div>
+                      )}
+                      
+                      {/* Hover actions */}
+                      <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setNewAlbumParentId(album.id);
+                            setShowNewAlbumModal(true);
+                          }}
+                          className="p-1.5 rounded-lg bg-muted hover:bg-muted/80 transition-all"
+                          title="Unterordner erstellen"
+                        >
+                          <FolderPlus className="w-3.5 h-3.5 text-muted-foreground" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingAlbum(album);
+                            setShowEditAlbumModal(true);
+                          }}
+                          className="p-1.5 rounded-lg bg-muted hover:bg-muted/80 transition-all"
+                          title="Bearbeiten"
+                        >
+                          <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            togglePin(album.id);
+                          }}
+                          className="p-1.5 rounded-lg bg-muted hover:bg-muted/80 transition-all"
+                          title={album.is_pinned ? 'Loslösen' : 'Anpinnen'}
+                        >
+                          {album.is_pinned ? (
+                            <PinOff className="w-3.5 h-3.5 text-muted-foreground" />
+                          ) : (
+                            <Pin className="w-3.5 h-3.5 text-muted-foreground" />
+                          )}
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteAlbumConfirm({ isOpen: true, album });
+                          }}
+                          className="p-1.5 rounded-lg bg-muted hover:bg-destructive/20 transition-all"
+                          title="Löschen"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
+                        </button>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Files Section Header */}
+          {filteredFiles.length > 0 && currentChildAlbums.length > 0 && (
+            <h3 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
+              <File className="w-4 h-4" />
+              Dateien ({filteredFiles.length})
+            </h3>
+          )}
+
+          {/* Files Grid */}
+          {filteredFiles.length === 0 && currentChildAlbums.length === 0 ? (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="glass-card p-12 text-center"
+            >
+              <File className="w-16 h-16 mx-auto mb-4 text-muted-foreground/30" />
+              <h3 className="text-lg font-medium text-foreground mb-2">Keine Dateien</h3>
+              <p className="text-muted-foreground">
+                Lade deine ersten Dateien hoch
+              </p>
+            </motion.div>
+          ) : filteredFiles.length > 0 && viewMode === 'grid' ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+              {filteredFiles.map((file, index) => {
+                const FileIcon = getFileIcon(file.mime_type);
+                const isPreviewable = canPreview(file.mime_type);
+                const previewIdx = isPreviewable ? previewableFiles.findIndex(f => f.id === file.id) : -1;
 
             return (
               <motion.div
@@ -1704,102 +1825,103 @@ export default function Files() {
               </motion.div>
             );
           })}
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {filteredFiles.map((file, index) => {
-            const FileIcon = getFileIcon(file.mime_type);
-            return (
-              <motion.div
-                key={file.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.03 }}
-                className="glass-card-hover p-4 flex items-center gap-4 group"
-                onContextMenu={(e) => handleContextMenu(e, file)}
-                onTouchStart={(e) => handleLongPressStart(file, e)}
-                onTouchEnd={handleLongPressEnd}
-                onTouchMove={handleLongPressEnd}
-              >
-                <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center shrink-0">
-                  <FileIcon className="w-6 h-6 text-primary" />
-                </div>
+            </div>
+          ) : filteredFiles.length > 0 && viewMode === 'list' ? (
+            <div className="space-y-2">
+              {filteredFiles.map((file, index) => {
+                const FileIcon = getFileIcon(file.mime_type);
+                return (
+                  <motion.div
+                    key={file.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.03 }}
+                    className="glass-card-hover p-4 flex items-center gap-4 group"
+                    onContextMenu={(e) => handleContextMenu(e, file)}
+                    onTouchStart={(e) => handleLongPressStart(file, e)}
+                    onTouchEnd={handleLongPressEnd}
+                    onTouchMove={handleLongPressEnd}
+                  >
+                    <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center shrink-0">
+                      <FileIcon className="w-6 h-6 text-primary" />
+                    </div>
 
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-medium text-foreground truncate">
-                      {file.filename.replace(/^\d+-/, '')}
-                    </h3>
-                    {file.is_favorite && (
-                      <Star className="w-4 h-4 text-yellow-500 fill-yellow-500 shrink-0" />
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm text-muted-foreground">
-                      {formatFileSize(file.size)} • {formatDate(file.uploaded_at)}
-                    </p>
-                    {/* Album badge */}
-                    {file.album_id && (
-                      <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-muted text-xs text-muted-foreground">
-                        <Folder className="w-3 h-3" />
-                        {albums.find((a) => a.id === file.album_id)?.name || 'Album'}
-                      </span>
-                    )}
-                    {file.tags && file.tags.length > 0 && (
-                      <div className="flex gap-1">
-                        {file.tags.slice(0, 3).map(tagId => {
-                          const tag = tags.find(t => t.id === tagId);
-                          return tag ? (
-                            <span 
-                              key={tagId} 
-                              className="px-2 py-0.5 rounded text-xs"
-                              style={{ backgroundColor: `${tag.color}30`, color: tag.color }}
-                            >
-                              {tag.name}
-                            </span>
-                          ) : null;
-                        })}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-medium text-foreground truncate">
+                          {file.filename.replace(/^\d+-/, '')}
+                        </h3>
+                        {file.is_favorite && (
+                          <Star className="w-4 h-4 text-yellow-500 fill-yellow-500 shrink-0" />
+                        )}
                       </div>
-                    )}
-                  </div>
-                </div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm text-muted-foreground">
+                          {formatFileSize(file.size)} • {formatDate(file.uploaded_at)}
+                        </p>
+                        {file.album_id && (
+                          <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-muted text-xs text-muted-foreground">
+                            <Folder className="w-3 h-3" />
+                            {albums.find((a) => a.id === file.album_id)?.name || 'Album'}
+                          </span>
+                        )}
+                        {file.tags && file.tags.length > 0 && (
+                          <div className="flex gap-1">
+                            {file.tags.slice(0, 3).map(tagId => {
+                              const tag = tags.find(t => t.id === tagId);
+                              return tag ? (
+                                <span 
+                                  key={tagId} 
+                                  className="px-2 py-0.5 rounded text-xs"
+                                  style={{ backgroundColor: `${tag.color}30`, color: tag.color }}
+                                >
+                                  {tag.name}
+                                </span>
+                              ) : null;
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
 
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={() => toggleFavorite(file)}
-                    className="p-2 hover:bg-muted rounded-lg transition-colors"
-                  >
-                    <Star className={cn("w-5 h-5", file.is_favorite ? "text-yellow-500 fill-yellow-500" : "text-muted-foreground")} />
-                  </button>
-                  <button
-                    onClick={() => downloadFile(file)}
-                    className="p-2 hover:bg-muted rounded-lg transition-colors"
-                  >
-                    <Download className="w-5 h-5 text-muted-foreground" />
-                  </button>
-                  <button
-                    onClick={() => setSingleFileAlbumPicker(file)}
-                    className="p-2 hover:bg-muted rounded-lg transition-colors"
-                  >
-                    <Folder className="w-5 h-5 text-muted-foreground" />
-                  </button>
-                  <button
-                    onClick={() => setRenameDialog({ isOpen: true, file })}
-                    className="p-2 hover:bg-muted rounded-lg transition-colors"
-                  >
-                    <Pencil className="w-5 h-5 text-muted-foreground" />
-                  </button>
-                  <button
-                    onClick={() => setDeleteConfirm({ isOpen: true, file })}
-                    className="p-2 hover:bg-destructive/20 rounded-lg transition-colors"
-                  >
-                    <Trash2 className="w-5 h-5 text-destructive" />
-                  </button>
-                </div>
-              </motion.div>
-            );
-          })}
-        </div>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => toggleFavorite(file)}
+                        className="p-2 hover:bg-muted rounded-lg transition-colors"
+                      >
+                        <Star className={cn("w-5 h-5", file.is_favorite ? "text-yellow-500 fill-yellow-500" : "text-muted-foreground")} />
+                      </button>
+                      <button
+                        onClick={() => downloadFile(file)}
+                        className="p-2 hover:bg-muted rounded-lg transition-colors"
+                      >
+                        <Download className="w-5 h-5 text-muted-foreground" />
+                      </button>
+                      <button
+                        onClick={() => setSingleFileAlbumPicker(file)}
+                        className="p-2 hover:bg-muted rounded-lg transition-colors"
+                      >
+                        <Folder className="w-5 h-5 text-muted-foreground" />
+                      </button>
+                      <button
+                        onClick={() => setRenameDialog({ isOpen: true, file })}
+                        className="p-2 hover:bg-muted rounded-lg transition-colors"
+                      >
+                        <Pencil className="w-5 h-5 text-muted-foreground" />
+                      </button>
+                      <button
+                        onClick={() => setDeleteConfirm({ isOpen: true, file })}
+                        className="p-2 hover:bg-destructive/20 rounded-lg transition-colors"
+                      >
+                        <Trash2 className="w-5 h-5 text-destructive" />
+                      </button>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          ) : null}
+        </>
       )}
 
       {/* Lightbox Preview */}
