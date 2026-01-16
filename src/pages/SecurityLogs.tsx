@@ -60,6 +60,8 @@ import {
   Area
 } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
+import { SecurityLogsSettings } from '@/components/SecurityLogsSettings';
+import { useSecurityLogs } from '@/hooks/useSecurityLogs';
 
 interface SecurityLog {
   id: string;
@@ -128,9 +130,8 @@ const filterEventTypes: Record<FilterType, string[]> = {
 const CHART_COLORS = ['#22c55e', '#ef4444', '#3b82f6', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16'];
 
 export default function SecurityLogs() {
-  const [logs, setLogs] = useState<SecurityLog[]>([]);
   const [sessions, setSessions] = useState<SessionHistoryItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [sessionsLoading, setSessionsLoading] = useState(true);
   const [filter, setFilter] = useState<FilterType>('all');
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
@@ -140,6 +141,20 @@ export default function SecurityLogs() {
   });
   const [quickRange, setQuickRange] = useState('30d');
   const { userId, sessionToken, supabaseClient } = useAuth();
+  
+  // Use the security logs hook for configurable fetching and deletion
+  const {
+    logs,
+    totalCount,
+    loading: logsLoading,
+    settings,
+    updateSettings,
+    fetchLogs,
+    clearAllLogs,
+    deleteOldLogs
+  } = useSecurityLogs();
+  
+  const loading = logsLoading || sessionsLoading;
 
   const handleQuickRange = (value: string) => {
     setQuickRange(value);
@@ -318,23 +333,12 @@ export default function SecurityLogs() {
     printWindow.document.close();
   };
 
-  const fetchData = useCallback(async () => {
+  // Fetch sessions separately (logs are handled by useSecurityLogs hook)
+  const fetchSessions = useCallback(async () => {
     if (!userId || !sessionToken) return;
-    setLoading(true);
+    setSessionsLoading(true);
     
     try {
-      // Fetch security logs
-      const { data: logsData, error: logsError } = await supabaseClient
-        .from('security_logs')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(200);
-
-      if (logsError) throw logsError;
-      setLogs(logsData || []);
-
-      // Fetch session history
       const { data: sessionsData, error: sessionsError } = await supabaseClient
         .from('session_history')
         .select('*')
@@ -345,16 +349,28 @@ export default function SecurityLogs() {
       if (sessionsError) throw sessionsError;
       setSessions(sessionsData || []);
     } catch (error) {
-      console.error('Error fetching security data:', error);
-      toast.error('Fehler beim Laden der Daten');
+      console.error('Error fetching sessions:', error);
+      toast.error('Fehler beim Laden der Sessions');
     } finally {
-      setLoading(false);
+      setSessionsLoading(false);
     }
-  }, [userId, sessionToken]);
+  }, [userId, sessionToken, supabaseClient]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    fetchSessions();
+  }, [fetchSessions]);
+  
+  // Refresh all data
+  const refreshData = useCallback(() => {
+    fetchLogs();
+    fetchSessions();
+  }, [fetchLogs, fetchSessions]);
+  
+  // Handle limit change
+  const handleLimitChange = useCallback((limit: number) => {
+    updateSettings({ displayLimit: limit });
+    fetchLogs(limit);
+  }, [updateSettings, fetchLogs]);
 
   // Calculate statistics
   const statistics = useMemo(() => {
@@ -565,13 +581,23 @@ export default function SecurityLogs() {
             </div>
           </div>
 
-          <button
-            onClick={fetchData}
-            disabled={loading}
-            className="p-3 rounded-xl bg-muted/30 hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 self-start sm:self-auto"
-          >
-            <RefreshCw className={cn("w-5 h-5", loading && "animate-spin")} />
-          </button>
+          <div className="flex items-center gap-2">
+            <SecurityLogsSettings
+              displayLimit={settings.displayLimit}
+              totalCount={totalCount}
+              onLimitChange={handleLimitChange}
+              onDeleteAll={clearAllLogs}
+              onDeleteOld={deleteOldLogs}
+              onRefresh={refreshData}
+            />
+            <button
+              onClick={refreshData}
+              disabled={loading}
+              className="p-3 rounded-xl bg-muted/30 hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={cn("w-5 h-5", loading && "animate-spin")} />
+            </button>
+          </div>
         </div>
 
         {/* Export & Date Range Controls */}
