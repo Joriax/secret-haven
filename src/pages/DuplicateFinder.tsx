@@ -12,12 +12,23 @@ import {
   AlertCircle,
   X,
   Play,
-  Film
+  Film,
+  Fingerprint,
+  FileText,
+  Star,
+  ChevronDown
 } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { useDuplicateFinder } from '@/hooks/useDuplicateFinder';
+import { Badge } from '@/components/ui/badge';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { useDuplicateFinder, ScanMode, DuplicateGroup, DuplicateItem } from '@/hooks/useDuplicateFinder';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -31,24 +42,48 @@ const formatSize = (bytes: number) => {
 
 const VIDEO_EXTENSIONS = /\.(mp4|mov|webm|avi|mkv|m4v|3gp)$/i;
 
+const scanModeLabels: Record<ScanMode, { label: string; description: string; icon: React.ReactNode }> = {
+  exact: {
+    label: 'Exakte Duplikate',
+    description: 'Identischer Inhalt (Hash-Vergleich)',
+    icon: <Fingerprint className="w-4 h-4" />,
+  },
+  similar: {
+    label: 'Ähnliche Dateien',
+    description: 'Gleicher Name & ähnliche Größe',
+    icon: <FileText className="w-4 h-4" />,
+  },
+  all: {
+    label: 'Vollständiger Scan',
+    description: 'Exakte + ähnliche Duplikate',
+    icon: <Search className="w-4 h-4" />,
+  },
+};
+
 export default function DuplicateFinder() {
   const {
     isScanning,
+    scanMode,
     progress,
     progressPercent,
     duplicates,
     totalDuplicateSize,
     totalDuplicateCount,
+    exactDuplicateCount,
+    similarDuplicateCount,
     scanForDuplicates,
     cancelScan,
     deleteDuplicate,
     deleteAllDuplicates,
     deleteAllDuplicatesGlobally,
+    keepAsOriginal,
   } = useDuplicateFinder();
 
   const [deletingItems, setDeletingItems] = useState<Set<string>>(new Set());
+  const [selectedMode, setSelectedMode] = useState<ScanMode>('all');
+  const [filterType, setFilterType] = useState<'all' | 'exact' | 'similar'>('all');
 
-  const handleDeleteDuplicate = async (item: any) => {
+  const handleDeleteDuplicate = async (item: DuplicateItem) => {
     setDeletingItems(prev => new Set(prev).add(item.id));
     const success = await deleteDuplicate(item);
     setDeletingItems(prev => {
@@ -64,7 +99,7 @@ export default function DuplicateFinder() {
     }
   };
 
-  const handleDeleteAllDuplicates = async (group: any) => {
+  const handleDeleteAllDuplicates = async (group: DuplicateGroup) => {
     const success = await deleteAllDuplicates(group);
     if (success) {
       toast.success(`${group.items.length - 1} Duplikate in Papierkorb verschoben`);
@@ -82,9 +117,19 @@ export default function DuplicateFinder() {
     }
   };
 
+  const handleKeepAsOriginal = (groupHash: string, itemId: string) => {
+    keepAsOriginal(groupHash, itemId);
+    toast.success('Als Original markiert');
+  };
+
   const isVideo = (filename: string) => VIDEO_EXTENSIONS.test(filename);
 
-  const renderPreview = (item: any) => {
+  const filteredDuplicates = duplicates.filter(group => {
+    if (filterType === 'all') return true;
+    return group.matchType === filterType;
+  });
+
+  const renderPreview = (item: DuplicateItem) => {
     if (isVideo(item.filename)) {
       return (
         <div className="w-full aspect-square bg-muted flex items-center justify-center relative">
@@ -122,6 +167,27 @@ export default function DuplicateFinder() {
         <File className="w-8 h-8 text-muted-foreground" />
       </div>
     );
+  };
+
+  const getMatchTypeBadge = (matchType: 'exact' | 'similar' | 'name-only') => {
+    switch (matchType) {
+      case 'exact':
+        return (
+          <Badge variant="default" className="bg-green-500/20 text-green-400 border-green-500/30">
+            <Fingerprint className="w-3 h-3 mr-1" />
+            Identisch
+          </Badge>
+        );
+      case 'similar':
+        return (
+          <Badge variant="default" className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30">
+            <FileText className="w-3 h-3 mr-1" />
+            Ähnlich
+          </Badge>
+        );
+      default:
+        return null;
+    }
   };
 
   return (
@@ -162,7 +228,7 @@ export default function DuplicateFinder() {
             </div>
           </div>
 
-          <div className="flex gap-2 w-full sm:w-auto">
+          <div className="flex flex-wrap gap-2 w-full sm:w-auto">
             {isScanning ? (
               <Button
                 onClick={cancelScan}
@@ -173,13 +239,35 @@ export default function DuplicateFinder() {
                 Abbrechen
               </Button>
             ) : (
-              <Button
-                onClick={scanForDuplicates}
-                className="flex-1 sm:flex-none"
-              >
-                <Search className="w-4 h-4 mr-2" />
-                Scannen
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button className="flex-1 sm:flex-none gap-2">
+                    <Search className="w-4 h-4" />
+                    Scannen
+                    <ChevronDown className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64">
+                  {Object.entries(scanModeLabels).map(([mode, { label, description, icon }]) => (
+                    <DropdownMenuItem
+                      key={mode}
+                      onClick={() => {
+                        setSelectedMode(mode as ScanMode);
+                        scanForDuplicates(mode as ScanMode);
+                      }}
+                      className="flex flex-col items-start gap-1 py-3"
+                    >
+                      <div className="flex items-center gap-2 font-medium">
+                        {icon}
+                        {label}
+                      </div>
+                      <span className="text-xs text-muted-foreground pl-6">
+                        {description}
+                      </span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
             
             {duplicates.length > 0 && !isScanning && (
@@ -194,6 +282,28 @@ export default function DuplicateFinder() {
             )}
           </div>
         </div>
+
+        {/* Stats breakdown when duplicates found */}
+        {duplicates.length > 0 && !isScanning && (
+          <div className="mt-4 pt-4 border-t border-border grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-foreground">{duplicates.length}</div>
+              <div className="text-xs text-muted-foreground">Gruppen</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-green-400">{exactDuplicateCount}</div>
+              <div className="text-xs text-muted-foreground">Identische</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-yellow-400">{similarDuplicateCount}</div>
+              <div className="text-xs text-muted-foreground">Ähnliche</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-primary">{formatSize(totalDuplicateSize)}</div>
+              <div className="text-xs text-muted-foreground">Einsparung</div>
+            </div>
+          </div>
+        )}
 
         {/* Progress Bar */}
         <AnimatePresence>
@@ -214,18 +324,50 @@ export default function DuplicateFinder() {
               <Progress value={progressPercent} className="h-2" />
               <div className="flex justify-between text-xs text-muted-foreground mt-1">
                 <span>
-                  {progress.phase === 'loading' && 'Laden...'}
-                  {progress.phase === 'hashing' && 'Analysiere Dateien...'}
-                  {progress.phase === 'analyzing' && 'Suche Duplikate...'}
+                  {progress.phase === 'loading' && 'Lade Dateien...'}
+                  {progress.phase === 'fetching-sizes' && 'Ermittle Größen...'}
+                  {progress.phase === 'hashing' && 'Berechne Hashes...'}
+                  {progress.phase === 'analyzing' && 'Analysiere Duplikate...'}
                 </span>
                 {progress.total > 0 && (
-                  <span>{progress.current} / {progress.total} Dateien</span>
+                  <span>{progress.current} / {progress.total}</span>
                 )}
               </div>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
+
+      {/* Filter Tabs */}
+      {duplicates.length > 0 && !isScanning && (
+        <div className="flex gap-2">
+          <Button
+            variant={filterType === 'all' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setFilterType('all')}
+          >
+            Alle ({duplicates.length})
+          </Button>
+          <Button
+            variant={filterType === 'exact' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setFilterType('exact')}
+            className="gap-1"
+          >
+            <Fingerprint className="w-3 h-3" />
+            Identisch ({duplicates.filter(g => g.matchType === 'exact').length})
+          </Button>
+          <Button
+            variant={filterType === 'similar' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setFilterType('similar')}
+            className="gap-1"
+          >
+            <FileText className="w-3 h-3" />
+            Ähnlich ({duplicates.filter(g => g.matchType === 'similar').length})
+          </Button>
+        </div>
+      )}
 
       {/* No Duplicates Message */}
       {!isScanning && duplicates.length === 0 && progress.phase === 'done' && progress.current > 0 && (
@@ -247,7 +389,7 @@ export default function DuplicateFinder() {
       {/* Duplicate Groups */}
       <div className="space-y-4">
         <AnimatePresence mode="popLayout">
-          {duplicates.map((group, groupIndex) => (
+          {filteredDuplicates.map((group, groupIndex) => (
             <motion.div
               key={group.hash}
               initial={{ opacity: 0, y: 20 }}
@@ -258,7 +400,7 @@ export default function DuplicateFinder() {
               className="glass-card p-4"
             >
               {/* Group Header */}
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                 <div className="flex items-center gap-3">
                   <div className={cn(
                     "w-10 h-10 rounded-lg flex items-center justify-center",
@@ -273,9 +415,12 @@ export default function DuplicateFinder() {
                     )}
                   </div>
                   <div>
-                    <h3 className="font-medium text-foreground truncate max-w-[200px] sm:max-w-[400px]">
-                      {group.originalName}
-                    </h3>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-medium text-foreground truncate max-w-[200px] sm:max-w-[400px]">
+                        {group.originalName}
+                      </h3>
+                      {getMatchTypeBadge(group.matchType)}
+                    </div>
                     <p className="text-sm text-muted-foreground">
                       {group.items.length} Kopien • {formatSize(group.size)} pro Datei
                     </p>
@@ -304,7 +449,7 @@ export default function DuplicateFinder() {
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.8 }}
                     className={cn(
-                      "relative rounded-xl overflow-hidden border transition-all",
+                      "relative rounded-xl overflow-hidden border transition-all group/item",
                       index === 0 
                         ? "border-green-500/50 ring-2 ring-green-500/20" 
                         : "border-border hover:border-destructive/50",
@@ -314,30 +459,47 @@ export default function DuplicateFinder() {
                     {/* Preview */}
                     {renderPreview(item)}
 
-                    {/* Badge */}
+                    {/* Badge & Actions */}
                     {index === 0 ? (
-                      <div className="absolute top-2 left-2 px-2 py-1 rounded-md bg-green-500 text-white text-xs font-medium">
+                      <div className="absolute top-2 left-2 px-2 py-1 rounded-md bg-green-500 text-white text-xs font-medium flex items-center gap-1">
+                        <Star className="w-3 h-3" />
                         Original
                       </div>
                     ) : (
-                      <button
-                        onClick={() => handleDeleteDuplicate(item)}
-                        disabled={deletingItems.has(item.id)}
-                        className="absolute top-2 right-2 p-1.5 rounded-md bg-destructive/90 text-white hover:bg-destructive transition-colors"
-                      >
-                        {deletingItems.has(item.id) ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Trash2 className="w-3.5 h-3.5" />
-                        )}
-                      </button>
+                      <>
+                        {/* Keep as Original button (visible on hover) */}
+                        <button
+                          onClick={() => handleKeepAsOriginal(group.hash, item.id)}
+                          className="absolute top-2 left-2 p-1.5 rounded-md bg-green-500/90 text-white hover:bg-green-500 transition-all opacity-0 group-hover/item:opacity-100"
+                          title="Als Original behalten"
+                        >
+                          <Star className="w-3.5 h-3.5" />
+                        </button>
+                        {/* Delete button */}
+                        <button
+                          onClick={() => handleDeleteDuplicate(item)}
+                          disabled={deletingItems.has(item.id)}
+                          className="absolute top-2 right-2 p-1.5 rounded-md bg-destructive/90 text-white hover:bg-destructive transition-colors"
+                        >
+                          {deletingItems.has(item.id) ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </>
                     )}
 
-                    {/* Date */}
+                    {/* Date & Size */}
                     <div className="absolute bottom-0 inset-x-0 px-2 py-1.5 bg-gradient-to-t from-black/80 to-transparent">
                       <p className="text-xs text-white/80 truncate">
                         {new Date(item.uploaded_at).toLocaleDateString('de-DE')}
                       </p>
+                      {item.size > 0 && (
+                        <p className="text-xs text-white/60">
+                          {formatSize(item.size)}
+                        </p>
+                      )}
                     </div>
                   </motion.div>
                 ))}
