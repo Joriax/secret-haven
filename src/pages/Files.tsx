@@ -58,7 +58,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -1291,7 +1290,7 @@ export default function Files() {
                     : null;
                   setSelectedAlbum(parentAlbum || null);
                 }}
-                className="flex items-center justify-center gap-2 h-10 px-3 rounded-xl bg-muted hover:bg-muted/80 transition-all text-sm order-first"
+                className="flex items-center justify-center gap-2 h-9 px-3 rounded-lg bg-muted hover:bg-muted/80 transition-all text-sm font-medium order-first"
               >
                 <ChevronLeft className="w-4 h-4" />
                 <span className="hidden sm:inline">Zurück</span>
@@ -1301,7 +1300,7 @@ export default function Files() {
             {/* Sort dropdown */}
             <DropdownMenu open={showSortMenu} onOpenChange={setShowSortMenu}>
               <DropdownMenuTrigger asChild>
-                <button className="flex items-center justify-center gap-2 h-10 px-3 rounded-xl border border-border hover:bg-muted transition-all text-sm">
+                <button className="flex items-center justify-center gap-2 h-9 px-3 rounded-lg border border-border hover:bg-muted transition-all text-sm font-medium">
                   <ArrowUpDown className="w-4 h-4" />
                   <span className="hidden sm:inline">Sortieren</span>
                 </button>
@@ -1325,7 +1324,7 @@ export default function Files() {
                 setNewAlbumParentId(selectedAlbum?.id || null);
                 setShowNewAlbumModal(true);
               }}
-              className="flex items-center justify-center gap-2 h-10 px-3 rounded-xl border border-border hover:bg-muted transition-all text-sm"
+              className="flex items-center justify-center gap-2 h-9 px-3 rounded-lg border border-border hover:bg-muted transition-all text-sm font-medium"
             >
               <FolderPlus className="w-4 h-4" />
               <span className="hidden sm:inline">{selectedAlbum ? 'Unterordner' : 'Ordner'}</span>
@@ -1338,7 +1337,7 @@ export default function Files() {
                 setSelectedItems(new Set());
               }}
               className={cn(
-                "flex items-center justify-center gap-2 h-10 px-3 rounded-xl border transition-all text-sm",
+                "flex items-center justify-center gap-2 h-9 px-3 rounded-lg border transition-all text-sm font-medium",
                 isMultiSelectMode 
                   ? "bg-primary text-primary-foreground border-primary" 
                   : "border-border hover:bg-muted"
@@ -1349,7 +1348,7 @@ export default function Files() {
             </button>
 
             {/* View Mode Toggle */}
-            <div className="flex items-center h-10 border border-border rounded-xl overflow-hidden">
+            <div className="flex items-center h-9 border border-border rounded-lg overflow-hidden">
               <button
                 onClick={() => setViewMode('grid')}
                 className={cn(
@@ -1372,7 +1371,7 @@ export default function Files() {
 
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="flex items-center justify-center gap-2 h-10 px-4 rounded-xl bg-primary text-primary-foreground hover:opacity-90 transition-all text-sm"
+              className="flex items-center justify-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-all text-sm font-medium"
             >
               <Plus className="w-4 h-4" />
               <span>Hochladen</span>
@@ -1525,96 +1524,94 @@ export default function Files() {
                   const albumFileCount = files.filter(f => f.album_id === album.id).length;
                   const iconName = album.icon || 'folder';
                   const icons: Record<string, React.ReactNode> = {
-                    folder: <Folder className="w-8 h-8" style={{ color: album.color }} />,
-                    music: <Music className="w-8 h-8" style={{ color: album.color }} />,
-                    book: <BookOpen className="w-8 h-8" style={{ color: album.color }} />,
-                    archive: <Archive className="w-8 h-8" style={{ color: album.color }} />,
-                    briefcase: <Briefcase className="w-8 h-8" style={{ color: album.color }} />,
-                    camera: <Camera className="w-8 h-8" style={{ color: album.color }} />,
-                    film: <Film className="w-8 h-8" style={{ color: album.color }} />,
-                    heart: <Heart className="w-8 h-8" style={{ color: album.color }} />,
-                    home: <Home className="w-8 h-8" style={{ color: album.color }} />,
-                    image: <ImageIcon className="w-8 h-8" style={{ color: album.color }} />,
-                    inbox: <Inbox className="w-8 h-8" style={{ color: album.color }} />,
-                    layers: <Layers className="w-8 h-8" style={{ color: album.color }} />,
-                    package: <Package className="w-8 h-8" style={{ color: album.color }} />,
+                    folder: <Folder className="w-10 h-10" style={{ color: album.color }} />,
+                    music: <Music className="w-10 h-10" style={{ color: album.color }} />,
+                    book: <BookOpen className="w-10 h-10" style={{ color: album.color }} />,
+                    archive: <Archive className="w-10 h-10" style={{ color: album.color }} />,
+                    briefcase: <Briefcase className="w-10 h-10" style={{ color: album.color }} />,
+                    camera: <Camera className="w-10 h-10" style={{ color: album.color }} />,
+                    film: <Film className="w-10 h-10" style={{ color: album.color }} />,
+                    heart: <Heart className="w-10 h-10" style={{ color: album.color }} />,
+                    home: <Home className="w-10 h-10" style={{ color: album.color }} />,
+                    image: <ImageIcon className="w-10 h-10" style={{ color: album.color }} />,
+                    inbox: <Inbox className="w-10 h-10" style={{ color: album.color }} />,
+                    layers: <Layers className="w-10 h-10" style={{ color: album.color }} />,
+                    package: <Package className="w-10 h-10" style={{ color: album.color }} />,
                   };
                   
                   return (
                     <motion.div
                       key={album.id}
-                      initial={{ opacity: 0, scale: 0.9 }}
+                      initial={{ opacity: 0, scale: 0.95 }}
                       animate={{ opacity: 1, scale: 1 }}
                       whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
                       onClick={() => setSelectedAlbum(album)}
-                      className="glass-card-hover overflow-hidden cursor-pointer p-4 relative group"
+                      className="relative cursor-pointer rounded-2xl p-4 transition-all duration-200 group bg-card/50 hover:bg-card border border-border/50 hover:border-border hover:shadow-lg hover:shadow-black/5"
                     >
                       <div className="flex flex-col items-center text-center">
                         <div 
-                          className="w-16 h-16 rounded-xl flex items-center justify-center mb-2"
-                          style={{ backgroundColor: `${album.color}20` }}
+                          className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl flex items-center justify-center mb-3"
+                          style={{ backgroundColor: `${album.color || '#6366f1'}15` }}
                         >
                           {icons[iconName] || icons.folder}
                         </div>
                         <h4 className="text-sm font-medium text-foreground truncate w-full">{album.name}</h4>
-                        <p className="text-xs text-muted-foreground">{albumFileCount} Dateien</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{albumFileCount} Dateien</p>
                       </div>
                       
                       {/* Pin indicator */}
                       {album.is_pinned && (
                         <div className="absolute top-2 left-2">
-                          <Pin className="w-3.5 h-3.5 text-primary" />
+                          <div className="p-1 rounded-md bg-primary/10">
+                            <Pin className="w-3 h-3 text-primary" />
+                          </div>
                         </div>
                       )}
                       
-                      {/* Hover actions */}
-                      <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setNewAlbumParentId(album.id);
-                            setShowNewAlbumModal(true);
-                          }}
-                          className="p-1.5 rounded-lg bg-muted hover:bg-muted/80 transition-all"
-                          title="Unterordner erstellen"
-                        >
-                          <FolderPlus className="w-3.5 h-3.5 text-muted-foreground" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditingAlbum(album);
-                            setShowEditAlbumModal(true);
-                          }}
-                          className="p-1.5 rounded-lg bg-muted hover:bg-muted/80 transition-all"
-                          title="Bearbeiten"
-                        >
-                          <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            togglePin(album.id);
-                          }}
-                          className="p-1.5 rounded-lg bg-muted hover:bg-muted/80 transition-all"
-                          title={album.is_pinned ? 'Loslösen' : 'Anpinnen'}
-                        >
-                          {album.is_pinned ? (
-                            <PinOff className="w-3.5 h-3.5 text-muted-foreground" />
-                          ) : (
-                            <Pin className="w-3.5 h-3.5 text-muted-foreground" />
-                          )}
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeleteAlbumConfirm({ isOpen: true, album });
-                          }}
-                          className="p-1.5 rounded-lg bg-muted hover:bg-destructive/20 transition-all"
-                          title="Löschen"
-                        >
-                          <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
-                        </button>
+                      {/* Actions Menu */}
+                      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              onClick={(e) => e.stopPropagation()}
+                              className="p-1.5 rounded-lg bg-background/80 hover:bg-background border border-border/50 transition-colors"
+                            >
+                              <MoreVertical className="w-4 h-4 text-muted-foreground" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setNewAlbumParentId(album.id); setShowNewAlbumModal(true); }}>
+                              <FolderPlus className="w-4 h-4 mr-2" />
+                              Unterordner erstellen
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setEditingAlbum(album); setShowEditAlbumModal(true); }}>
+                              <Pencil className="w-4 h-4 mr-2" />
+                              Bearbeiten
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); togglePin(album.id); }}>
+                              {album.is_pinned ? (
+                                <>
+                                  <PinOff className="w-4 h-4 mr-2" />
+                                  Loslösen
+                                </>
+                              ) : (
+                                <>
+                                  <Pin className="w-4 h-4 mr-2" />
+                                  Anpinnen
+                                </>
+                              )}
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem 
+                              onClick={(e) => { e.stopPropagation(); setDeleteAlbumConfirm({ isOpen: true, album }); }}
+                              className="text-destructive focus:text-destructive"
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Löschen
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </motion.div>
                   );

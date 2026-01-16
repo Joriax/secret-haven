@@ -66,6 +66,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
@@ -1402,7 +1403,7 @@ export default function Photos() {
                     : null;
                   setSelectedAlbum(parentAlbum || null);
                 }}
-                className="flex items-center justify-center gap-2 h-10 px-3 rounded-xl bg-muted hover:bg-muted/80 transition-all text-sm order-first"
+                className="flex items-center justify-center gap-2 h-9 px-3 rounded-lg bg-muted hover:bg-muted/80 transition-all text-sm font-medium order-first"
               >
                 <ChevronLeft className="w-4 h-4" />
                 <span className="hidden sm:inline">Zurück</span>
@@ -1413,7 +1414,7 @@ export default function Photos() {
             {viewMode !== 'albums' && filteredMedia.filter(m => m.type === 'photo').length > 0 && (
               <button
                 onClick={startSlideshow}
-                className="flex items-center justify-center gap-2 h-10 px-3 rounded-xl border border-border hover:bg-muted transition-all text-sm"
+                className="flex items-center justify-center gap-2 h-9 px-3 rounded-lg border border-border hover:bg-muted transition-all text-sm font-medium"
               >
                 <PlayCircle className="w-4 h-4" />
                 <span className="hidden sm:inline">Slideshow</span>
@@ -1424,7 +1425,7 @@ export default function Photos() {
             {viewMode !== 'albums' && (
               <DropdownMenu open={showSortMenu} onOpenChange={setShowSortMenu}>
                 <DropdownMenuTrigger asChild>
-                  <button className="flex items-center justify-center gap-2 h-10 px-3 rounded-xl border border-border hover:bg-muted transition-all text-sm">
+                  <button className="flex items-center justify-center gap-2 h-9 px-3 rounded-lg border border-border hover:bg-muted transition-all text-sm font-medium">
                     <ArrowUpDown className="w-4 h-4" />
                     <span className="hidden sm:inline">Sortieren</span>
                   </button>
@@ -1450,7 +1451,7 @@ export default function Photos() {
                 setSelectedItems(new Set());
               }}
               className={cn(
-                "flex items-center justify-center gap-2 h-10 px-3 rounded-xl border transition-all text-sm",
+                "flex items-center justify-center gap-2 h-9 px-3 rounded-lg border transition-all text-sm font-medium",
                 isMultiSelectMode 
                   ? "bg-primary text-primary-foreground border-primary" 
                   : "border-border hover:bg-muted"
@@ -1465,7 +1466,7 @@ export default function Photos() {
                 setNewAlbumParentId(selectedAlbum?.id || null);
                 setShowNewAlbumModal(true);
               }}
-              className="flex items-center justify-center gap-2 h-10 px-3 rounded-xl border border-border hover:bg-muted transition-all text-sm"
+              className="flex items-center justify-center gap-2 h-9 px-3 rounded-lg border border-border hover:bg-muted transition-all text-sm font-medium"
             >
               <FolderPlus className="w-4 h-4" />
               <span className="hidden sm:inline">{selectedAlbum ? 'Unteralbum' : 'Album'}</span>
@@ -1473,7 +1474,7 @@ export default function Photos() {
             
             <button
               onClick={() => cameraInputRef.current?.click()}
-              className="flex items-center justify-center gap-2 h-10 px-3 rounded-xl border border-border hover:bg-muted transition-all text-sm"
+              className="flex items-center justify-center gap-2 h-9 px-3 rounded-lg border border-border hover:bg-muted transition-all text-sm font-medium"
             >
               <Camera className="w-4 h-4" />
               <span className="hidden sm:inline">Kamera</span>
@@ -1481,7 +1482,7 @@ export default function Photos() {
 
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="flex items-center justify-center gap-2 h-10 px-4 rounded-xl bg-primary text-primary-foreground hover:opacity-90 transition-all text-sm"
+              className="flex items-center justify-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-all text-sm font-medium"
             >
               <Plus className="w-4 h-4" />
               <span>Hochladen</span>
@@ -1598,134 +1599,151 @@ export default function Photos() {
 
       {/* Albums View - Show only root-level albums when not in an album, or child albums when in an album */}
       {viewMode === 'albums' && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-          {currentChildAlbums.map((album) => (
-            <motion.div
-              key={album.id}
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              whileHover={{ scale: 1.02 }}
-              onClick={() => setSelectedAlbum(album)}
-              onDragOver={(e) => handleAlbumDragOver(e, album.id)}
-              onDragLeave={handleAlbumDragLeave}
-              onDrop={(e) => handleAlbumDrop(e, album.id)}
-              className={cn(
-                "glass-card-hover overflow-hidden cursor-pointer aspect-square relative group transition-all",
-                dragOverAlbum === album.id && "ring-2 ring-primary scale-105"
-              )}
-            >
-              {album.cover_url ? (
-                <img
-                  src={album.cover_url}
-                  alt={album.name}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div 
-                  className="w-full h-full flex items-center justify-center"
-                  style={{ backgroundColor: album.color || '#6366f1' }}
-                >
-                  {(() => {
-                    const iconName = album.icon || 'folder';
-                    const icons: Record<string, React.ComponentType<{ className?: string }>> = {
-                      folder: Folder,
-                      star: Star,
-                      heart: Heart,
-                      image: ImageIcon,
-                      video: Video,
-                      music: Music,
-                    };
-                    const IconComponent = icons[iconName] || Folder;
-                    return <IconComponent className="w-12 h-12 text-white/80" />;
-                  })()}
-                </div>
-              )}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
-              
-              {/* Pin indicator & actions */}
-              <div className="absolute top-2 right-2 flex items-center gap-1">
-                {album.is_pinned && (
-                  <div className="p-1.5 rounded-lg bg-primary/80">
-                    <Pin className="w-3.5 h-3.5 text-white" />
-                  </div>
-                )}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setNewAlbumParentId(album.id);
-                    setShowNewAlbumModal(true);
-                  }}
-                  className="p-1.5 rounded-lg bg-black/40 opacity-0 group-hover:opacity-100 hover:bg-black/60 transition-all"
-                  title="Unteralbum erstellen"
-                >
-                  <FolderPlus className="w-3.5 h-3.5 text-white" />
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openEditAlbumModal(album);
-                  }}
-                  className="p-1.5 rounded-lg bg-black/40 opacity-0 group-hover:opacity-100 hover:bg-black/60 transition-all"
-                  title="Album bearbeiten"
-                >
-                  <Pencil className="w-3.5 h-3.5 text-white" />
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleAlbumPin(album.id);
-                  }}
-                  className="p-1.5 rounded-lg bg-black/40 opacity-0 group-hover:opacity-100 hover:bg-black/60 transition-all"
-                  title={album.is_pinned ? 'Loslösen' : 'Anpinnen'}
-                >
-                  {album.is_pinned ? (
-                    <PinOff className="w-3.5 h-3.5 text-white" />
-                  ) : (
-                    <Pin className="w-3.5 h-3.5 text-white" />
-                  )}
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setAlbumDeleteConfirm({ isOpen: true, album });
-                  }}
-                  className="p-1.5 rounded-lg bg-black/40 opacity-0 group-hover:opacity-100 hover:bg-destructive/80 transition-all"
-                  title="Album löschen"
-                >
-                  <Trash2 className="w-3.5 h-3.5 text-white" />
-                </button>
-              </div>
-              
-              <div className="absolute bottom-0 left-0 right-0 p-4">
-                <h3 className="font-semibold text-white truncate">{album.name}</h3>
-                <p className="text-white/70 text-sm">{album.count} Elemente</p>
-              </div>
-              {dragOverAlbum === album.id && (
-                <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
-                  <p className="text-white font-medium">Hierher ziehen</p>
-                </div>
-              )}
-            </motion.div>
-          ))}
-
-          {currentChildAlbums.length === 0 && !selectedAlbum && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="col-span-full glass-card p-12 text-center"
-            >
-              <FolderPlus className="w-16 h-16 mx-auto mb-4 text-muted-foreground/30" />
-              <h3 className="text-lg font-medium text-foreground mb-2">Keine Alben</h3>
-              <p className="text-muted-foreground mb-4">Erstelle dein erstes Album</p>
-              <button
-                onClick={() => setShowNewAlbumModal(true)}
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-primary hover:shadow-glow transition-all text-primary-foreground"
-              >
-                <FolderPlus className="w-5 h-5" />
-                Album erstellen
-              </button>
-            </motion.div>
+        <div>
+          {currentChildAlbums.length > 0 && (
+            <h3 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
+              <Folder className="w-4 h-4" />
+              {selectedAlbum ? 'Unteralben' : 'Alben'} ({currentChildAlbums.length})
+            </h3>
           )}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+            {currentChildAlbums.map((album) => {
+              const iconName = album.icon || 'folder';
+              const icons: Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties }>> = {
+                folder: Folder,
+                star: Star,
+                heart: Heart,
+                image: ImageIcon,
+                video: Video,
+                music: Music,
+              };
+              const IconComponent = icons[iconName] || Folder;
+              
+              return (
+                <motion.div
+                  key={album.id}
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setSelectedAlbum(album)}
+                  onDragOver={(e) => handleAlbumDragOver(e, album.id)}
+                  onDragLeave={handleAlbumDragLeave}
+                  onDrop={(e) => handleAlbumDrop(e, album.id)}
+                  className={cn(
+                    "relative cursor-pointer rounded-2xl p-4 transition-all duration-200 group",
+                    "bg-card/50 hover:bg-card border border-border/50 hover:border-border",
+                    "hover:shadow-lg hover:shadow-black/5",
+                    dragOverAlbum === album.id && "ring-2 ring-primary scale-105 bg-primary/5"
+                  )}
+                >
+                  <div className="flex flex-col items-center text-center">
+                    {album.cover_url ? (
+                      <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden mb-3 shadow-sm">
+                        <img
+                          src={album.cover_url}
+                          alt={album.name}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    ) : (
+                      <div 
+                        className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl flex items-center justify-center mb-3"
+                        style={{ backgroundColor: `${album.color || '#6366f1'}15` }}
+                      >
+                        <IconComponent 
+                          className="w-8 h-8 sm:w-10 sm:h-10" 
+                          style={{ color: album.color || '#6366f1' }} 
+                        />
+                      </div>
+                    )}
+                    <h4 className="text-sm font-medium text-foreground truncate w-full">{album.name}</h4>
+                    <p className="text-xs text-muted-foreground mt-0.5">{album.count} Elemente</p>
+                  </div>
+                  
+                  {/* Pin indicator */}
+                  {album.is_pinned && (
+                    <div className="absolute top-2 left-2">
+                      <div className="p-1 rounded-md bg-primary/10">
+                        <Pin className="w-3 h-3 text-primary" />
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Actions Menu */}
+                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          onClick={(e) => e.stopPropagation()}
+                          className="p-1.5 rounded-lg bg-background/80 hover:bg-background border border-border/50 transition-colors"
+                        >
+                          <MoreVertical className="w-4 h-4 text-muted-foreground" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setNewAlbumParentId(album.id); setShowNewAlbumModal(true); }}>
+                          <FolderPlus className="w-4 h-4 mr-2" />
+                          Unteralbum erstellen
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openEditAlbumModal(album); }}>
+                          <Pencil className="w-4 h-4 mr-2" />
+                          Bearbeiten
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); toggleAlbumPin(album.id); }}>
+                          {album.is_pinned ? (
+                            <>
+                              <PinOff className="w-4 h-4 mr-2" />
+                              Loslösen
+                            </>
+                          ) : (
+                            <>
+                              <Pin className="w-4 h-4 mr-2" />
+                              Anpinnen
+                            </>
+                          )}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem 
+                          onClick={(e) => { e.stopPropagation(); setAlbumDeleteConfirm({ isOpen: true, album }); }}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Löschen
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                  
+                  {/* Drag Over Overlay */}
+                  {dragOverAlbum === album.id && (
+                    <div className="absolute inset-0 rounded-2xl bg-primary/10 flex items-center justify-center pointer-events-none">
+                      <p className="text-sm font-medium text-primary">Hierher ziehen</p>
+                    </div>
+                  )}
+                </motion.div>
+              );
+            })}
+
+            {currentChildAlbums.length === 0 && !selectedAlbum && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="col-span-full glass-card p-12 text-center"
+              >
+                <FolderPlus className="w-16 h-16 mx-auto mb-4 text-muted-foreground/30" />
+                <h3 className="text-lg font-medium text-foreground mb-2">Keine Alben</h3>
+                <p className="text-muted-foreground mb-4">Erstelle dein erstes Album</p>
+                <button
+                  onClick={() => setShowNewAlbumModal(true)}
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-primary hover:shadow-glow transition-all text-primary-foreground"
+                >
+                  <FolderPlus className="w-5 h-5" />
+                  Album erstellen
+                </button>
+              </motion.div>
+            )}
+          </div>
         </div>
       )}
 
@@ -1759,118 +1777,103 @@ export default function Photos() {
             </motion.div>
           ) : (
             <>
-              {/* Child Albums Grid - shown when in an album - with full functionality */}
+              {/* Child Albums Grid - shown when in an album - Apple Files style */}
               {selectedAlbum && currentChildAlbums.length > 0 && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4 mb-6">
-                  {currentChildAlbums.map((album) => (
-                    <motion.div
-                      key={album.id}
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      whileHover={{ scale: 1.02 }}
-                      onClick={() => setSelectedAlbum(album)}
-                      onDragOver={(e) => handleAlbumDragOver(e, album.id)}
-                      onDragLeave={handleAlbumDragLeave}
-                      onDrop={(e) => handleAlbumDrop(e, album.id)}
-                      className={cn(
-                        "glass-card-hover overflow-hidden cursor-pointer aspect-square relative group transition-all",
-                        dragOverAlbum === album.id && "ring-2 ring-primary scale-105"
-                      )}
-                    >
-                      {album.cover_url ? (
-                        <img
-                          src={album.cover_url}
-                          alt={album.name}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div 
-                          className="w-full h-full flex items-center justify-center"
-                          style={{ backgroundColor: album.color || '#6366f1' }}
-                        >
-                          {(() => {
-                            const iconName = album.icon || 'folder';
-                            const icons: Record<string, React.ComponentType<{ className?: string }>> = {
-                              folder: Folder,
-                              star: Star,
-                              heart: Heart,
-                              image: ImageIcon,
-                              video: Video,
-                              music: Music,
-                            };
-                            const IconComponent = icons[iconName] || Folder;
-                            return <IconComponent className="w-10 h-10 text-white/80" />;
-                          })()}
-                        </div>
-                      )}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+                <div className="mb-6">
+                  <h3 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
+                    <Folder className="w-4 h-4" />
+                    Unteralben ({currentChildAlbums.length})
+                  </h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                    {currentChildAlbums.map((album) => {
+                      const iconName = album.icon || 'folder';
+                      const icons: Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties }>> = {
+                        folder: Folder,
+                        star: Star,
+                        heart: Heart,
+                        image: ImageIcon,
+                        video: Video,
+                        music: Music,
+                      };
+                      const IconComponent = icons[iconName] || Folder;
                       
-                      {/* Pin indicator & actions - same as main albums view */}
-                      <div className="absolute top-2 right-2 flex items-center gap-1">
-                        {album.is_pinned && (
-                          <div className="p-1.5 rounded-lg bg-primary/80">
-                            <Pin className="w-3 h-3 text-white" />
-                          </div>
-                        )}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setNewAlbumParentId(album.id);
-                            setShowNewAlbumModal(true);
-                          }}
-                          className="p-1.5 rounded-lg bg-black/40 opacity-0 group-hover:opacity-100 hover:bg-black/60 transition-all"
-                          title="Unteralbum erstellen"
-                        >
-                          <FolderPlus className="w-3.5 h-3.5 text-white" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openEditAlbumModal(album);
-                          }}
-                          className="p-1.5 rounded-lg bg-black/40 opacity-0 group-hover:opacity-100 hover:bg-black/60 transition-all"
-                          title="Album bearbeiten"
-                        >
-                          <Pencil className="w-3.5 h-3.5 text-white" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleAlbumPin(album.id);
-                          }}
-                          className="p-1.5 rounded-lg bg-black/40 opacity-0 group-hover:opacity-100 hover:bg-black/60 transition-all"
-                          title={album.is_pinned ? 'Loslösen' : 'Anpinnen'}
-                        >
-                          {album.is_pinned ? (
-                            <PinOff className="w-3.5 h-3.5 text-white" />
-                          ) : (
-                            <Pin className="w-3.5 h-3.5 text-white" />
+                      return (
+                        <motion.div
+                          key={album.id}
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={() => setSelectedAlbum(album)}
+                          onDragOver={(e) => handleAlbumDragOver(e, album.id)}
+                          onDragLeave={handleAlbumDragLeave}
+                          onDrop={(e) => handleAlbumDrop(e, album.id)}
+                          className={cn(
+                            "relative cursor-pointer rounded-2xl p-4 transition-all duration-200 group",
+                            "bg-card/50 hover:bg-card border border-border/50 hover:border-border",
+                            "hover:shadow-lg hover:shadow-black/5",
+                            dragOverAlbum === album.id && "ring-2 ring-primary scale-105 bg-primary/5"
                           )}
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setAlbumDeleteConfirm({ isOpen: true, album });
-                          }}
-                          className="p-1.5 rounded-lg bg-black/40 opacity-0 group-hover:opacity-100 hover:bg-destructive/80 transition-all"
-                          title="Album löschen"
                         >
-                          <Trash2 className="w-3.5 h-3.5 text-white" />
-                        </button>
-                      </div>
-                      
-                      <div className="absolute bottom-0 left-0 right-0 p-3">
-                        <h3 className="font-semibold text-white truncate text-sm">{album.name}</h3>
-                        <p className="text-white/70 text-xs">{album.count} Elemente</p>
-                      </div>
-                      
-                      {dragOverAlbum === album.id && (
-                        <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
-                          <p className="text-white font-medium text-sm">Hierher ziehen</p>
-                        </div>
-                      )}
-                    </motion.div>
-                  ))}
+                          <div className="flex flex-col items-center text-center">
+                            {album.cover_url ? (
+                              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden mb-3 shadow-sm">
+                                <img src={album.cover_url} alt={album.name} className="w-full h-full object-cover" />
+                              </div>
+                            ) : (
+                              <div 
+                                className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl flex items-center justify-center mb-3"
+                                style={{ backgroundColor: `${album.color || '#6366f1'}15` }}
+                              >
+                                <IconComponent className="w-8 h-8 sm:w-10 sm:h-10" style={{ color: album.color || '#6366f1' }} />
+                              </div>
+                            )}
+                            <h4 className="text-sm font-medium text-foreground truncate w-full">{album.name}</h4>
+                            <p className="text-xs text-muted-foreground mt-0.5">{album.count} Elemente</p>
+                          </div>
+                          
+                          {album.is_pinned && (
+                            <div className="absolute top-2 left-2">
+                              <div className="p-1 rounded-md bg-primary/10">
+                                <Pin className="w-3 h-3 text-primary" />
+                              </div>
+                            </div>
+                          )}
+                          
+                          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button onClick={(e) => e.stopPropagation()} className="p-1.5 rounded-lg bg-background/80 hover:bg-background border border-border/50 transition-colors">
+                                  <MoreVertical className="w-4 h-4 text-muted-foreground" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-48">
+                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setNewAlbumParentId(album.id); setShowNewAlbumModal(true); }}>
+                                  <FolderPlus className="w-4 h-4 mr-2" />Unteralbum erstellen
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openEditAlbumModal(album); }}>
+                                  <Pencil className="w-4 h-4 mr-2" />Bearbeiten
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); toggleAlbumPin(album.id); }}>
+                                  {album.is_pinned ? <><PinOff className="w-4 h-4 mr-2" />Loslösen</> : <><Pin className="w-4 h-4 mr-2" />Anpinnen</>}
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setAlbumDeleteConfirm({ isOpen: true, album }); }} className="text-destructive focus:text-destructive">
+                                  <Trash2 className="w-4 h-4 mr-2" />Löschen
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                          
+                          {dragOverAlbum === album.id && (
+                            <div className="absolute inset-0 rounded-2xl bg-primary/10 flex items-center justify-center pointer-events-none">
+                              <p className="text-sm font-medium text-primary">Hierher ziehen</p>
+                            </div>
+                          )}
+                        </motion.div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
               
