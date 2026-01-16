@@ -97,22 +97,25 @@ export default function Settings() {
     }
   };
 
-  // Fetch existing recovery key
+  // Fetch existing recovery key via edge function
   useEffect(() => {
     const fetchRecoveryKey = async () => {
-      if (!userId) return;
-      const { data } = await supabase
-        .from('vault_users')
-        .select('recovery_key')
-        .eq('id', userId)
-        .single();
+      if (!userId || !sessionToken) return;
       
-      if (data?.recovery_key) {
-        setRecoveryKey(data.recovery_key);
+      try {
+        const { data, error } = await supabase.functions.invoke('verify-pin', {
+          body: { action: 'get-recovery-key', sessionToken }
+        });
+        
+        if (!error && data?.success && data?.recoveryKey) {
+          setRecoveryKey(data.recoveryKey);
+        }
+      } catch (err) {
+        console.error('Failed to fetch recovery key:', err);
       }
     };
     fetchRecoveryKey();
-  }, [userId]);
+  }, [userId, sessionToken]);
 
   const handleLogout = () => {
     logout();
