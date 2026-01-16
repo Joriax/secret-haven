@@ -79,9 +79,9 @@ export const MultiSelectBar: React.FC<MultiSelectBarProps> = ({
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 20 }}
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 w-[95vw] max-w-lg"
+          className="fixed bottom-6 left-4 right-4 z-40 max-w-lg mx-auto"
         >
-          <div className="glass-card flex items-center justify-between gap-2 px-3 py-3">
+          <div className="glass-card flex items-center justify-between gap-2 px-3 py-3 overflow-hidden">
             {/* Left: Count */}
             <div className="flex items-center gap-2 shrink-0">
               <span className="w-8 h-8 rounded-full bg-purple-500 flex items-center justify-center text-white font-medium text-sm">
@@ -153,14 +153,13 @@ export const MultiSelectBar: React.FC<MultiSelectBarProps> = ({
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <button
-                        className="flex items-center gap-1 px-2 py-2 rounded-lg transition-colors text-sm text-white/80 hover:bg-white/10"
+                        className="flex items-center gap-1 px-2 py-2 rounded-lg transition-colors text-sm text-white/80 hover:bg-white/10 shrink-0"
                         title="Mehr Aktionen"
                       >
                         <MoreHorizontal className="w-4 h-4" />
-                        <ChevronDown className="w-3 h-3" />
                       </button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="center" side="top" className="w-52">
+                    <DropdownMenuContent align="end" side="top" className="w-52 z-50">
                       <DropdownMenuLabel>Aktionen</DropdownMenuLabel>
                       <DropdownMenuSeparator />
 

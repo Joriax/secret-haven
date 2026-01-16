@@ -11,7 +11,6 @@ import {
   Download, 
   Trash2, 
   Loader2,
-  Upload,
   Pencil,
   Star,
   Eye,
@@ -103,7 +102,6 @@ export default function Files() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; file: FileItem | null; isMulti?: boolean }>({ isOpen: false, file: null });
   const [renameDialog, setRenameDialog] = useState<{ isOpen: boolean; file: FileItem | null }>({ isOpen: false, file: null });
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
@@ -495,22 +493,6 @@ export default function Files() {
     if (error) return null;
     return data?.signedUrl || null;
   };
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  }, []);
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    handleUpload(e.dataTransfer.files);
-  }, [userId]);
 
   // Filter and sort files
   const filteredFiles = useMemo(() => {
@@ -1305,7 +1287,7 @@ export default function Files() {
                   <span className="hidden sm:inline">Sortieren</span>
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuContent align="start" side="bottom" className="w-48 z-50">
                 {sortOptions.map(option => (
                   <DropdownMenuItem
                     key={option.id}
@@ -1450,34 +1432,7 @@ export default function Files() {
         />
       </motion.div>
 
-      {/* Drop Zone */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        onClick={() => fileInputRef.current?.click()}
-        className={cn(
-          "glass-card p-8 border-2 border-dashed transition-all cursor-pointer",
-          isDragging
-            ? "border-primary bg-primary/10"
-            : "border-border hover:border-primary/50"
-        )}
-      >
-        <div className="flex flex-col items-center justify-center text-center">
-          <Upload className={cn(
-            "w-12 h-12 mb-4 transition-colors",
-            isDragging ? "text-primary" : "text-muted-foreground"
-          )} />
-          <p className="text-foreground mb-2">
-            Dateien hierher ziehen
-          </p>
-          <p className="text-muted-foreground text-sm">
-            oder klicke zum Auswählen (max. 100MB)
-          </p>
-        </div>
-      </motion.div>
+      {/* Upload Progress */}
 
       {/* Upload Progress */}
       <AnimatePresence>
