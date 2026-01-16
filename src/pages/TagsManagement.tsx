@@ -4,26 +4,8 @@ import { Plus, Tag, Pencil, Trash2, Check, X, Loader2 } from 'lucide-react';
 import { useTags, Tag as TagType } from '@/hooks/useTags';
 import { cn } from '@/lib/utils';
 import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
+import { ColorPicker } from '@/components/ColorPicker';
 import { toast } from 'sonner';
-
-const colorOptions = [
-  // Purple & Violet
-  '#6366f1', '#8b5cf6', '#a855f7', '#d946ef', 
-  // Pink & Rose
-  '#ec4899', '#f43f5e', '#fb7185', '#f472b6',
-  // Red & Orange
-  '#ef4444', '#f97316', '#fb923c', '#fbbf24',
-  // Yellow & Lime
-  '#eab308', '#facc15', '#a3e635', '#84cc16',
-  // Green
-  '#22c55e', '#4ade80', '#10b981', '#34d399',
-  // Teal & Cyan
-  '#14b8a6', '#2dd4bf', '#06b6d4', '#22d3ee',
-  // Blue
-  '#0ea5e9', '#3b82f6', '#6366f1', '#60a5fa',
-  // Neutral & Special
-  '#64748b', '#78716c', '#71717a', '#737373',
-];
 
 export default function TagsManagement() {
   const { tags, loading, createTag, updateTag, deleteTag } = useTags();
@@ -114,49 +96,38 @@ export default function TagsManagement() {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="glass-card p-4"
+        className="glass-card p-4 md:p-6"
       >
         <h3 className="text-lg font-semibold text-foreground mb-4">Neuen Tag erstellen</h3>
         <div className="flex flex-col sm:flex-row gap-4">
-          <div className="flex-1">
+          <div className="flex-1 flex items-center gap-3">
+            <ColorPicker 
+              color={newTagColor} 
+              onChange={setNewTagColor}
+              size="lg"
+            />
             <input
               type="text"
               value={newTagName}
               onChange={(e) => setNewTagName(e.target.value)}
-              placeholder="Tag-Name..."
-              className="w-full px-4 py-2 rounded-xl bg-background border border-border focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all text-foreground"
+              placeholder="Tag-Name eingeben..."
+              className="flex-1 px-4 py-3 rounded-xl bg-background border border-border focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all text-foreground"
               onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
             />
           </div>
           
-          <div className="flex items-center gap-2">
-            <div className="flex gap-1 flex-wrap">
-              {colorOptions.slice(0, 12).map((color) => (
-                <button
-                  key={color}
-                  onClick={() => setNewTagColor(color)}
-                  className={cn(
-                    "w-6 h-6 rounded-full transition-transform hover:scale-110",
-                    newTagColor === color && "ring-2 ring-offset-2 ring-offset-background ring-primary"
-                  )}
-                  style={{ backgroundColor: color }}
-                />
-              ))}
-            </div>
-            
-            <button
-              onClick={handleCreate}
-              disabled={!newTagName.trim() || isCreating}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-primary hover:shadow-glow transition-all text-primary-foreground disabled:opacity-50"
-            >
-              {isCreating ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Plus className="w-4 h-4" />
-              )}
-              <span>Erstellen</span>
-            </button>
-          </div>
+          <button
+            onClick={handleCreate}
+            disabled={!newTagName.trim() || isCreating}
+            className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-primary hover:shadow-glow transition-all text-primary-foreground disabled:opacity-50"
+          >
+            {isCreating ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <Plus className="w-5 h-5" />
+            )}
+            <span className="font-medium">Erstellen</span>
+          </button>
         </div>
       </motion.div>
 
@@ -165,14 +136,15 @@ export default function TagsManagement() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="glass-card p-4"
+        className="glass-card p-4 md:p-6"
       >
-        <h3 className="text-lg font-semibold text-foreground mb-4">Alle Tags</h3>
+        <h3 className="text-lg font-semibold text-foreground mb-4">Alle Tags ({tags.length})</h3>
         
         {tags.length === 0 ? (
           <div className="text-center py-12">
             <Tag className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
             <p className="text-muted-foreground">Noch keine Tags erstellt</p>
+            <p className="text-muted-foreground/60 text-sm mt-1">Erstelle deinen ersten Tag oben</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -185,48 +157,38 @@ export default function TagsManagement() {
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: 20 }}
                   className={cn(
-                    "flex items-center justify-between p-3 rounded-xl transition-colors",
-                    editingTag?.id === tag.id ? "bg-primary/10" : "bg-muted/50 hover:bg-muted"
+                    "flex items-center justify-between p-4 rounded-xl transition-colors",
+                    editingTag?.id === tag.id ? "bg-primary/10 border border-primary/30" : "bg-muted/50 hover:bg-muted border border-transparent"
                   )}
                 >
                   {editingTag?.id === tag.id ? (
-                    <div className="flex-1 flex items-center gap-3">
-                      <div
-                        className="w-4 h-4 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: editColor }}
-                      />
-                      <input
-                        type="text"
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        className="flex-1 px-3 py-1 rounded-lg bg-background border border-border focus:border-primary outline-none text-foreground"
-                        autoFocus
-                      />
-                      <div className="flex gap-1 flex-wrap">
-                        {colorOptions.slice(0, 10).map((color) => (
-                          <button
-                            key={color}
-                            onClick={() => setEditColor(color)}
-                            className={cn(
-                              "w-5 h-5 rounded-full transition-transform hover:scale-110",
-                              editColor === color && "ring-2 ring-offset-1 ring-primary"
-                            )}
-                            style={{ backgroundColor: color }}
-                          />
-                        ))}
+                    <div className="flex-1 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                      <div className="flex items-center gap-3 w-full sm:w-auto">
+                        <ColorPicker 
+                          color={editColor} 
+                          onChange={setEditColor}
+                          size="md"
+                        />
+                        <input
+                          type="text"
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          className="flex-1 px-4 py-2 rounded-lg bg-background border border-border focus:border-primary outline-none text-foreground"
+                          autoFocus
+                        />
                       </div>
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-2 ml-auto">
                         <button
                           onClick={handleUpdate}
                           className="p-2 text-green-500 hover:bg-green-500/10 rounded-lg transition-colors"
                         >
-                          <Check className="w-4 h-4" />
+                          <Check className="w-5 h-5" />
                         </button>
                         <button
                           onClick={cancelEditing}
                           className="p-2 text-muted-foreground hover:bg-muted rounded-lg transition-colors"
                         >
-                          <X className="w-4 h-4" />
+                          <X className="w-5 h-5" />
                         </button>
                       </div>
                     </div>
@@ -234,10 +196,13 @@ export default function TagsManagement() {
                     <>
                       <div className="flex items-center gap-3">
                         <div
-                          className="w-4 h-4 rounded-full"
+                          className="w-5 h-5 rounded-full ring-2 ring-white/10"
                           style={{ backgroundColor: tag.color }}
                         />
                         <span className="text-foreground font-medium">{tag.name}</span>
+                        <span className="text-xs text-muted-foreground px-2 py-0.5 rounded-full bg-muted">
+                          {tag.color}
+                        </span>
                       </div>
                       <div className="flex items-center gap-1">
                         <button
@@ -260,30 +225,6 @@ export default function TagsManagement() {
             </AnimatePresence>
           </div>
         )}
-      </motion.div>
-
-      {/* Color Palette Reference */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-        className="glass-card p-4"
-      >
-        <h3 className="text-lg font-semibold text-foreground mb-4">Farbpalette</h3>
-        <div className="flex flex-wrap gap-2">
-          {colorOptions.map((color) => (
-            <div
-              key={color}
-              className="flex items-center gap-2 px-3 py-2 bg-muted/50 rounded-lg"
-            >
-              <div
-                className="w-4 h-4 rounded-full"
-                style={{ backgroundColor: color }}
-              />
-              <span className="text-sm text-muted-foreground font-mono">{color}</span>
-            </div>
-          ))}
-        </div>
       </motion.div>
 
       <DeleteConfirmDialog
