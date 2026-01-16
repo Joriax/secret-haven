@@ -1,9 +1,9 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
 
 interface StorageItem {
   id: string;
+  name: string;
   size: number;
   type: 'photo' | 'file' | 'note_attachment';
   mimeType: string;
@@ -94,8 +94,44 @@ function getMonthLabel(monthKey: string): string {
   return `${months[parseInt(month) - 1]} ${year}`;
 }
 
+function getMimeTypeFromFilename(filename: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase() || '';
+  const mimeMap: Record<string, string> = {
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'png': 'image/png',
+    'gif': 'image/gif',
+    'webp': 'image/webp',
+    'svg': 'image/svg+xml',
+    'mp4': 'video/mp4',
+    'webm': 'video/webm',
+    'mov': 'video/quicktime',
+    'avi': 'video/x-msvideo',
+    'mp3': 'audio/mpeg',
+    'wav': 'audio/wav',
+    'ogg': 'audio/ogg',
+    'pdf': 'application/pdf',
+    'doc': 'application/msword',
+    'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'xls': 'application/vnd.ms-excel',
+    'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'ppt': 'application/vnd.ms-powerpoint',
+    'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'zip': 'application/zip',
+    'rar': 'application/x-rar-compressed',
+    '7z': 'application/x-7z-compressed',
+    'txt': 'text/plain',
+    'json': 'application/json',
+    'xml': 'text/xml',
+    'html': 'text/html',
+    'css': 'text/css',
+    'js': 'text/javascript',
+  };
+  return mimeMap[ext] || 'application/octet-stream';
+}
+
 export function useStorageAnalysis() {
-  const { sessionToken, userId } = useAuth();
+  const { sessionToken, userId, supabaseClient: supabase } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<StorageAnalysisData | null>(null);
@@ -110,7 +146,7 @@ export function useStorageAnalysis() {
     setError(null);
 
     try {
-      // Fetch all data in parallel
+      // Fetch all database data in parallel
       const [photosRes, filesRes, attachmentsRes, albumsRes, fileAlbumsRes] = await Promise.all([
         supabase
           .from('photos')
@@ -124,7 +160,7 @@ export function useStorageAnalysis() {
           .is('deleted_at', null),
         supabase
           .from('note_attachments')
-          .select('id, filename, mime_type, size, created_at')
+          .select('id, filename, original_name, mime_type, size, created_at')
           .eq('user_id', userId),
         supabase
           .from('albums')
@@ -140,28 +176,47 @@ export function useStorageAnalysis() {
       const photoAlbums = new Map((albumsRes.data || []).map(a => [a.id, a]));
       const fileAlbumMap = new Map((fileAlbumsRes.data || []).map(a => [a.id, a]));
 
-      // Get photo sizes from storage (batch approach using file list)
+      // Get photo sizes from storage - list files in user's folder
       const photoItems: StorageItem[] = [];
       const photos = photosRes.data || [];
       
-      // For photos, estimate size based on typical image sizes or fetch from storage
-      // We'll use the storage list to get actual sizes
       if (photos.length > 0) {
-        const { data: storageFiles } = await supabase.storage
+        // Fetch storage files to get actual sizes
+        const { data: storageFiles, error: storageError } = await supabase.storage
           .from('photos')
           .list(userId, { limit: 1000 });
         
-        const storageSizeMap = new Map(
-          (storageFiles || []).map(f => [f.name, f.metadata?.size || 0])
-        );
+        if (storageError) {
+          console.warn('Could not fetch storage files:', storageError);
+        }
+
+        // Create a map of filename to size from storage
+        const storageSizeMap = new Map<string, number>();
+        if (storageFiles) {
+          for (const file of storageFiles) {
+            // Storage list returns file metadata with size
+            const size = (file.metadata as any)?.size || file.metadata?.contentLength || 0;
+            storageSizeMap.set(file.name, size);
+          }
+        }
 
         for (const photo of photos) {
-          const size = storageSizeMap.get(photo.filename) || 500000; // Default 500KB if not found
+          // Try to get actual size from storage, fallback to estimated size
+          let size = storageSizeMap.get(photo.filename) || 0;
+          
+          // If no size from storage, estimate based on typical photo sizes
+          if (size === 0) {
+            size = 800000; // Default 800KB for photos
+          }
+
+          const mimeType = getMimeTypeFromFilename(photo.filename);
+          
           photoItems.push({
             id: photo.id,
+            name: photo.filename,
             size,
             type: 'photo',
-            mimeType: 'image/jpeg',
+            mimeType,
             createdAt: new Date(photo.uploaded_at || Date.now()),
             albumId: photo.album_id,
             albumName: photo.album_id ? photoAlbums.get(photo.album_id)?.name : undefined,
@@ -172,9 +227,10 @@ export function useStorageAnalysis() {
       // Process files
       const fileItems: StorageItem[] = (filesRes.data || []).map(file => ({
         id: file.id,
+        name: file.filename,
         size: file.size || 0,
         type: 'file' as const,
-        mimeType: file.mime_type || 'application/octet-stream',
+        mimeType: file.mime_type || getMimeTypeFromFilename(file.filename),
         createdAt: new Date(file.uploaded_at || Date.now()),
         albumId: file.album_id,
         albumName: file.album_id ? fileAlbumMap.get(file.album_id)?.name : undefined,
@@ -183,9 +239,10 @@ export function useStorageAnalysis() {
       // Process note attachments
       const attachmentItems: StorageItem[] = (attachmentsRes.data || []).map(att => ({
         id: att.id,
+        name: att.original_name || att.filename,
         size: att.size || 0,
         type: 'note_attachment' as const,
-        mimeType: att.mime_type || 'application/octet-stream',
+        mimeType: att.mime_type || getMimeTypeFromFilename(att.filename),
         createdAt: new Date(att.created_at || Date.now()),
       }));
 
