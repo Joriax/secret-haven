@@ -9,6 +9,7 @@ import { AutoLockProvider } from "@/components/AutoLockProvider";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { PWAUpdatePrompt } from "@/components/PWAUpdatePrompt";
+import { PanicButton } from "@/components/PanicButton";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -33,6 +34,9 @@ import SharedAlbumView from "./pages/SharedAlbumView";
 import BreakTracker from "./pages/BreakTracker";
 import DuplicateFinder from "./pages/DuplicateFinder";
 import StorageAnalysis from "./pages/StorageAnalysis";
+import ActivityTimeline from "./pages/ActivityTimeline";
+import UsageStats from "./pages/UsageStats";
+import TagCloud from "./pages/TagCloud";
 
 const queryClient = new QueryClient();
 
@@ -62,6 +66,7 @@ const App = () => (
                   <Route path="/recently-viewed" element={<RecentlyViewed />} />
                   <Route path="/recently-added" element={<RecentlyAdded />} />
                   <Route path="/tags" element={<TagsManagement />} />
+                  <Route path="/tag-cloud" element={<TagCloud />} />
                   <Route path="/links" element={<Links />} />
                   <Route path="/tiktok" element={<TikTok />} />
                   <Route path="/shared-albums" element={<SharedAlbums />} />
@@ -69,12 +74,15 @@ const App = () => (
                   <Route path="/break-tracker" element={<BreakTracker />} />
                   <Route path="/duplicate-finder" element={<DuplicateFinder />} />
                   <Route path="/storage-analysis" element={<StorageAnalysis />} />
+                  <Route path="/activity" element={<ActivityTimeline />} />
+                  <Route path="/usage-stats" element={<UsageStats />} />
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/admin" element={<Admin />} />
                 </Route>
                 <Route path="/shared/:token" element={<SharedAlbum />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
+              <PanicButton />
             </BrowserRouter>
           </AutoLockProvider>
         </RealtimeSyncProvider>
