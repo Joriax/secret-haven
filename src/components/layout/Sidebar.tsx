@@ -22,7 +22,8 @@ import {
   Crown,
   Share2,
   Coffee,
-  Copy
+  Copy,
+  HardDrive
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserRoles } from '@/hooks/useUserRoles';
@@ -51,6 +52,7 @@ const secondaryNavItems = [
   { icon: Share2, label: 'Geteilte Alben', path: '/shared-albums' },
   { icon: Coffee, label: 'Pausen', path: '/break-tracker' },
   { icon: Copy, label: 'Duplikate', path: '/duplicate-finder' },
+  { icon: HardDrive, label: 'Speicheranalyse', path: '/storage-analysis' },
 ];
 
 const securityNavItems = [
