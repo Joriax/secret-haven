@@ -108,48 +108,52 @@ export default function Dashboard() {
     }
 
     try {
-      const items: ViewedItem[] = [];
+      const historySlice = history.slice(0, 5);
       
-      for (const h of history.slice(0, 5)) {
+      // Group items by type for batch queries
+      const noteIds = historySlice.filter(h => h.item_type === 'note').map(h => h.item_id);
+      const photoIds = historySlice.filter(h => h.item_type === 'photo').map(h => h.item_id);
+      const fileIds = historySlice.filter(h => h.item_type === 'file').map(h => h.item_id);
+      const secretIds = historySlice.filter(h => h.item_type === 'secret_text').map(h => h.item_id);
+
+      // Batch fetch all items in parallel
+      const [notesRes, photosRes, filesRes, secretsRes] = await Promise.all([
+        noteIds.length > 0 
+          ? supabase.from('notes').select('id, title').in('id', noteIds)
+          : Promise.resolve({ data: [] }),
+        photoIds.length > 0 
+          ? supabase.from('photos').select('id, filename').in('id', photoIds)
+          : Promise.resolve({ data: [] }),
+        fileIds.length > 0 
+          ? supabase.from('files').select('id, filename').in('id', fileIds)
+          : Promise.resolve({ data: [] }),
+        secretIds.length > 0 
+          ? supabase.from('secret_texts').select('id, title').in('id', secretIds)
+          : Promise.resolve({ data: [] }),
+      ]);
+
+      // Create lookup maps
+      const notesMap = new Map((notesRes.data || []).map(n => [n.id, n.title || 'Notiz']));
+      const photosMap = new Map((photosRes.data || []).map(p => [p.id, p.filename?.replace(/^\d+-/, '') || 'Foto']));
+      const filesMap = new Map((filesRes.data || []).map(f => [f.id, f.filename?.replace(/^\d+-/, '') || 'Datei']));
+      const secretsMap = new Map((secretsRes.data || []).map(s => [s.id, s.title || 'Geheimer Text']));
+
+      // Map history items to ViewedItem with titles from lookup
+      const items: ViewedItem[] = historySlice.map(h => {
         let title = 'Unbekannt';
-        
-        if (h.item_type === 'note') {
-          const { data } = await supabase
-            .from('notes')
-            .select('title')
-            .eq('id', h.item_id)
-            .single();
-          title = data?.title || 'Notiz';
-        } else if (h.item_type === 'photo') {
-          const { data } = await supabase
-            .from('photos')
-            .select('filename')
-            .eq('id', h.item_id)
-            .single();
-          title = data?.filename?.replace(/^\d+-/, '') || 'Foto';
-        } else if (h.item_type === 'file') {
-          const { data } = await supabase
-            .from('files')
-            .select('filename')
-            .eq('id', h.item_id)
-            .single();
-          title = data?.filename?.replace(/^\d+-/, '') || 'Datei';
-        } else if (h.item_type === 'secret_text') {
-          const { data } = await supabase
-            .from('secret_texts')
-            .select('title')
-            .eq('id', h.item_id)
-            .single();
-          title = data?.title || 'Geheimer Text';
+        switch (h.item_type) {
+          case 'note': title = notesMap.get(h.item_id) || 'Notiz'; break;
+          case 'photo': title = photosMap.get(h.item_id) || 'Foto'; break;
+          case 'file': title = filesMap.get(h.item_id) || 'Datei'; break;
+          case 'secret_text': title = secretsMap.get(h.item_id) || 'Geheimer Text'; break;
         }
-        
-        items.push({
+        return {
           id: h.item_id,
           type: h.item_type,
           title,
           viewedAt: h.viewed_at,
-        });
-      }
+        };
+      });
       
       setViewedItems(items);
     } catch (error) {

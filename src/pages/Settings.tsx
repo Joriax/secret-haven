@@ -345,20 +345,20 @@ export default function Settings() {
       {/* Auto-Lock Section */}
       <div className="glass-card p-6">
         <div className="flex items-center gap-3 mb-6">
-          <Timer className="w-5 h-5 text-cyan-400" />
-          <h2 className="text-lg font-semibold text-white">Auto-Lock</h2>
+          <Timer className="w-5 h-5 text-cyan-500" />
+          <h2 className="text-lg font-semibold text-foreground">Auto-Lock</h2>
         </div>
 
         <div className="space-y-4">
           {/* Auto-Lock Toggle */}
-          <div className="flex items-center justify-between p-4 rounded-xl bg-white/5">
+          <div className="flex items-center justify-between p-4 rounded-xl bg-muted/30">
             <div className="flex items-center gap-4">
               <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
-                <Clock className="w-5 h-5 text-cyan-400" />
+                <Clock className="w-5 h-5 text-cyan-500" />
               </div>
               <div>
-                <h3 className="font-medium text-white">Automatische Sperre</h3>
-                <p className="text-sm text-white/50">Bei Inaktivität automatisch sperren</p>
+                <h3 className="font-medium text-foreground">Automatische Sperre</h3>
+                <p className="text-sm text-muted-foreground">Bei Inaktivität automatisch sperren</p>
               </div>
             </div>
             <Switch
@@ -377,11 +377,11 @@ export default function Settings() {
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              className="p-4 rounded-xl bg-white/5 space-y-4"
+              className="p-4 rounded-xl bg-muted/30 space-y-4"
             >
               <div className="flex items-center justify-between">
-                <span className="text-white/60 text-sm">Sperren nach:</span>
-                <span className="text-cyan-400 font-medium">
+                <span className="text-muted-foreground text-sm">Sperren nach:</span>
+                <span className="text-cyan-500 font-medium">
                   {autoLockMinutes < 60 
                     ? `${autoLockMinutes} Minute${autoLockMinutes !== 1 ? 'n' : ''}` 
                     : `${autoLockMinutes / 60} Stunde${autoLockMinutes / 60 !== 1 ? 'n' : ''}`
@@ -400,7 +400,7 @@ export default function Settings() {
                 step={1}
                 className="w-full"
               />
-              <div className="flex justify-between text-xs text-white/40">
+              <div className="flex justify-between text-xs text-muted-foreground">
                 <span>1 Min</span>
                 <span>30 Min</span>
                 <span>60 Min</span>
@@ -414,18 +414,18 @@ export default function Settings() {
       {biometricAvailable && (
         <div className="glass-card p-6">
           <div className="flex items-center gap-3 mb-6">
-            <Fingerprint className="w-5 h-5 text-green-400" />
-            <h2 className="text-lg font-semibold text-white">Biometrie</h2>
+            <Fingerprint className="w-5 h-5 text-green-500" />
+            <h2 className="text-lg font-semibold text-foreground">Biometrie</h2>
           </div>
 
-          <div className="flex items-center justify-between p-4 rounded-xl bg-white/5">
+          <div className="flex items-center justify-between p-4 rounded-xl bg-muted/30">
             <div className="flex items-center gap-4">
               <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
-                <Fingerprint className="w-5 h-5 text-green-400" />
+                <Fingerprint className="w-5 h-5 text-green-500" />
               </div>
               <div>
-                <h3 className="font-medium text-white">Touch/Face ID</h3>
-                <p className="text-sm text-white/50">Biometrische Authentifizierung für schnellen Zugang</p>
+                <h3 className="font-medium text-foreground">Touch/Face ID</h3>
+                <p className="text-sm text-muted-foreground">Biometrische Authentifizierung für schnellen Zugang</p>
               </div>
             </div>
             <Switch
@@ -436,7 +436,7 @@ export default function Settings() {
           </div>
           
           {biometricEnabled && (
-            <p className="text-green-400/70 text-xs mt-3 px-4">
+            <p className="text-green-500/70 text-xs mt-3 px-4">
               ✓ Biometrie aktiviert - Du kannst dich jetzt mit Touch/Face ID anmelden
             </p>
           )}
@@ -446,26 +446,26 @@ export default function Settings() {
       {/* Security Section */}
       <div className="glass-card p-6">
         <div className="flex items-center gap-3 mb-6">
-          <Shield className="w-5 h-5 text-purple-400" />
-          <h2 className="text-lg font-semibold text-white">Sicherheit</h2>
+          <Shield className="w-5 h-5 text-purple-500" />
+          <h2 className="text-lg font-semibold text-foreground">Sicherheit</h2>
         </div>
 
         <div className="space-y-4">
           {/* Change PIN */}
           <button
             onClick={() => { setShowPinChange(!showPinChange); setShowDecoyPin(false); setShowRecoveryKey(false); setMessage(null); }}
-            className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-white/5 transition-colors group"
+            className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-muted/30 transition-colors group"
           >
             <div className="flex items-center gap-4">
               <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                <Lock className="w-5 h-5 text-purple-400" />
+                <Lock className="w-5 h-5 text-purple-500" />
               </div>
               <div className="text-left">
-                <h3 className="font-medium text-white">PIN ändern</h3>
-                <p className="text-sm text-white/50">Ändere deinen 6-stelligen Zugangs-PIN</p>
+                <h3 className="font-medium text-foreground">PIN ändern</h3>
+                <p className="text-sm text-muted-foreground">Ändere deinen 6-stelligen Zugangs-PIN</p>
               </div>
             </div>
-            <motion.div animate={{ rotate: showPinChange ? 180 : 0 }} className="text-white/40">▼</motion.div>
+            <motion.div animate={{ rotate: showPinChange ? 180 : 0 }} className="text-muted-foreground">▼</motion.div>
           </button>
 
           <AnimatePresence>
@@ -476,9 +476,9 @@ export default function Settings() {
                 exit={{ height: 0, opacity: 0 }}
                 className="overflow-hidden"
               >
-                <div className="p-4 space-y-4 bg-white/5 rounded-xl">
+              <div className="p-4 space-y-4 bg-muted/30 rounded-xl">
                   <div>
-                    <label className="block text-sm text-white/60 mb-2">Aktueller PIN</label>
+                    <label className="block text-sm text-muted-foreground mb-2">Aktueller PIN</label>
                     <input
                       type="password"
                       inputMode="numeric"
@@ -486,11 +486,11 @@ export default function Settings() {
                       value={currentPin}
                       onChange={(e) => setCurrentPin(e.target.value.replace(/\D/g, ''))}
                       placeholder="••••••"
-                      className="w-full px-4 py-3 rounded-xl vault-input text-white placeholder:text-white/30 text-center tracking-widest"
+                      className="w-full px-4 py-3 rounded-xl vault-input text-foreground placeholder:text-muted-foreground/50 text-center tracking-widest"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-white/60 mb-2">Neuer PIN</label>
+                    <label className="block text-sm text-muted-foreground mb-2">Neuer PIN</label>
                     <input
                       type="password"
                       inputMode="numeric"
@@ -498,11 +498,11 @@ export default function Settings() {
                       value={newPin}
                       onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ''))}
                       placeholder="••••••"
-                      className="w-full px-4 py-3 rounded-xl vault-input text-white placeholder:text-white/30 text-center tracking-widest"
+                      className="w-full px-4 py-3 rounded-xl vault-input text-foreground placeholder:text-muted-foreground/50 text-center tracking-widest"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-white/60 mb-2">PIN bestätigen</label>
+                    <label className="block text-sm text-muted-foreground mb-2">PIN bestätigen</label>
                     <input
                       type="password"
                       inputMode="numeric"
@@ -510,7 +510,7 @@ export default function Settings() {
                       value={confirmPin}
                       onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ''))}
                       placeholder="••••••"
-                      className="w-full px-4 py-3 rounded-xl vault-input text-white placeholder:text-white/30 text-center tracking-widest"
+                      className="w-full px-4 py-3 rounded-xl vault-input text-foreground placeholder:text-muted-foreground/50 text-center tracking-widest"
                     />
                   </div>
 
@@ -536,10 +536,10 @@ export default function Settings() {
                     disabled={isLoading}
                     className="w-full py-3 rounded-xl bg-gradient-primary hover:shadow-glow transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                   >
-                    {isLoading ? <Loader2 className="w-5 h-5 text-white animate-spin" /> : (
+                    {isLoading ? <Loader2 className="w-5 h-5 text-primary-foreground animate-spin" /> : (
                       <>
-                        <Lock className="w-4 h-4 text-white" />
-                        <span className="text-white font-medium">PIN ändern</span>
+                        <Lock className="w-4 h-4 text-primary-foreground" />
+                        <span className="text-primary-foreground font-medium">PIN ändern</span>
                       </>
                     )}
                   </button>
@@ -551,18 +551,18 @@ export default function Settings() {
           {/* Decoy PIN */}
           <button
             onClick={() => { setShowDecoyPin(!showDecoyPin); setShowPinChange(false); setShowRecoveryKey(false); setMessage(null); }}
-            className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-white/5 transition-colors group"
+            className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-muted/30 transition-colors group"
           >
             <div className="flex items-center gap-4">
               <div className="w-10 h-10 rounded-lg bg-yellow-500/20 flex items-center justify-center">
-                <EyeOff className="w-5 h-5 text-yellow-400" />
+                <EyeOff className="w-5 h-5 text-yellow-500" />
               </div>
               <div className="text-left">
-                <h3 className="font-medium text-white">Tarn-PIN (Fake Vault)</h3>
-                <p className="text-sm text-white/50">Zweiter PIN zeigt leeren/harmlosen Vault</p>
+                <h3 className="font-medium text-foreground">Tarn-PIN (Fake Vault)</h3>
+                <p className="text-sm text-muted-foreground">Zweiter PIN zeigt leeren/harmlosen Vault</p>
               </div>
             </div>
-            <motion.div animate={{ rotate: showDecoyPin ? 180 : 0 }} className="text-white/40">▼</motion.div>
+            <motion.div animate={{ rotate: showDecoyPin ? 180 : 0 }} className="text-muted-foreground">▼</motion.div>
           </button>
 
           <AnimatePresence>
@@ -573,14 +573,14 @@ export default function Settings() {
                 exit={{ height: 0, opacity: 0 }}
                 className="overflow-hidden"
               >
-                <div className="p-4 space-y-4 bg-white/5 rounded-xl">
+                <div className="p-4 space-y-4 bg-muted/30 rounded-xl">
                   <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
-                    <p className="text-yellow-400 text-sm">
+                    <p className="text-yellow-500 text-sm">
                       Der Tarn-PIN zeigt einen leeren Vault an, falls du gezwungen wirst, dein Gerät zu entsperren.
                     </p>
                   </div>
                   <div>
-                    <label className="block text-sm text-white/60 mb-2">Aktueller Haupt-PIN</label>
+                    <label className="block text-sm text-muted-foreground mb-2">Aktueller Haupt-PIN</label>
                     <input
                       type="password"
                       inputMode="numeric"
@@ -588,11 +588,11 @@ export default function Settings() {
                       value={currentPin}
                       onChange={(e) => setCurrentPin(e.target.value.replace(/\D/g, ''))}
                       placeholder="••••••"
-                      className="w-full px-4 py-3 rounded-xl vault-input text-white placeholder:text-white/30 text-center tracking-widest"
+                      className="w-full px-4 py-3 rounded-xl vault-input text-foreground placeholder:text-muted-foreground/50 text-center tracking-widest"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-white/60 mb-2">Neuer Tarn-PIN</label>
+                    <label className="block text-sm text-muted-foreground mb-2">Neuer Tarn-PIN</label>
                     <input
                       type="password"
                       inputMode="numeric"
@@ -600,11 +600,11 @@ export default function Settings() {
                       value={decoyPin}
                       onChange={(e) => setDecoyPin(e.target.value.replace(/\D/g, ''))}
                       placeholder="••••••"
-                      className="w-full px-4 py-3 rounded-xl vault-input text-white placeholder:text-white/30 text-center tracking-widest"
+                      className="w-full px-4 py-3 rounded-xl vault-input text-foreground placeholder:text-muted-foreground/50 text-center tracking-widest"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-white/60 mb-2">Tarn-PIN bestätigen</label>
+                    <label className="block text-sm text-muted-foreground mb-2">Tarn-PIN bestätigen</label>
                     <input
                       type="password"
                       inputMode="numeric"
@@ -612,7 +612,7 @@ export default function Settings() {
                       value={confirmDecoyPin}
                       onChange={(e) => setConfirmDecoyPin(e.target.value.replace(/\D/g, ''))}
                       placeholder="••••••"
-                      className="w-full px-4 py-3 rounded-xl vault-input text-white placeholder:text-white/30 text-center tracking-widest"
+                      className="w-full px-4 py-3 rounded-xl vault-input text-foreground placeholder:text-muted-foreground/50 text-center tracking-widest"
                     />
                   </div>
 
@@ -638,10 +638,10 @@ export default function Settings() {
                     disabled={isLoading}
                     className="w-full py-3 rounded-xl bg-gradient-to-r from-yellow-600 to-orange-600 hover:shadow-glow transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                   >
-                    {isLoading ? <Loader2 className="w-5 h-5 text-white animate-spin" /> : (
+                    {isLoading ? <Loader2 className="w-5 h-5 text-primary-foreground animate-spin" /> : (
                       <>
-                        <EyeOff className="w-4 h-4 text-white" />
-                        <span className="text-white font-medium">Tarn-PIN aktivieren</span>
+                        <EyeOff className="w-4 h-4 text-primary-foreground" />
+                        <span className="text-primary-foreground font-medium">Tarn-PIN aktivieren</span>
                       </>
                     )}
                   </button>
@@ -653,18 +653,18 @@ export default function Settings() {
           {/* Recovery Key */}
           <button
             onClick={() => { setShowRecoveryKey(!showRecoveryKey); setShowPinChange(false); setShowDecoyPin(false); }}
-            className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-white/5 transition-colors group"
+            className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-muted/30 transition-colors group"
           >
             <div className="flex items-center gap-4">
               <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                <Key className="w-5 h-5 text-blue-400" />
+                <Key className="w-5 h-5 text-blue-500" />
               </div>
               <div className="text-left">
-                <h3 className="font-medium text-white">Recovery-Schlüssel</h3>
-                <p className="text-sm text-white/50">Backup-Code für Notfallzugriff</p>
+                <h3 className="font-medium text-foreground">Recovery-Schlüssel</h3>
+                <p className="text-sm text-muted-foreground">Backup-Code für Notfallzugriff</p>
               </div>
             </div>
-            <motion.div animate={{ rotate: showRecoveryKey ? 180 : 0 }} className="text-white/40">▼</motion.div>
+            <motion.div animate={{ rotate: showRecoveryKey ? 180 : 0 }} className="text-muted-foreground">▼</motion.div>
           </button>
 
           <AnimatePresence>
@@ -675,36 +675,36 @@ export default function Settings() {
                 exit={{ height: 0, opacity: 0 }}
                 className="overflow-hidden"
               >
-                <div className="p-4 space-y-4 bg-white/5 rounded-xl">
+                <div className="p-4 space-y-4 bg-muted/30 rounded-xl">
                   {recoveryKey ? (
                     <>
                       <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                        <p className="text-blue-400 text-sm mb-2">Dein Recovery-Schlüssel:</p>
-                        <div className="font-mono text-lg text-white bg-black/30 p-3 rounded-lg text-center break-all">
+                        <p className="text-blue-500 text-sm mb-2">Dein Recovery-Schlüssel:</p>
+                        <div className="font-mono text-lg text-foreground bg-background/50 p-3 rounded-lg text-center break-all">
                           {recoveryKey}
                         </div>
                       </div>
                       <div className="flex gap-3">
                         <button
                           onClick={copyRecoveryKey}
-                          className="flex-1 py-3 rounded-xl border border-white/10 hover:bg-white/5 transition-all flex items-center justify-center gap-2"
+                          className="flex-1 py-3 rounded-xl border border-border hover:bg-muted/30 transition-all flex items-center justify-center gap-2"
                         >
-                          <Copy className="w-4 h-4 text-white" />
-                          <span className="text-white">Kopieren</span>
+                          <Copy className="w-4 h-4 text-foreground" />
+                          <span className="text-foreground">Kopieren</span>
                         </button>
                         <button
                           onClick={generateNewRecoveryKey}
                           disabled={isLoading}
-                          className="flex-1 py-3 rounded-xl border border-white/10 hover:bg-white/5 transition-all flex items-center justify-center gap-2"
+                          className="flex-1 py-3 rounded-xl border border-border hover:bg-muted/30 transition-all flex items-center justify-center gap-2"
                         >
-                          <RefreshCw className={cn("w-4 h-4 text-white", isLoading && "animate-spin")} />
-                          <span className="text-white">Neu generieren</span>
+                          <RefreshCw className={cn("w-4 h-4 text-foreground", isLoading && "animate-spin")} />
+                          <span className="text-foreground">Neu generieren</span>
                         </button>
                       </div>
                     </>
                   ) : (
                     <>
-                      <p className="text-white/60 text-sm">
+                      <p className="text-muted-foreground text-sm">
                         Generiere einen Recovery-Schlüssel, um im Notfall Zugriff zu erhalten.
                       </p>
                       <button
@@ -712,10 +712,10 @@ export default function Settings() {
                         disabled={isLoading}
                         className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                       >
-                        {isLoading ? <Loader2 className="w-5 h-5 text-white animate-spin" /> : (
+                        {isLoading ? <Loader2 className="w-5 h-5 text-primary-foreground animate-spin" /> : (
                           <>
-                            <Key className="w-4 h-4 text-white" />
-                            <span className="text-white font-medium">Recovery-Key generieren</span>
+                            <Key className="w-4 h-4 text-primary-foreground" />
+                            <span className="text-primary-foreground font-medium">Recovery-Key generieren</span>
                           </>
                         )}
                       </button>
@@ -738,15 +738,15 @@ export default function Settings() {
       <div className="glass-card p-6">
         <button
           onClick={handleLogout}
-          className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-red-500/10 transition-colors group"
+          className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-destructive/10 transition-colors group"
         >
           <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
-              <LogOut className="w-5 h-5 text-red-400" />
+            <div className="w-10 h-10 rounded-lg bg-destructive/20 flex items-center justify-center">
+              <LogOut className="w-5 h-5 text-destructive" />
             </div>
             <div className="text-left">
-              <h3 className="font-medium text-white">Abmelden</h3>
-              <p className="text-sm text-white/50">Sitzung beenden und zum Login zurückkehren</p>
+              <h3 className="font-medium text-foreground">Abmelden</h3>
+              <p className="text-sm text-muted-foreground">Sitzung beenden und zum Login zurückkehren</p>
             </div>
           </div>
         </button>
@@ -754,8 +754,8 @@ export default function Settings() {
 
       {/* Info */}
       <div className="glass-card p-6">
-        <h3 className="text-sm font-medium text-white/60 mb-3">Info</h3>
-        <div className="space-y-2 text-sm text-white/40">
+        <h3 className="text-sm font-medium text-muted-foreground mb-3">Info</h3>
+        <div className="space-y-2 text-sm text-muted-foreground/70">
           <p>Version: 1.0.0</p>
           <p>Private Vault - Dein sicherer Tresor</p>
         </div>
