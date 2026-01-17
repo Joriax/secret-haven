@@ -1,4 +1,4 @@
-import React, { memo, useMemo } from 'react';
+import React, { memo, useMemo, useCallback } from 'react';
 import { 
   Bold, 
   Italic, 
@@ -19,7 +19,9 @@ import { cn } from '@/lib/utils';
 interface FormatAction {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
-  action: () => void;
+  prefix: string;
+  suffix: string;
+  placeholder: string;
 }
 
 interface NoteToolbarProps {
@@ -29,32 +31,36 @@ interface NoteToolbarProps {
   children?: React.ReactNode;
 }
 
+const FORMAT_ACTIONS: FormatAction[] = [
+  { icon: Bold, label: 'Fett', prefix: '**', suffix: '**', placeholder: 'fett' },
+  { icon: Italic, label: 'Kursiv', prefix: '*', suffix: '*', placeholder: 'kursiv' },
+  { icon: Heading1, label: 'Überschrift 1', prefix: '\n# ', suffix: '\n', placeholder: 'Überschrift' },
+  { icon: Heading2, label: 'Überschrift 2', prefix: '\n## ', suffix: '\n', placeholder: 'Überschrift' },
+  { icon: Heading3, label: 'Überschrift 3', prefix: '\n### ', suffix: '\n', placeholder: 'Überschrift' },
+  { icon: List, label: 'Liste', prefix: '\n- ', suffix: '\n', placeholder: 'Listenpunkt' },
+  { icon: ListOrdered, label: 'Nummerierte Liste', prefix: '\n1. ', suffix: '\n', placeholder: 'Listenpunkt' },
+  { icon: CheckSquare, label: 'Checkbox', prefix: '\n- [ ] ', suffix: '\n', placeholder: 'Aufgabe' },
+  { icon: Quote, label: 'Zitat', prefix: '\n> ', suffix: '\n', placeholder: 'Zitat' },
+  { icon: Code, label: 'Code', prefix: '`', suffix: '`', placeholder: 'code' },
+  { icon: Link, label: 'Link', prefix: '[', suffix: '](url)', placeholder: 'Linktext' },
+];
+
 export const NoteToolbar = memo(function NoteToolbar({
   showPreview,
   onTogglePreview,
   onInsertMarkdown,
   children,
 }: NoteToolbarProps) {
-  const formatActions: FormatAction[] = useMemo(() => [
-    { icon: Bold, label: 'Fett', action: () => onInsertMarkdown('**', '**', 'fett') },
-    { icon: Italic, label: 'Kursiv', action: () => onInsertMarkdown('*', '*', 'kursiv') },
-    { icon: Heading1, label: 'Überschrift 1', action: () => onInsertMarkdown('\n# ', '\n', 'Überschrift') },
-    { icon: Heading2, label: 'Überschrift 2', action: () => onInsertMarkdown('\n## ', '\n', 'Überschrift') },
-    { icon: Heading3, label: 'Überschrift 3', action: () => onInsertMarkdown('\n### ', '\n', 'Überschrift') },
-    { icon: List, label: 'Liste', action: () => onInsertMarkdown('\n- ', '\n', 'Listenpunkt') },
-    { icon: ListOrdered, label: 'Nummerierte Liste', action: () => onInsertMarkdown('\n1. ', '\n', 'Listenpunkt') },
-    { icon: CheckSquare, label: 'Checkbox', action: () => onInsertMarkdown('\n- [ ] ', '\n', 'Aufgabe') },
-    { icon: Quote, label: 'Zitat', action: () => onInsertMarkdown('\n> ', '\n', 'Zitat') },
-    { icon: Code, label: 'Code', action: () => onInsertMarkdown('`', '`', 'code') },
-    { icon: Link, label: 'Link', action: () => onInsertMarkdown('[', '](url)', 'Linktext') },
-  ], [onInsertMarkdown]);
+  const handleAction = useCallback((action: FormatAction) => {
+    onInsertMarkdown(action.prefix, action.suffix, action.placeholder);
+  }, [onInsertMarkdown]);
 
   return (
     <div className="flex items-center gap-1 px-6 py-3 border-b border-border bg-muted/30 flex-wrap">
-      {formatActions.map((action, index) => (
+      {FORMAT_ACTIONS.map((action, index) => (
         <button
           key={index}
-          onClick={action.action}
+          onClick={() => handleAction(action)}
           className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
           title={action.label}
         >
