@@ -20,7 +20,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useViewHistory } from '@/hooks/useViewHistory';
 import { useDashboardWidgets, DashboardWidget } from '@/hooks/useDashboardWidgets';
-import { cn } from '@/lib/utils';
+import { cn, formatFileSize } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CreateNewDialog } from '@/components/CreateNewDialog';
 import { Button } from '@/components/ui/button';
@@ -392,13 +392,8 @@ export default function Dashboard() {
     return date.toLocaleDateString('de-DE', { day: '2-digit', month: 'short' });
   };
 
-  const formatSize = (bytes: number) => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-  };
+  // Use centralized formatFileSize with 1 decimal
+  const formatSize = (bytes: number) => formatFileSize(bytes, 1);
 
   const totalItems = stats.notes + stats.photos + stats.files + stats.tiktokVideos + stats.links;
 

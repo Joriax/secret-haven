@@ -7,10 +7,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { useBiometric } from '@/hooks/useBiometric';
 import { toast } from 'sonner';
-
-const PIN_LENGTH = 6;
-const MAX_ATTEMPTS = 5;
-const LOCKOUT_DURATION = 10 * 60 * 1000;
+import { 
+  PIN_LENGTH, 
+  MAX_LOGIN_ATTEMPTS as MAX_ATTEMPTS, 
+  LOCKOUT_DURATION_MS as LOCKOUT_DURATION 
+} from '@/lib/constants';
 
 export default function Login() {
   const [username, setUsername] = useState('');
