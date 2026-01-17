@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
+import { TRASH_RETENTION_DAYS } from '@/config';
 
 const TRASH_RETENTION_KEY = 'vault_trash_retention_days';
-const DEFAULT_RETENTION_DAYS = 30;
 
 export function useTrashSettings() {
-  const [retentionDays, setRetentionDays] = useState<number>(DEFAULT_RETENTION_DAYS);
+  const [retentionDays, setRetentionDays] = useState<number>(TRASH_RETENTION_DAYS);
 
   useEffect(() => {
     const stored = localStorage.getItem(TRASH_RETENTION_KEY);

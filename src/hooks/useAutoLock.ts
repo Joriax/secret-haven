@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSecurityLogs } from '@/hooks/useSecurityLogs';
+import { AUTO_LOCK_TIMEOUT_MINUTES } from '@/config';
 
 const ACTIVITY_EVENTS = [
   'mousedown',
@@ -17,13 +18,13 @@ export const useAutoLock = () => {
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastActivityRef = useRef<number>(Date.now());
 
-  // Get timeout from localStorage, default 5 minutes (300000ms)
+  // Get timeout from localStorage, use config default
   const getTimeoutDuration = useCallback(() => {
     const stored = localStorage.getItem('vault_auto_lock_timeout');
     if (stored) {
       return parseInt(stored, 10);
     }
-    return 5 * 60 * 1000; // 5 minutes default
+    return AUTO_LOCK_TIMEOUT_MINUTES * 60 * 1000; // From config
   }, []);
 
   const setTimeoutDuration = useCallback((minutes: number) => {

@@ -1,7 +1,5 @@
 import * as tus from "tus-js-client";
-
-const SUPABASE_PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+import { SUPABASE_PROJECT_ID, SUPABASE_ANON_KEY, getStorageEndpoint, UPLOAD_CHUNK_SIZE_MB } from '@/config';
 
 export type ResumableUploadOptions = {
   bucket: string;
@@ -26,17 +24,16 @@ export function resumableStorageUpload({
   sessionToken,
   onProgress,
 }: ResumableUploadOptions): Promise<void> {
-  if (!SUPABASE_PROJECT_ID || !SUPABASE_ANON_KEY) {
-    return Promise.reject(new Error("Missing storage configuration"));
+  const endpoint = getStorageEndpoint();
+  if (!endpoint || !SUPABASE_ANON_KEY) {
+    return Promise.reject(new Error("Missing storage configuration. Check src/config/index.ts"));
   }
-
-  const endpoint = `https://${SUPABASE_PROJECT_ID}.storage.supabase.co/storage/v1/upload/resumable`;
 
   return new Promise((resolve, reject) => {
     const upload = new tus.Upload(file, {
       endpoint,
       retryDelays: [0, 3000, 5000, 10000, 20000],
-      chunkSize: 6 * 1024 * 1024,
+      chunkSize: UPLOAD_CHUNK_SIZE_MB * 1024 * 1024,
       removeFingerprintOnSuccess: true,
       headers: {
         apikey: SUPABASE_ANON_KEY,
