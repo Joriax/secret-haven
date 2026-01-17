@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { FolderPlus, ChevronRight, ChevronLeft, Trash2, Pencil, Folder, Star, Heart, Video, Music, MoreVertical, Pin, PinOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -43,7 +43,7 @@ interface AlbumSidebarProps {
   onSelectAlbum?: (album: Album | null) => void;
 }
 
-export function AlbumSidebar({
+export const AlbumSidebar = memo(function AlbumSidebar({
   albums,
   isOpen,
   onToggle,
@@ -58,11 +58,10 @@ export function AlbumSidebar({
   selectedAlbum,
   onSelectAlbum,
 }: AlbumSidebarProps) {
-  // Sort albums: pinned first, then by creation date
-  const sortedAlbums = [...albums].sort((a, b) => {
+  const sortedAlbums = useMemo(() => [...albums].sort((a, b) => {
     if (a.is_pinned !== b.is_pinned) return b.is_pinned ? 1 : -1;
     return 0;
-  });
+  }), [albums]);
 
   return (
     <>
@@ -265,4 +264,4 @@ export function AlbumSidebar({
       </motion.div>
     </>
   );
-}
+});

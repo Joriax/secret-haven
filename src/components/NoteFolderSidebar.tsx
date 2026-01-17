@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, memo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Folder, 
@@ -36,7 +36,7 @@ const FOLDER_COLORS = [
   '#f97316', '#eab308', '#22c55e', '#14b8a6', '#06b6d4', '#3b82f6'
 ];
 
-export function NoteFolderSidebar({
+export const NoteFolderSidebar = memo(function NoteFolderSidebar({
   folders,
   selectedFolderId,
   onSelectFolder,
@@ -53,14 +53,14 @@ export function NoteFolderSidebar({
   const [editName, setEditName] = useState('');
   const [editColor, setEditColor] = useState('');
 
-  const handleCreate = () => {
+  const handleCreate = useCallback(() => {
     if (newFolderName.trim()) {
       onCreateFolder(newFolderName.trim(), newFolderColor);
       setNewFolderName('');
       setNewFolderColor('#6366f1');
       setIsCreating(false);
     }
-  };
+  }, [newFolderName, newFolderColor, onCreateFolder]);
 
   const handleStartEdit = (folder: NoteFolder) => {
     setEditingFolder(folder.id);
@@ -242,4 +242,4 @@ export function NoteFolderSidebar({
       </AnimatePresence>
     </div>
   );
-}
+});

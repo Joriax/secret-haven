@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { motion } from 'framer-motion';
 import { GripVertical, Eye, EyeOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -16,7 +16,7 @@ interface DraggableWidgetProps {
   className?: string;
 }
 
-export const DraggableWidget: React.FC<DraggableWidgetProps> = ({
+export const DraggableWidget = memo(function DraggableWidget({
   widget,
   index,
   isEditing,
@@ -26,7 +26,7 @@ export const DraggableWidget: React.FC<DraggableWidgetProps> = ({
   onToggleVisibility,
   children,
   className,
-}) => {
+}: DraggableWidgetProps) {
   return (
     <motion.div
       layout
@@ -78,4 +78,4 @@ export const DraggableWidget: React.FC<DraggableWidgetProps> = ({
       </div>
     </motion.div>
   );
-};
+});

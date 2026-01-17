@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, memo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   FolderPlus, ChevronRight, ChevronLeft, ChevronDown, 
@@ -60,7 +60,7 @@ interface AlbumItemProps {
   onCreateSub: (parentId: string) => void;
 }
 
-function AlbumItem({
+const AlbumItem = memo(function AlbumItem({
   album,
   isSelected,
   isDragOver,
@@ -248,9 +248,9 @@ function AlbumItem({
       </AnimatePresence>
     </div>
   );
-}
+});
 
-export function UnifiedAlbumSidebar({
+export const UnifiedAlbumSidebar = memo(function UnifiedAlbumSidebar({
   albums,
   flattenedAlbums,
   isOpen,
@@ -270,7 +270,7 @@ export function UnifiedAlbumSidebar({
 }: UnifiedAlbumSidebarProps) {
   const [expandedAlbums, setExpandedAlbums] = useState<Set<string>>(new Set());
 
-  const toggleExpand = (albumId: string) => {
+  const toggleExpand = useCallback((albumId: string) => {
     setExpandedAlbums(prev => {
       const next = new Set(prev);
       if (next.has(albumId)) {
@@ -280,13 +280,13 @@ export function UnifiedAlbumSidebar({
       }
       return next;
     });
-  };
+  }, []);
 
-  const handleCreateSub = (parentId: string) => {
+  const handleCreateSub = useCallback((parentId: string) => {
     // Expand parent when creating sub-album
     setExpandedAlbums(prev => new Set(prev).add(parentId));
     onCreateAlbum(parentId);
-  };
+  }, [onCreateAlbum]);
 
   return (
     <>
@@ -399,4 +399,4 @@ export function UnifiedAlbumSidebar({
       </motion.div>
     </>
   );
-}
+});

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { motion } from 'framer-motion';
 import {
   Folder,
@@ -70,7 +70,7 @@ const iconMap: Record<string, React.ComponentType<{ className?: string; style?: 
   video: Video,
 };
 
-export function AppleStyleFolderCard({
+export const AppleStyleFolderCard = memo(function AppleStyleFolderCard({
   id,
   name,
   color = '#6366f1',
@@ -216,7 +216,7 @@ export function AppleStyleFolderCard({
       )}
     </motion.div>
   );
-}
+});
 
 // Grid wrapper for consistent folder layout
 interface FolderGridProps {
