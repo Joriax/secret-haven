@@ -299,9 +299,13 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-background">
+    <div 
+      className="min-h-screen flex items-center justify-center p-4 bg-background"
+      role="main"
+      aria-label="Anmeldeseite"
+    >
       {/* Subtle background glow */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+      <div className="fixed inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
         <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-primary/5 rounded-full blur-[120px]" />
       </div>
 
@@ -313,6 +317,8 @@ export default function Login() {
           "w-full max-w-sm p-8 rounded-2xl bg-card border border-border",
           shake && "animate-[shake_0.5s_ease-in-out]"
         )}
+        role="form"
+        aria-labelledby="login-title"
       >
         {/* Logo */}
         <motion.div
@@ -336,7 +342,7 @@ export default function Login() {
             >
               {/* Title */}
               <div className="text-center mb-6">
-                <h1 className="text-xl font-display font-semibold text-foreground mb-1">
+                <h1 id="login-title" className="text-xl font-display font-semibold text-foreground mb-1">
                   Private Vault
                 </h1>
                 <p className="text-sm text-muted-foreground">
@@ -346,9 +352,11 @@ export default function Login() {
 
               {/* Username Input */}
               <div className="mb-4">
+                <label htmlFor="username" className="sr-only">Benutzername</label>
                 <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" aria-hidden="true" />
                   <input
+                    id="username"
                     ref={usernameInputRef}
                     type="text"
                     value={username}
@@ -361,43 +369,51 @@ export default function Login() {
                     className="w-full pl-11 pr-4 py-3 rounded-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none transition-all"
                     autoComplete="username"
                     autoFocus
+                    aria-describedby={error ? "login-error" : undefined}
                   />
                 </div>
               </div>
 
               {/* PIN Input */}
-              <div className="flex justify-center gap-2.5 mb-6">
-                {pin.map((digit, index) => (
-                  <input
-                    key={index}
-                    ref={(el) => (inputRefs.current[index] = el)}
-                    type="password"
-                    inputMode="numeric"
-                    maxLength={1}
-                    value={digit}
-                    onChange={(e) => handleChange(index, e.target.value)}
-                    onKeyDown={(e) => handleKeyDown(index, e)}
-                    disabled={isLoading || !!lockoutUntil}
-                    className={cn(
-                      "w-11 h-13 text-center text-xl font-semibold rounded-xl transition-all",
-                      "bg-muted border border-border text-foreground",
-                      "focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none",
-                      digit && "border-primary/50"
-                    )}
-                  />
-                ))}
-              </div>
+              <fieldset className="mb-6">
+                <legend className="sr-only">6-stelliger PIN</legend>
+                <div className="flex justify-center gap-2.5">
+                  {pin.map((digit, index) => (
+                    <input
+                      key={index}
+                      ref={(el) => (inputRefs.current[index] = el)}
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={1}
+                      value={digit}
+                      onChange={(e) => handleChange(index, e.target.value)}
+                      onKeyDown={(e) => handleKeyDown(index, e)}
+                      disabled={isLoading || !!lockoutUntil}
+                      aria-label={`PIN Ziffer ${index + 1} von ${PIN_LENGTH}`}
+                      className={cn(
+                        "w-11 h-13 text-center text-xl font-semibold rounded-xl transition-all",
+                        "bg-muted border border-border text-foreground",
+                        "focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none",
+                        digit && "border-primary/50"
+                      )}
+                    />
+                  ))}
+                </div>
+              </fieldset>
 
               {/* Error */}
               <AnimatePresence>
                 {error && (
                   <motion.div
+                    id="login-error"
+                    role="alert"
+                    aria-live="assertive"
                     initial={{ opacity: 0, y: -5 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -5 }}
                     className="flex items-center justify-center gap-2 mb-4 text-destructive"
                   >
-                    <AlertCircle className="w-4 h-4" />
+                    <AlertCircle className="w-4 h-4" aria-hidden="true" />
                     <span className="text-sm">{error}</span>
                   </motion.div>
                 )}

@@ -28,13 +28,35 @@ export const MainLayout: React.FC = () => {
 
   return (
     <div className="min-h-screen flex w-full bg-background">
+      {/* Skip link for keyboard navigation */}
+      <a 
+        href="#main-content" 
+        className="skip-link"
+        onClick={(e) => {
+          e.preventDefault();
+          const main = document.getElementById('main-content');
+          if (main) {
+            main.focus();
+            main.scrollIntoView({ behavior: 'smooth' });
+          }
+        }}
+      >
+        Zum Hauptinhalt springen
+      </a>
+
       <Sidebar 
         isOpen={sidebarOpen} 
         onToggle={() => setSidebarOpen(!sidebarOpen)} 
         onSearchOpen={() => setSearchOpen(true)}
       />
       
-      <main className="flex-1 min-h-screen lg:ml-0 overflow-x-hidden bg-gradient-subtle">
+      <main 
+        id="main-content"
+        className="flex-1 min-h-screen lg:ml-0 overflow-x-hidden bg-gradient-subtle"
+        tabIndex={-1}
+        role="main"
+        aria-label="Hauptinhalt"
+      >
         <div className="p-4 lg:p-6 pt-16 lg:pt-6">
           <Outlet />
         </div>
