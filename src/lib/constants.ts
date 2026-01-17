@@ -67,6 +67,13 @@ export const DEFAULT_PAGE_SIZE = 50;
 /** Maximum items to load at once */
 export const MAX_ITEMS_PER_LOAD = 100;
 
+/** Pagination defaults */
+export const PAGINATION = {
+  DEFAULT_PAGE_SIZE: 50,
+  MAX_PAGE_SIZE: 100,
+  INITIAL_PAGE: 1,
+} as const;
+
 // ==================== Debounce/Throttle ====================
 
 /** Debounce delay for search inputs (ms) */
@@ -74,6 +81,14 @@ export const SEARCH_DEBOUNCE_MS = 300;
 
 /** Auto-save delay for notes (ms) */
 export const AUTOSAVE_DELAY_MS = 2000;
+
+/** Debounce delays in milliseconds */
+export const DEBOUNCE_DELAYS = {
+  SEARCH: 300,
+  AUTO_SAVE: 2000,
+  RESIZE: 100,
+  SCROLL: 50,
+} as const;
 
 // ==================== Dates ====================
 

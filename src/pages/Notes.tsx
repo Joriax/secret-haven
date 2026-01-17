@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Plus, 
@@ -13,34 +13,17 @@ import {
   Lock, 
   Tag, 
   History, 
-  RotateCcw,
   Copy,
   Share,
   MoreVertical,
   ChevronLeft,
-  Unlock,
-  Bold,
-  Italic,
-  List,
-  ListOrdered,
-  Quote,
-  Code,
-  Link,
-  Heading1,
-  Heading2,
-  Heading3,
-  Eye,
-  EyeOff,
-  CheckSquare,
   Folder,
   Share2,
-  Scan
+  Scan,
+  Unlock
 } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useAuth } from '@/contexts/AuthContext';
-import { useTags, Tag as TagType } from '@/hooks/useTags';
+import { useTags } from '@/hooks/useTags';
 import { useNoteFolders } from '@/hooks/useNoteFolders';
 import { useViewHistory } from '@/hooks/useViewHistory';
 import { useNoteAttachments } from '@/hooks/useNoteAttachments';
@@ -52,6 +35,7 @@ import { NoteFolderSidebar } from '@/components/NoteFolderSidebar';
 import { NoteAttachmentsPanel } from '@/components/NoteAttachmentsPanel';
 import { ShareToAlbumDialog } from '@/components/ShareToAlbumDialog';
 import { OCRScanner } from '@/components/OCRScanner';
+import { NoteToolbar, MarkdownRenderer, NoteSecureModal, NoteVersionsModal } from '@/components/notes';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -59,6 +43,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { AUTOSAVE_DELAY_MS } from '@/lib/constants';
 
 interface Note {
   id: string;
@@ -131,6 +116,29 @@ export default function Notes() {
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [showFolderSidebar, setShowFolderSidebar] = useState(true);
 
+  // Memoized filtered notes
+  const filteredNotes = useMemo(() => {
+    return notes.filter(note => {
+      if (filterFavorites && !note.is_favorite) return false;
+      if (filterSecure && !note.is_secure) return false;
+      if (selectedTagFilter && !note.tags?.includes(selectedTagFilter)) return false;
+      if (selectedFolderId !== null && note.folder_id !== selectedFolderId) return false;
+      if (searchQuery) {
+        return note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (note.content || '').toLowerCase().includes(searchQuery.toLowerCase());
+      }
+      return true;
+    });
+  }, [notes, filterFavorites, filterSecure, selectedTagFilter, selectedFolderId, searchQuery]);
+
+  // Memoized note counts
+  const noteCounts = useMemo(() => {
+    return folders.reduce((acc, folder) => {
+      acc[folder.id] = notes.filter(n => n.folder_id === folder.id).length;
+      return acc;
+    }, {} as Record<string, number>);
+  }, [folders, notes]);
+
   const fetchNotes = useCallback(async () => {
     if (!userId) return;
 
@@ -154,7 +162,7 @@ export default function Notes() {
     } finally {
       setIsLoading(false);
     }
-  }, [userId, isDecoyMode]);
+  }, [userId, isDecoyMode, supabase]);
 
   useEffect(() => {
     fetchNotes();
@@ -179,7 +187,7 @@ export default function Notes() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userId, fetchNotes]);
+  }, [userId, fetchNotes, supabase]);
 
   // Auto-save functionality
   useEffect(() => {
@@ -193,16 +201,16 @@ export default function Notes() {
       if (editTitle !== selectedNote.title || editContent !== selectedNote.content) {
         saveNoteQuiet();
       }
-    }, 2000);
+    }, AUTOSAVE_DELAY_MS);
 
     setAutoSaveTimeout(timeout);
 
     return () => {
       if (timeout) clearTimeout(timeout);
     };
-  }, [editTitle, editContent]);
+  }, [editTitle, editContent, isEditing, selectedNote]);
 
-  const createNote = async (folderId?: string | null) => {
+  const createNote = useCallback(async (folderId?: string | null) => {
     if (!userId) return;
 
     try {
@@ -222,7 +230,7 @@ export default function Notes() {
 
       if (error) throw error;
       
-      setNotes([data, ...notes]);
+      setNotes(prev => [data, ...prev]);
       setSelectedNote(data);
       setEditTitle(data.title);
       setEditContent(data.content || '');
@@ -231,9 +239,9 @@ export default function Notes() {
       console.error('Error creating note:', error);
       toast.error('Fehler beim Erstellen');
     }
-  };
+  }, [userId, selectedFolderId, supabase]);
 
-  const moveNoteToFolder = async (noteId: string, folderId: string | null) => {
+  const moveNoteToFolder = useCallback(async (noteId: string, folderId: string | null) => {
     try {
       const { error } = await supabase
         .from('notes')
@@ -242,18 +250,18 @@ export default function Notes() {
 
       if (error) throw error;
 
-      setNotes(notes.map(n => n.id === noteId ? { ...n, folder_id: folderId } : n));
+      setNotes(prev => prev.map(n => n.id === noteId ? { ...n, folder_id: folderId } : n));
       if (selectedNote?.id === noteId) {
-        setSelectedNote({ ...selectedNote, folder_id: folderId });
+        setSelectedNote(prev => prev ? { ...prev, folder_id: folderId } : null);
       }
       toast.success(folderId ? 'In Ordner verschoben' : 'Aus Ordner entfernt');
     } catch (error) {
       console.error('Error moving note:', error);
       toast.error('Fehler beim Verschieben');
     }
-  };
+  }, [supabase, selectedNote?.id]);
 
-  const saveNoteQuiet = async () => {
+  const saveNoteQuiet = useCallback(async () => {
     if (!selectedNote) return;
 
     try {
@@ -268,14 +276,14 @@ export default function Notes() {
       if (error) throw error;
 
       const updatedNote = { ...selectedNote, title: editTitle, content: editContent, updated_at: new Date().toISOString() };
-      setNotes(notes.map(n => n.id === selectedNote.id ? updatedNote : n));
+      setNotes(prev => prev.map(n => n.id === selectedNote.id ? updatedNote : n));
       setSelectedNote(updatedNote);
     } catch (error) {
       console.error('Error auto-saving note:', error);
     }
-  };
+  }, [selectedNote, editTitle, editContent, supabase]);
 
-  const saveNote = async () => {
+  const saveNote = useCallback(async () => {
     if (!selectedNote) return;
 
     setIsSaving(true);
@@ -309,7 +317,7 @@ export default function Notes() {
       if (error) throw error;
 
       const updatedNote = { ...selectedNote, title: editTitle, content: editContent, updated_at: new Date().toISOString() };
-      setNotes(notes.map(n => n.id === selectedNote.id ? updatedNote : n));
+      setNotes(prev => prev.map(n => n.id === selectedNote.id ? updatedNote : n));
       setSelectedNote(updatedNote);
       setIsEditing(false);
       toast.success('Notiz gespeichert');
@@ -319,9 +327,9 @@ export default function Notes() {
     } finally {
       setIsSaving(false);
     }
-  };
+  }, [selectedNote, editTitle, editContent, userId, supabase]);
 
-  const handleDelete = async () => {
+  const handleDelete = useCallback(async () => {
     if (!deleteConfirm.note) return;
 
     try {
@@ -332,7 +340,7 @@ export default function Notes() {
 
       if (error) throw error;
 
-      setNotes(notes.filter(n => n.id !== deleteConfirm.note!.id));
+      setNotes(prev => prev.filter(n => n.id !== deleteConfirm.note!.id));
       if (selectedNote?.id === deleteConfirm.note.id) {
         setSelectedNote(null);
         setIsEditing(false);
@@ -343,9 +351,9 @@ export default function Notes() {
       console.error('Error deleting note:', error);
       toast.error('Fehler beim Löschen');
     }
-  };
+  }, [deleteConfirm.note, selectedNote?.id, supabase]);
 
-  const toggleFavorite = async (note: Note) => {
+  const toggleFavorite = useCallback(async (note: Note) => {
     try {
       const { error } = await supabase
         .from('notes')
@@ -355,7 +363,7 @@ export default function Notes() {
       if (error) throw error;
 
       const updated = { ...note, is_favorite: !note.is_favorite };
-      setNotes(notes.map(n => n.id === note.id ? updated : n));
+      setNotes(prev => prev.map(n => n.id === note.id ? updated : n));
       if (selectedNote?.id === note.id) {
         setSelectedNote(updated);
       }
@@ -363,9 +371,9 @@ export default function Notes() {
     } catch (error) {
       console.error('Error toggling favorite:', error);
     }
-  };
+  }, [supabase, selectedNote?.id]);
 
-  const updateNoteTags = async (noteId: string, newTags: string[]) => {
+  const updateNoteTags = useCallback(async (noteId: string, newTags: string[]) => {
     try {
       const { error } = await supabase
         .from('notes')
@@ -374,17 +382,17 @@ export default function Notes() {
 
       if (error) throw error;
 
-      setNotes(notes.map(n => n.id === noteId ? { ...n, tags: newTags } : n));
+      setNotes(prev => prev.map(n => n.id === noteId ? { ...n, tags: newTags } : n));
       if (selectedNote?.id === noteId) {
-        setSelectedNote({ ...selectedNote, tags: newTags });
+        setSelectedNote(prev => prev ? { ...prev, tags: newTags } : null);
       }
       toast.success('Tags aktualisiert');
     } catch (error) {
       console.error('Error updating tags:', error);
     }
-  };
+  }, [supabase, selectedNote?.id]);
 
-  const lockNote = async () => {
+  const lockNote = useCallback(async () => {
     if (!selectedNote || !securePassword) return;
 
     try {
@@ -401,7 +409,7 @@ export default function Notes() {
       if (error) throw error;
 
       const updatedNote = { ...selectedNote, is_secure: true, secure_content: encrypted, content: '[Verschlüsselt]' };
-      setNotes(notes.map(n => n.id === selectedNote.id ? updatedNote : n));
+      setNotes(prev => prev.map(n => n.id === selectedNote.id ? updatedNote : n));
       setSelectedNote(updatedNote);
       setShowSecureModal(false);
       setSecurePassword('');
@@ -411,9 +419,9 @@ export default function Notes() {
       console.error('Error locking note:', error);
       toast.error('Fehler beim Verschlüsseln');
     }
-  };
+  }, [selectedNote, securePassword, editContent, supabase]);
 
-  const unlockNote = async () => {
+  const unlockNote = useCallback(async () => {
     if (!selectedNote || !securePassword || !selectedNote.secure_content) return;
 
     try {
@@ -423,7 +431,6 @@ export default function Notes() {
         return;
       }
 
-      // Permanently unlock the note
       const { error } = await supabase
         .from('notes')
         .update({ 
@@ -436,7 +443,7 @@ export default function Notes() {
       if (error) throw error;
 
       const updatedNote = { ...selectedNote, is_secure: false, secure_content: null, content: decrypted };
-      setNotes(notes.map(n => n.id === selectedNote.id ? updatedNote : n));
+      setNotes(prev => prev.map(n => n.id === selectedNote.id ? updatedNote : n));
       setSelectedNote(updatedNote);
       setEditContent(decrypted);
       setShowSecureModal(false);
@@ -447,9 +454,9 @@ export default function Notes() {
       console.error('Error unlocking note:', error);
       toast.error('Fehler beim Entschlüsseln');
     }
-  };
+  }, [selectedNote, securePassword, supabase]);
 
-  const fetchVersions = async (noteId: string) => {
+  const fetchVersions = useCallback(async (noteId: string) => {
     const { data } = await supabase
       .from('note_versions')
       .select('*')
@@ -457,9 +464,9 @@ export default function Notes() {
       .order('version_number', { ascending: false });
     
     setVersions(data || []);
-  };
+  }, [supabase]);
 
-  const restoreVersion = async (version: NoteVersion) => {
+  const restoreVersion = useCallback(async (version: NoteVersion) => {
     if (!selectedNote) return;
 
     try {
@@ -474,7 +481,7 @@ export default function Notes() {
       if (error) throw error;
 
       const updatedNote = { ...selectedNote, title: version.title, content: version.content };
-      setNotes(notes.map(n => n.id === selectedNote.id ? updatedNote : n));
+      setNotes(prev => prev.map(n => n.id === selectedNote.id ? updatedNote : n));
       setSelectedNote(updatedNote);
       setEditTitle(version.title);
       setEditContent(version.content || '');
@@ -484,9 +491,9 @@ export default function Notes() {
       console.error('Error restoring version:', error);
       toast.error('Fehler beim Wiederherstellen');
     }
-  };
+  }, [selectedNote, supabase]);
 
-  const duplicateNote = async (note: Note) => {
+  const duplicateNote = useCallback(async (note: Note) => {
     if (!userId) return;
 
     try {
@@ -505,20 +512,20 @@ export default function Notes() {
 
       if (error) throw error;
       
-      setNotes([data, ...notes]);
+      setNotes(prev => [data, ...prev]);
       toast.success('Notiz dupliziert');
     } catch (error) {
       console.error('Error duplicating note:', error);
       toast.error('Fehler beim Duplizieren');
     }
-  };
+  }, [userId, supabase]);
 
-  const copyToClipboard = (text: string) => {
+  const copyToClipboard = useCallback((text: string) => {
     navigator.clipboard.writeText(text);
     toast.success('In Zwischenablage kopiert');
-  };
+  }, []);
 
-  const shareNote = async (note: Note) => {
+  const shareNote = useCallback(async (note: Note) => {
     if (navigator.share) {
       try {
         await navigator.share({
@@ -531,41 +538,23 @@ export default function Notes() {
     } else {
       copyToClipboard(`${note.title}\n\n${note.content || ''}`);
     }
-  };
+  }, [copyToClipboard]);
 
-  const filteredNotes = notes.filter(note => {
-    if (filterFavorites && !note.is_favorite) return false;
-    if (filterSecure && !note.is_secure) return false;
-    if (selectedTagFilter && !note.tags?.includes(selectedTagFilter)) return false;
-    if (selectedFolderId !== null && note.folder_id !== selectedFolderId) return false;
-    if (searchQuery) {
-      return note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (note.content || '').toLowerCase().includes(searchQuery.toLowerCase());
-    }
-    return true;
-  });
-
-  // Calculate note counts per folder
-  const noteCounts = folders.reduce((acc, folder) => {
-    acc[folder.id] = notes.filter(n => n.folder_id === folder.id).length;
-    return acc;
-  }, {} as Record<string, number>);
-
-  const formatDate = (dateString: string) => {
+  const formatDate = useCallback((dateString: string) => {
     return new Date(dateString).toLocaleDateString('de-DE', {
       day: '2-digit',
       month: 'short',
       hour: '2-digit',
       minute: '2-digit',
     });
-  };
+  }, []);
 
-  const getWordCount = (text: string) => {
+  const getWordCount = useCallback((text: string) => {
     return text.trim().split(/\s+/).filter(Boolean).length;
-  };
+  }, []);
 
-  // Markdown formatting helpers
-  const insertMarkdown = (prefix: string, suffix: string = '', placeholder: string = '') => {
+  // Markdown formatting helper
+  const insertMarkdown = useCallback((prefix: string, suffix: string = '', placeholder: string = '') => {
     const textarea = textareaRef.current;
     if (!textarea) return;
 
@@ -581,7 +570,6 @@ export default function Notes() {
     
     setEditContent(newContent);
     
-    // Set cursor position after insertion
     setTimeout(() => {
       const newCursorPos = start + prefix.length + textToInsert.length + suffix.length;
       textarea.focus();
@@ -590,21 +578,21 @@ export default function Notes() {
         selectedText ? newCursorPos : start + prefix.length + placeholder.length
       );
     }, 0);
-  };
+  }, [editContent]);
 
-  const formatActions = [
-    { icon: Bold, label: 'Fett', action: () => insertMarkdown('**', '**', 'fett') },
-    { icon: Italic, label: 'Kursiv', action: () => insertMarkdown('*', '*', 'kursiv') },
-    { icon: Heading1, label: 'Überschrift 1', action: () => insertMarkdown('\n# ', '\n', 'Überschrift') },
-    { icon: Heading2, label: 'Überschrift 2', action: () => insertMarkdown('\n## ', '\n', 'Überschrift') },
-    { icon: Heading3, label: 'Überschrift 3', action: () => insertMarkdown('\n### ', '\n', 'Überschrift') },
-    { icon: List, label: 'Liste', action: () => insertMarkdown('\n- ', '\n', 'Listenpunkt') },
-    { icon: ListOrdered, label: 'Nummerierte Liste', action: () => insertMarkdown('\n1. ', '\n', 'Listenpunkt') },
-    { icon: CheckSquare, label: 'Checkbox', action: () => insertMarkdown('\n- [ ] ', '\n', 'Aufgabe') },
-    { icon: Quote, label: 'Zitat', action: () => insertMarkdown('\n> ', '\n', 'Zitat') },
-    { icon: Code, label: 'Code', action: () => insertMarkdown('`', '`', 'code') },
-    { icon: Link, label: 'Link', action: () => insertMarkdown('[', '](url)', 'Linktext') },
-  ];
+  const handleSecureModalClose = useCallback(() => {
+    setShowSecureModal(false);
+    setSecurePassword('');
+    setPendingSecureAction(null);
+  }, []);
+
+  const handleSecureConfirm = useCallback(() => {
+    if (pendingSecureAction === 'lock') {
+      lockNote();
+    } else {
+      unlockNote();
+    }
+  }, [pendingSecureAction, lockNote, unlockNote]);
 
   return (
     <div className="h-[calc(100vh-6rem)] flex flex-col lg:flex-row gap-4">
@@ -910,34 +898,22 @@ export default function Notes() {
                         >
                           <span className="w-3 h-3 rounded-full" style={{ backgroundColor: tag.color }} />
                           <span className="text-foreground text-sm">{tag.name}</span>
-                          {selectedNote.tags?.includes(tag.id) && (
-                            <span className="ml-auto text-primary">✓</span>
-                          )}
                         </button>
                       ))}
-                      <button
-                        onClick={() => setShowTagSelector(false)}
-                        className="w-full mt-2 py-2 text-sm text-muted-foreground hover:text-foreground"
-                      >
-                        Schließen
-                      </button>
                     </div>
                   )}
                 </div>
 
                 {/* Version History */}
                 <button
-                  onClick={() => {
-                    fetchVersions(selectedNote.id);
-                    setShowVersions(true);
-                  }}
+                  onClick={() => { fetchVersions(selectedNote.id); setShowVersions(true); }}
                   className="p-2 rounded-lg hover:bg-muted text-muted-foreground transition-all"
                   title="Versionen"
                 >
                   <History className="w-4 h-4" />
                 </button>
 
-                {/* Secure Lock */}
+                {/* Lock/Unlock */}
                 <button
                   onClick={() => {
                     if (selectedNote.is_secure) {
@@ -968,55 +944,29 @@ export default function Notes() {
                     ) : (
                       <Save className="w-4 h-4 text-primary-foreground" />
                     )}
-                    <span className="text-primary-foreground text-sm">Speichern</span>
+                    <span className="text-primary-foreground text-sm hidden sm:inline">Speichern</span>
                   </button>
                 ) : (
                   <button
                     onClick={() => setIsEditing(true)}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl border border-border hover:bg-muted transition-all"
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-muted hover:bg-muted/80 transition-all"
                   >
                     <Edit2 className="w-4 h-4 text-foreground" />
-                    <span className="text-foreground text-sm">Bearbeiten</span>
+                    <span className="text-foreground text-sm hidden sm:inline">Bearbeiten</span>
                   </button>
                 )}
               </div>
             </div>
 
-            {/* Tag Display */}
-            {selectedNote.tags?.length > 0 && (
-              <div className="flex gap-2 px-6 pt-4 flex-wrap">
-                {selectedNote.tags.map(tagId => {
-                  const tag = tags.find(t => t.id === tagId);
-                  return tag ? (
-                    <span
-                      key={tagId}
-                      className="px-3 py-1 rounded-full text-xs font-medium"
-                      style={{ backgroundColor: `${tag.color}30`, color: tag.color }}
-                    >
-                      {tag.name}
-                    </span>
-                  ) : null;
-                })}
-              </div>
-            )}
-
             {/* Editor Content */}
             {isEditing ? (
               <div className="flex-1 flex flex-col overflow-hidden">
                 {/* Formatting Toolbar */}
-                <div className="flex items-center gap-1 px-6 py-3 border-b border-border bg-muted/30 flex-wrap">
-                  {formatActions.map((action, index) => (
-                    <button
-                      key={index}
-                      onClick={action.action}
-                      className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                      title={action.label}
-                    >
-                      <action.icon className="w-4 h-4" />
-                    </button>
-                  ))}
-                  
-                  {/* OCR Scanner Button */}
+                <NoteToolbar
+                  showPreview={showPreview}
+                  onTogglePreview={() => setShowPreview(!showPreview)}
+                  onInsertMarkdown={insertMarkdown}
+                >
                   <OCRScanner 
                     onTextExtracted={(text) => {
                       setEditContent(prev => prev + (prev ? '\n\n' : '') + text);
@@ -1031,19 +981,7 @@ export default function Notes() {
                       </button>
                     }
                   />
-                  
-                  <div className="flex-1" />
-                  <button
-                    onClick={() => setShowPreview(!showPreview)}
-                    className={cn(
-                      "flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors text-sm",
-                      showPreview ? "bg-primary/20 text-primary" : "hover:bg-muted text-muted-foreground"
-                    )}
-                  >
-                    {showPreview ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    <span className="hidden sm:inline">{showPreview ? 'Editor' : 'Vorschau'}</span>
-                  </button>
-                </div>
+                </NoteToolbar>
 
                 <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
                   {/* Editor Panel */}
@@ -1072,66 +1010,7 @@ export default function Notes() {
                   {showPreview && (
                     <div className="flex-1 overflow-y-auto p-6 bg-background/50">
                       <h1 className="text-2xl font-bold text-foreground mb-6">{editTitle || 'Vorschau'}</h1>
-                      <div className="prose prose-neutral dark:prose-invert max-w-none">
-                        <ReactMarkdown
-                          components={{
-                            code: ({ className, children, ...props }) => {
-                              const match = /language-(\w+)/.exec(className || '');
-                              const isInline = !match && String(children).split('\n').length === 1;
-                              
-                              if (isInline) {
-                                return (
-                                  <code className="bg-muted rounded px-1.5 py-0.5 text-primary font-mono text-sm">
-                                    {children}
-                                  </code>
-                                );
-                              }
-                              
-                              return match ? (
-                                <SyntaxHighlighter
-                                  style={oneDark}
-                                  language={match[1]}
-                                  PreTag="div"
-                                  className="rounded-xl !bg-[#1e1e2e] !mt-0 !mb-4"
-                                  customStyle={{ 
-                                    fontSize: '0.875rem',
-                                    borderRadius: '0.75rem',
-                                    padding: '1rem',
-                                    margin: 0,
-                                  }}
-                                >
-                                  {String(children).replace(/\n$/, '')}
-                                </SyntaxHighlighter>
-                              ) : (
-                                <code className="bg-muted rounded px-1.5 py-0.5 text-primary font-mono text-sm block p-4 overflow-x-auto">
-                                  {children}
-                                </code>
-                              );
-                            },
-                            pre: ({ children }) => <>{children}</>,
-                            h1: ({ children }) => <h1 className="text-2xl font-bold text-foreground mt-6 mb-4">{children}</h1>,
-                            h2: ({ children }) => <h2 className="text-xl font-bold text-foreground mt-5 mb-3">{children}</h2>,
-                            h3: ({ children }) => <h3 className="text-lg font-bold text-foreground mt-4 mb-2">{children}</h3>,
-                            p: ({ children }) => <p className="text-foreground mb-4 leading-relaxed">{children}</p>,
-                            ul: ({ children }) => <ul className="list-disc list-inside text-foreground mb-4 space-y-1">{children}</ul>,
-                            ol: ({ children }) => <ol className="list-decimal list-inside text-foreground mb-4 space-y-1">{children}</ol>,
-                            li: ({ children }) => {
-                              const text = String(children);
-                              if (text.startsWith('[ ] ')) {
-                                return <li className="flex items-center gap-2"><span className="w-4 h-4 border border-muted-foreground rounded" />{text.slice(4)}</li>;
-                              }
-                              if (text.startsWith('[x] ')) {
-                                return <li className="flex items-center gap-2"><span className="w-4 h-4 bg-primary rounded flex items-center justify-center text-xs text-primary-foreground">✓</span>{text.slice(4)}</li>;
-                              }
-                              return <li>{children}</li>;
-                            },
-                            a: ({ href, children }) => <a href={href} className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>,
-                            blockquote: ({ children }) => <blockquote className="border-l-4 border-primary pl-4 italic text-muted-foreground my-4">{children}</blockquote>,
-                          }}
-                        >
-                          {editContent || '*Schreibe etwas um die Vorschau zu sehen...*'}
-                        </ReactMarkdown>
-                      </div>
+                      <MarkdownRenderer content={editContent || '*Schreibe etwas um die Vorschau zu sehen...*'} />
                     </div>
                   )}
                 </div>
@@ -1158,32 +1037,7 @@ export default function Notes() {
               <div className="flex-1 flex flex-col overflow-hidden">
                 <div className="flex-1 overflow-y-auto p-6">
                   <h1 className="text-2xl font-bold text-foreground mb-6">{selectedNote.title}</h1>
-                  <div className="prose prose-neutral dark:prose-invert max-w-none">
-                    <ReactMarkdown
-                      components={{
-                        code: ({ className, children }) => (
-                          <code className={cn(className, "bg-muted rounded px-2 py-1 text-primary font-mono text-sm")}>
-                            {children}
-                          </code>
-                        ),
-                        pre: ({ children }) => (
-                          <pre className="bg-muted rounded-xl p-4 overflow-x-auto border border-border">
-                            {children}
-                          </pre>
-                        ),
-                        h1: ({ children }) => <h1 className="text-2xl font-bold text-foreground mt-6 mb-4">{children}</h1>,
-                        h2: ({ children }) => <h2 className="text-xl font-bold text-foreground mt-5 mb-3">{children}</h2>,
-                        h3: ({ children }) => <h3 className="text-lg font-bold text-foreground mt-4 mb-2">{children}</h3>,
-                        p: ({ children }) => <p className="text-foreground mb-4 leading-relaxed">{children}</p>,
-                        ul: ({ children }) => <ul className="list-disc list-inside text-foreground mb-4 space-y-1">{children}</ul>,
-                        ol: ({ children }) => <ol className="list-decimal list-inside text-foreground mb-4 space-y-1">{children}</ol>,
-                        a: ({ href, children }) => <a href={href} className="text-primary hover:underline">{children}</a>,
-                        blockquote: ({ children }) => <blockquote className="border-l-4 border-primary pl-4 italic text-muted-foreground my-4">{children}</blockquote>,
-                      }}
-                    >
-                      {editContent || '*Keine Inhalte*'}
-                    </ReactMarkdown>
-                  </div>
+                  <MarkdownRenderer content={editContent || '*Keine Inhalte*'} />
                 </div>
 
                 {/* Attachments Panel in View Mode */}
@@ -1222,142 +1076,22 @@ export default function Notes() {
       </AnimatePresence>
 
       {/* Secure Modal */}
-      <AnimatePresence>
-        {showSecureModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
-            onClick={() => { setShowSecureModal(false); setSecurePassword(''); }}
-          >
-            <motion.div
-              initial={{ scale: 0.9 }}
-              animate={{ scale: 1 }}
-              exit={{ scale: 0.9 }}
-              className="glass-card p-6 w-full max-w-sm"
-              onClick={e => e.stopPropagation()}
-            >
-              <div className="flex items-center gap-3 mb-4">
-                {pendingSecureAction === 'lock' ? (
-                  <Lock className="w-6 h-6 text-primary" />
-                ) : (
-                  <Unlock className="w-6 h-6 text-primary" />
-                )}
-                <h3 className="text-xl font-bold text-foreground">
-                  {pendingSecureAction === 'lock' ? 'Notiz verschlüsseln' : 'Notiz entschlüsseln'}
-                </h3>
-              </div>
-              <p className="text-sm text-muted-foreground mb-4">
-                {pendingSecureAction === 'lock' 
-                  ? 'Gib ein Passwort ein, um die Notiz zu verschlüsseln.' 
-                  : 'Gib das Passwort ein, um die Notiz zu entschlüsseln.'}
-              </p>
-              <input
-                type="password"
-                value={securePassword}
-                onChange={(e) => setSecurePassword(e.target.value)}
-                placeholder="Passwort eingeben..."
-                className="w-full px-4 py-3 rounded-xl vault-input text-foreground placeholder:text-muted-foreground mb-4"
-                autoFocus
-                onKeyDown={(e) => e.key === 'Enter' && (pendingSecureAction === 'lock' ? lockNote() : unlockNote())}
-              />
-              <div className="flex gap-3">
-                <button
-                  onClick={() => { setShowSecureModal(false); setSecurePassword(''); }}
-                  className="flex-1 py-3 rounded-xl border border-border text-foreground hover:bg-muted"
-                >
-                  Abbrechen
-                </button>
-                <button
-                  onClick={pendingSecureAction === 'lock' ? lockNote : unlockNote}
-                  disabled={!securePassword}
-                  className="flex-1 py-3 rounded-xl bg-gradient-primary text-primary-foreground hover:shadow-glow disabled:opacity-50"
-                >
-                  {pendingSecureAction === 'lock' ? 'Verschlüsseln' : 'Entschlüsseln'}
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <NoteSecureModal
+        isOpen={showSecureModal}
+        action={pendingSecureAction}
+        password={securePassword}
+        onPasswordChange={setSecurePassword}
+        onClose={handleSecureModalClose}
+        onConfirm={handleSecureConfirm}
+      />
 
       {/* Version History Modal */}
-      <AnimatePresence>
-        {showVersions && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
-            onClick={() => setShowVersions(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.9 }}
-              animate={{ scale: 1 }}
-              exit={{ scale: 0.9 }}
-              className="glass-card p-6 w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col"
-              onClick={e => e.stopPropagation()}
-            >
-              <div className="flex items-center gap-3 mb-4">
-                <History className="w-6 h-6 text-primary" />
-                <h3 className="text-xl font-bold text-foreground">Versionshistorie</h3>
-                <span className="text-muted-foreground text-sm ml-auto">{versions.length} Versionen</span>
-              </div>
-              
-              <div className="flex-1 overflow-y-auto space-y-3">
-                {versions.length === 0 ? (
-                  <div className="text-center py-12">
-                    <History className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
-                    <p className="text-muted-foreground">Keine früheren Versionen</p>
-                    <p className="text-muted-foreground/60 text-sm mt-1">Versionen werden beim Speichern erstellt</p>
-                  </div>
-                ) : (
-                  versions.map((version, index) => (
-                    <motion.div 
-                      key={version.id} 
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.05 }}
-                      className="p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors group"
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-primary font-semibold text-sm">v{version.version_number}</span>
-                            <span className="text-muted-foreground text-xs">•</span>
-                            <span className="text-muted-foreground text-sm">{formatDate(version.created_at)}</span>
-                          </div>
-                          <p className="text-foreground font-medium truncate">{version.title}</p>
-                          {version.content && (
-                            <p className="text-muted-foreground text-sm line-clamp-2 mt-2">
-                              {version.content.slice(0, 150)}{version.content.length > 150 ? '...' : ''}
-                            </p>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => restoreVersion(version)}
-                          className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-all shrink-0"
-                        >
-                          <RotateCcw className="w-4 h-4" />
-                          <span className="text-sm hidden sm:inline">Wiederherstellen</span>
-                        </button>
-                      </div>
-                    </motion.div>
-                  ))
-                )}
-              </div>
-              
-              <button
-                onClick={() => setShowVersions(false)}
-                className="mt-4 w-full py-3 rounded-xl border border-border text-foreground hover:bg-muted"
-              >
-                Schließen
-              </button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <NoteVersionsModal
+        isOpen={showVersions}
+        versions={versions}
+        onClose={() => setShowVersions(false)}
+        onRestore={restoreVersion}
+      />
 
       {/* Delete Confirmation */}
       <DeleteConfirmDialog
