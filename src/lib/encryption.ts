@@ -124,3 +124,94 @@ export const generateRecoveryKey = (): string => {
   
   return keyParts.join('-');
 };
+
+// Backup-specific encryption with versioning and integrity
+export interface EncryptedBackup {
+  version: string;
+  encrypted: true;
+  salt: number[];
+  iv: number[];
+  data: number[];
+}
+
+// Encrypt backup data with password using AES-GCM
+export const encryptBackup = async (data: string, password: string): Promise<EncryptedBackup> => {
+  const salt = crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
+  const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
+  const key = await deriveKey(password, salt);
+
+  const textBytes = stringToBytes(data);
+  const encryptedBuffer = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv: iv.buffer as ArrayBuffer },
+    key,
+    textBytes.buffer as ArrayBuffer
+  );
+
+  return {
+    version: '2.0',
+    encrypted: true,
+    salt: Array.from(salt),
+    iv: Array.from(iv),
+    data: Array.from(new Uint8Array(encryptedBuffer))
+  };
+};
+
+// Decrypt backup data with password
+export const decryptBackup = async (backup: EncryptedBackup, password: string): Promise<string | null> => {
+  try {
+    if (!backup.encrypted || !backup.salt || !backup.iv || !backup.data) {
+      throw new Error('Invalid backup format');
+    }
+
+    const salt = new Uint8Array(backup.salt);
+    const iv = new Uint8Array(backup.iv);
+    const encryptedData = new Uint8Array(backup.data);
+
+    const key = await deriveKey(password, salt);
+
+    const decryptedBuffer = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: iv.buffer as ArrayBuffer },
+      key,
+      encryptedData.buffer as ArrayBuffer
+    );
+
+    return bytesToString(new Uint8Array(decryptedBuffer));
+  } catch (error) {
+    console.error('Backup decryption failed:', error);
+    return null;
+  }
+};
+
+// Check if a backup is using the new encryption format
+export const isNewEncryptionFormat = (data: any): data is EncryptedBackup => {
+  return data && 
+    typeof data === 'object' && 
+    data.version === '2.0' && 
+    data.encrypted === true &&
+    Array.isArray(data.salt) &&
+    Array.isArray(data.iv) &&
+    Array.isArray(data.data);
+};
+
+// Check if a backup is using the old (insecure) format
+export const isOldEncryptionFormat = (data: any): boolean => {
+  return data && 
+    typeof data === 'object' && 
+    data.encrypted === true &&
+    typeof data.hash === 'string' &&
+    typeof data.data === 'string';
+};
+
+// Decrypt old format backup (legacy support)
+export const decryptOldBackup = (encryptedData: { hash: string; data: string }, password: string): string | null => {
+  try {
+    const pwHash = btoa(password);
+    if (encryptedData.hash !== pwHash.substring(0, 8)) {
+      return null; // Wrong password
+    }
+    return decodeURIComponent(escape(atob(encryptedData.data)));
+  } catch (error) {
+    console.error('Old backup decryption failed:', error);
+    return null;
+  }
+};

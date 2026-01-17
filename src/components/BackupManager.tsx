@@ -37,6 +37,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { 
+  encryptBackup, 
+  decryptBackup, 
+  isNewEncryptionFormat, 
+  isOldEncryptionFormat,
+  decryptOldBackup,
+  EncryptedBackup 
+} from '@/lib/encryption';
 import {
   Dialog,
   DialogContent,
@@ -424,13 +432,8 @@ export function BackupManager() {
       
       if (usePassword) {
         const jsonStr = JSON.stringify(exportData);
-        const encoded = btoa(unescape(encodeURIComponent(jsonStr)));
-        const pwHash = btoa(password);
-        fileContent = JSON.stringify({ 
-          encrypted: true, 
-          hash: pwHash.substring(0, 8), 
-          data: encoded 
-        });
+        const encryptedData = await encryptBackup(jsonStr, password);
+        fileContent = JSON.stringify(encryptedData);
         filename = `vault-backup-${new Date().toISOString().split('T')[0]}.vault`;
         mimeType = 'application/octet-stream';
       } else {
@@ -597,17 +600,26 @@ export function BackupManager() {
       if (encryptionPassword) {
         try {
           const encrypted = JSON.parse(text);
-          if (!encrypted.encrypted || !encrypted.data) {
-            throw new Error('Ungültiges Format');
-          }
           
-          const pwHash = btoa(encryptionPassword);
-          if (encrypted.hash !== pwHash.substring(0, 8)) {
-            throw new Error('Falsches Passwort');
+          // Try new encryption format first
+          if (isNewEncryptionFormat(encrypted)) {
+            const decrypted = await decryptBackup(encrypted, encryptionPassword);
+            if (!decrypted) {
+              throw new Error('Falsches Passwort');
+            }
+            importData = JSON.parse(decrypted);
+          } 
+          // Fall back to old format for backwards compatibility
+          else if (isOldEncryptionFormat(encrypted)) {
+            const decrypted = decryptOldBackup(encrypted, encryptionPassword);
+            if (!decrypted) {
+              throw new Error('Falsches Passwort');
+            }
+            importData = JSON.parse(decrypted);
+            toast.warning('Dieses Backup verwendet ein veraltetes Verschlüsselungsformat. Bitte erstelle ein neues verschlüsseltes Backup.');
+          } else {
+            throw new Error('Ungültiges verschlüsseltes Format');
           }
-          
-          const decoded = decodeURIComponent(escape(atob(encrypted.data)));
-          importData = JSON.parse(decoded);
         } catch (err: any) {
           throw new Error(err.message || 'Entschlüsselung fehlgeschlagen');
         }

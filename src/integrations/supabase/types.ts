@@ -60,6 +60,13 @@ export type Database = {
             referencedRelation: "vault_users"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "albums_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "vault_users_safe"
+            referencedColumns: ["id"]
+          },
         ]
       }
       backup_settings: {
@@ -276,6 +283,13 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "vault_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "files_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "vault_users_safe"
             referencedColumns: ["id"]
           },
         ]
@@ -570,6 +584,13 @@ export type Database = {
             referencedRelation: "vault_users"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "notes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "vault_users_safe"
+            referencedColumns: ["id"]
+          },
         ]
       }
       photos: {
@@ -625,6 +646,13 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "vault_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "photos_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "vault_users_safe"
             referencedColumns: ["id"]
           },
         ]
@@ -756,6 +784,13 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "vault_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "session_history_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "vault_users_safe"
             referencedColumns: ["id"]
           },
         ]
@@ -1053,6 +1088,13 @@ export type Database = {
             referencedRelation: "vault_users"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "vault_sessions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "vault_users_safe"
+            referencedColumns: ["id"]
+          },
         ]
       }
       vault_users: {
@@ -1123,7 +1165,48 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      vault_users_safe: {
+        Row: {
+          admin_notes: string | null
+          created_at: string | null
+          decoy_pin_hash: string | null
+          id: string | null
+          last_login_at: string | null
+          last_login_ip: string | null
+          login_count: number | null
+          pin_hash: string | null
+          recovery_key: string | null
+          updated_at: string | null
+          username: string | null
+        }
+        Insert: {
+          admin_notes?: never
+          created_at?: string | null
+          decoy_pin_hash?: string | null
+          id?: string | null
+          last_login_at?: string | null
+          last_login_ip?: string | null
+          login_count?: number | null
+          pin_hash?: string | null
+          recovery_key?: string | null
+          updated_at?: string | null
+          username?: string | null
+        }
+        Update: {
+          admin_notes?: never
+          created_at?: string | null
+          decoy_pin_hash?: string | null
+          id?: string | null
+          last_login_at?: string | null
+          last_login_ip?: string | null
+          login_count?: number | null
+          pin_hash?: string | null
+          recovery_key?: string | null
+          updated_at?: string | null
+          username?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       cleanup_expired_sessions: { Args: never; Returns: undefined }
@@ -1137,6 +1220,7 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
+      is_session_admin: { Args: never; Returns: boolean }
       validate_session_token: {
         Args: { token: string }
         Returns: {
