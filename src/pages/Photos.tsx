@@ -45,6 +45,8 @@ import {
   QrCode,
   Clock,
   Link2,
+  Zap,
+  Sparkles,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTags } from '@/hooks/useTags';
@@ -75,6 +77,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useSmartAlbums, SmartAlbumItem } from '@/hooks/useSmartAlbums';
+import { SmartAlbumCard, SmartAlbumList } from '@/components/SmartAlbumCard';
 
 // Video file extensions and MIME types
 const VIDEO_EXTENSIONS = /\.(mp4|mov|webm|avi|mkv|m4v|3gp|ogv|wmv|flv)$/i;
@@ -152,7 +156,7 @@ interface Album {
   depth?: number;
 }
 
-type ViewMode = 'all' | 'photos' | 'videos' | 'albums';
+type ViewMode = 'all' | 'photos' | 'videos' | 'albums' | 'smart';
 type SortMode = 'date-desc' | 'date-asc' | 'name-asc' | 'name-desc' | 'favorites';
 
 // Helper functions for hierarchical albums
@@ -239,6 +243,7 @@ export default function Photos() {
   const isMobile = useIsMobile();
   const { checkForDuplicate, showDuplicateWarning, registerUpload, loadExistingHashes } = useDuplicatePrevention();
   const [shareItem, setShareItem] = useState<MediaItem | null>(null);
+  const [selectedSmartAlbum, setSelectedSmartAlbum] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!userId) return;
@@ -1028,6 +1033,33 @@ export default function Photos() {
     return getChildAlbums(albums, selectedAlbum?.id || null);
   }, [albums, selectedAlbum]);
 
+  // Smart Albums - convert media to SmartAlbumItem format
+  const smartAlbumItems: SmartAlbumItem[] = useMemo(() => {
+    return media.map(m => ({
+      id: m.id,
+      filename: m.filename,
+      name: m.caption || m.filename,
+      created_at: m.taken_at,
+      uploaded_at: m.uploaded_at,
+      is_favorite: m.is_favorite,
+      tags: m.tags,
+      type: m.type,
+      mime_type: m.mime_type,
+    }));
+  }, [media]);
+
+  const { smartAlbums, getItemsForSmartAlbum } = useSmartAlbums(smartAlbumItems);
+
+  // Filtered media including smart album filter
+  const displayMedia = useMemo(() => {
+    if (selectedSmartAlbum) {
+      const smartItems = getItemsForSmartAlbum(selectedSmartAlbum);
+      const smartItemIds = new Set(smartItems.map(i => i.id));
+      return filteredMedia.filter(m => smartItemIds.has(m.id));
+    }
+    return filteredMedia;
+  }, [filteredMedia, selectedSmartAlbum, getItemsForSmartAlbum]);
+
   // Breadcrumb for navigation
   const breadcrumb = useMemo(() => {
     if (!selectedAlbum) return [];
@@ -1538,10 +1570,16 @@ export default function Photos() {
               { id: 'photos', label: 'Fotos', icon: ImageIcon },
               { id: 'videos', label: 'Videos', icon: Film },
               { id: 'albums', label: 'Alben', icon: Grid3X3 },
+              { id: 'smart', label: 'Smart', icon: Zap },
             ].map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setViewMode(tab.id as ViewMode)}
+                onClick={() => {
+                  setViewMode(tab.id as ViewMode);
+                  if (tab.id !== 'smart') {
+                    setSelectedSmartAlbum(null);
+                  }
+                }}
                 className={cn(
                   "flex items-center gap-2 px-4 py-2 rounded-xl whitespace-nowrap transition-all text-sm",
                   viewMode === tab.id
@@ -1787,8 +1825,107 @@ export default function Photos() {
         </div>
       )}
 
+      {/* Smart Albums View */}
+      {viewMode === 'smart' && !selectedAlbum && (
+        <div className="space-y-6">
+          {/* Active Smart Album Header */}
+          {selectedSmartAlbum && (
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setSelectedSmartAlbum(null)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted hover:bg-muted/80 transition-colors text-sm"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                Zurück
+              </button>
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-primary" />
+                <span className="font-medium">
+                  {smartAlbums.find(a => a.id === selectedSmartAlbum)?.name}
+                </span>
+                <span className="text-muted-foreground text-sm">
+                  ({displayMedia.length} Elemente)
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Smart Album Cards */}
+          {!selectedSmartAlbum && (
+            <>
+              <div className="flex items-center gap-2 mb-4">
+                <Sparkles className="w-5 h-5 text-primary" />
+                <h3 className="text-lg font-semibold text-foreground">Smart Alben</h3>
+                <span className="text-muted-foreground text-sm">
+                  Automatisch aktualisiert basierend auf Regeln
+                </span>
+              </div>
+              
+              {smartAlbums.length > 0 ? (
+                <SmartAlbumList 
+                  albums={smartAlbums}
+                  selectedId={selectedSmartAlbum}
+                  onSelect={(id) => setSelectedSmartAlbum(id)}
+                />
+              ) : (
+                <div className="glass-card p-12 text-center">
+                  <Sparkles className="w-16 h-16 mx-auto mb-4 text-muted-foreground/30" />
+                  <h3 className="text-lg font-medium text-foreground mb-2">
+                    Keine Smart Alben verfügbar
+                  </h3>
+                  <p className="text-muted-foreground">
+                    Füge Medien hinzu um Smart Alben zu aktivieren
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Show media when smart album is selected */}
+          {selectedSmartAlbum && displayMedia.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+              {displayMedia.map((item, index) => (
+                <LazyMediaItem
+                  key={item.id}
+                  item={item}
+                  index={index}
+                  isMultiSelectMode={isMultiSelectMode}
+                  isSelected={selectedItems.has(item.id)}
+                  tags={tags}
+                  onToggleSelect={toggleItemSelection}
+                  onOpenLightbox={(idx) => {
+                    setLightboxIndex(idx);
+                    recordView('photo', item.id);
+                  }}
+                  onToggleFavorite={toggleFavorite}
+                  onShowTagSelector={setShowTagSelector}
+                  onShowAlbumPicker={setSinglePhotoAlbumPicker}
+                  onShareToAlbum={(item) => setShareToAlbum({ isOpen: true, photo: item })}
+                  onDownload={downloadMedia}
+                  onDelete={(item) => setDeleteConfirm({ isOpen: true, item })}
+                  onDragStart={handleDragStart}
+                  onDragEnd={handleDragEnd}
+                />
+              ))}
+            </div>
+          )}
+
+          {selectedSmartAlbum && displayMedia.length === 0 && (
+            <div className="glass-card p-12 text-center">
+              <ImageIcon className="w-16 h-16 mx-auto mb-4 text-muted-foreground/30" />
+              <h3 className="text-lg font-medium text-foreground mb-2">
+                Keine Elemente
+              </h3>
+              <p className="text-muted-foreground">
+                Dieses Smart Album enthält keine passenden Elemente
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Media Grid */}
-      {(viewMode !== 'albums' || selectedAlbum) && (
+      {(viewMode !== 'albums' && viewMode !== 'smart' || selectedAlbum) && (
         <>
           {isLoading ? (
             <div className="flex items-center justify-center py-20">
