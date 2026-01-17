@@ -1413,10 +1413,10 @@ serve(async (req) => {
         );
       }
 
-      // Fetch all users
+      // Fetch all users (including username)
       const { data: usersData, error: usersError } = await supabase
         .from('vault_users')
-        .select('id, created_at, recovery_key, admin_notes, last_login_at, login_count, last_login_ip')
+        .select('id, username, created_at, recovery_key, admin_notes, last_login_at, login_count, last_login_ip')
         .order('created_at', { ascending: false });
 
       if (usersError) throw usersError;

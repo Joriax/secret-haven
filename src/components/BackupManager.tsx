@@ -642,6 +642,17 @@ export function BackupManager() {
         secrets: { total: 0, imported: 0, skipped: 0 },
       };
 
+      // ID mapping for maintaining album/folder relationships
+      const folderIdMap: Record<string, Record<string, string>> = {
+        note_folders: {},
+        link_folders: {},
+        tiktok_folders: {},
+      };
+      const albumIdMap: Record<string, Record<string, string>> = {
+        albums: {},
+        file_albums: {},
+      };
+
       // Import tags
       setImportStatus('Importiere Tags...');
       if (importData.tags?.length > 0) {
@@ -673,7 +684,7 @@ export function BackupManager() {
       }
       setImportProgress(20);
 
-      // Import folders
+      // Import folders with ID mapping for later reference
       setImportStatus('Importiere Ordner...');
       const folderTypes = ['note_folders', 'link_folders', 'tiktok_folders'] as const;
       for (const folderType of folderTypes) {
@@ -682,21 +693,27 @@ export function BackupManager() {
           stats.folders.total += folders.length;
           
           for (const folder of folders) {
-            const { error } = await supabaseClient.from(folderType).insert({
+            const oldId = folder.id;
+            const { data: newFolder, error } = await supabaseClient.from(folderType).insert({
               user_id: userId,
               name: folder.name,
               color: folder.color,
               icon: folder.icon,
-            });
+            }).select('id').single();
             
-            if (!error) stats.folders.imported++;
-            else stats.folders.skipped++;
+            if (!error && newFolder) {
+              stats.folders.imported++;
+              // Store ID mapping for later use
+              folderIdMap[folderType][oldId] = newFolder.id;
+            } else {
+              stats.folders.skipped++;
+            }
           }
         }
       }
       setImportProgress(35);
 
-      // Import albums
+      // Import albums with ID mapping
       setImportStatus('Importiere Alben...');
       const albumTypes = ['albums', 'file_albums'] as const;
       for (const albumType of albumTypes) {
@@ -705,22 +722,28 @@ export function BackupManager() {
           stats.albums.total += albums.length;
           
           for (const album of albums) {
-            const { error } = await supabaseClient.from(albumType).insert({
+            const oldId = album.id;
+            const { data: newAlbum, error } = await supabaseClient.from(albumType).insert({
               user_id: userId,
               name: album.name,
               color: album.color,
               icon: album.icon,
               is_pinned: album.is_pinned,
-            });
+            }).select('id').single();
             
-            if (!error) stats.albums.imported++;
-            else stats.albums.skipped++;
+            if (!error && newAlbum) {
+              stats.albums.imported++;
+              // Store ID mapping for later use
+              albumIdMap[albumType][oldId] = newAlbum.id;
+            } else {
+              stats.albums.skipped++;
+            }
           }
         }
       }
       setImportProgress(50);
 
-      // Import notes
+      // Import notes (with folder mapping)
       setImportStatus('Importiere Notizen...');
       if (importData.notes?.length > 0) {
         stats.notes.total = importData.notes.length;
@@ -731,10 +754,14 @@ export function BackupManager() {
             continue;
           }
           
+          // Map old folder_id to new folder_id
+          const newFolderId = note.folder_id ? folderIdMap['note_folders'][note.folder_id] : null;
+          
           const { error } = await supabaseClient.from('notes').insert({
             user_id: userId,
             title: note.title || 'Importierte Notiz',
             content: note.content,
+            folder_id: newFolderId || null,
             is_favorite: note.is_favorite,
             is_secure: note.is_secure,
             secure_content: note.secure_content,
@@ -747,7 +774,7 @@ export function BackupManager() {
       }
       setImportProgress(65);
 
-      // Import links
+      // Import links (with folder mapping)
       setImportStatus('Importiere Links...');
       if (importData.links?.length > 0) {
         stats.links.total = importData.links.length;
@@ -758,6 +785,9 @@ export function BackupManager() {
             continue;
           }
           
+          // Map old folder_id to new folder_id
+          const newFolderId = link.folder_id ? folderIdMap['link_folders'][link.folder_id] : null;
+          
           const { error } = await supabaseClient.from('links').insert({
             user_id: userId,
             url: link.url,
@@ -765,6 +795,7 @@ export function BackupManager() {
             description: link.description,
             favicon_url: link.favicon_url,
             image_url: link.image_url,
+            folder_id: newFolderId || null,
             is_favorite: link.is_favorite,
             tags: link.tags,
           });
@@ -774,6 +805,69 @@ export function BackupManager() {
         }
       }
       setImportProgress(80);
+
+      // Import TikTok videos (with folder mapping)
+      setImportStatus('Importiere TikTok Videos...');
+      if (importData.tiktok_videos?.length > 0) {
+        for (const tiktok of importData.tiktok_videos) {
+          if (tiktok.deleted_at) continue;
+          
+          // Map old folder_id to new folder_id
+          const newFolderId = tiktok.folder_id ? folderIdMap['tiktok_folders'][tiktok.folder_id] : null;
+          
+          await supabaseClient.from('tiktok_videos').insert({
+            user_id: userId,
+            url: tiktok.url,
+            title: tiktok.title,
+            author_name: tiktok.author_name,
+            thumbnail_url: tiktok.thumbnail_url,
+            video_id: tiktok.video_id,
+            folder_id: newFolderId || null,
+            is_favorite: tiktok.is_favorite,
+          });
+        }
+      }
+
+      // Import photos (with album mapping) - metadata only, files are handled separately
+      if (importData.photos?.length > 0) {
+        for (const photo of importData.photos) {
+          if (photo.deleted_at) continue;
+          
+          // Map old album_id to new album_id
+          const newAlbumId = photo.album_id ? albumIdMap['albums'][photo.album_id] : null;
+          
+          await supabaseClient.from('photos').insert({
+            user_id: userId,
+            filename: photo.filename,
+            caption: photo.caption,
+            taken_at: photo.taken_at,
+            album_id: newAlbumId || null,
+            is_favorite: photo.is_favorite,
+            tags: photo.tags,
+            thumbnail_filename: photo.thumbnail_filename,
+          });
+        }
+      }
+
+      // Import files (with album mapping) - metadata only, files are handled separately
+      if (importData.files?.length > 0) {
+        for (const file of importData.files) {
+          if (file.deleted_at) continue;
+          
+          // Map old album_id to new album_id
+          const newAlbumId = file.album_id ? albumIdMap['file_albums'][file.album_id] : null;
+          
+          await supabaseClient.from('files').insert({
+            user_id: userId,
+            filename: file.filename,
+            mime_type: file.mime_type,
+            size: file.size,
+            album_id: newAlbumId || null,
+            is_favorite: file.is_favorite,
+            tags: file.tags,
+          });
+        }
+      }
 
       // Import secret texts
       setImportStatus('Importiere geheime Texte...');
