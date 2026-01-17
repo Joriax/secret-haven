@@ -29,20 +29,26 @@
 /**
  * Supabase URL - Die URL deiner Supabase-Instanz
  * Für Self-Hosting: http://localhost:54321 oder deine eigene Domain
+ * 
+ * WICHTIG: Bei Self-Hosting diese URL durch deine eigene ersetzen!
  */
-export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://zbniouzrkbkyvkpnpwxa.supabase.co';
 
 /**
  * Supabase Anon/Publishable Key - Der öffentliche API-Schlüssel
  * Für Self-Hosting: Den anon key aus deiner Supabase-Instanz
+ * 
+ * WICHTIG: Bei Self-Hosting diesen Key durch deinen eigenen ersetzen!
  */
-export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
+export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpibmlvdXpya2JreXZrcG5wd3hhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYzMTcyMzYsImV4cCI6MjA4MTg5MzIzNn0.gTU98s049QxA0ZCco4rJYFJG5B00LaRPJbFY_6j1es8';
 
 /**
  * Supabase Projekt-ID - Für Storage-Uploads
  * Für Self-Hosting: Die Projekt-ID aus deiner Supabase-Instanz
+ * 
+ * WICHTIG: Bei Self-Hosting diese ID durch deine eigene ersetzen!
  */
-export const SUPABASE_PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID || '';
+export const SUPABASE_PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID || 'zbniouzrkbkyvkpnpwxa';
 
 // =====================================================
 //  STORAGE KONFIGURATION
