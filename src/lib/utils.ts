@@ -1,6 +1,9 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
+// Re-export formatDuration for convenience
+export { formatDuration } from '@/hooks/useVideoThumbnail';
+
 /**
  * Merge Tailwind classes with clsx
  */
