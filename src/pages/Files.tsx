@@ -50,7 +50,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTags } from '@/hooks/useTags';
 import { useViewHistory } from '@/hooks/useViewHistory';
 import { useFileAlbums, FileAlbum } from '@/hooks/useFileAlbums';
-import { cn } from '@/lib/utils';
+import { cn, formatFileSize } from '@/lib/utils';
 import { useLocation } from 'react-router-dom';
 import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
 import { RenameDialog } from '@/components/RenameDialog';
@@ -69,6 +69,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import { DocumentPreview, isOfficeDocument, isOfficeDocumentByExtension, isTextFile } from '@/components/DocumentPreview';
+import { MAX_FILE_SIZE_BYTES } from '@/config';
 
 interface FileItem {
   id: string;
@@ -86,22 +87,12 @@ type ViewMode = 'grid' | 'list';
 type FilterMode = 'all' | 'images' | 'videos' | 'documents' | 'audio';
 type SortMode = 'date-desc' | 'date-asc' | 'name-asc' | 'name-desc' | 'size-desc' | 'size-asc' | 'favorites';
 
-const MAX_FILE_SIZE = 100 * 1024 * 1024;
-
 const getFileIcon = (mimeType: string) => {
   if (mimeType.startsWith('image/')) return FileImage;
   if (mimeType.startsWith('video/')) return FileVideo;
   if (mimeType.startsWith('audio/')) return FileAudio;
   if (mimeType.includes('text') || mimeType.includes('document') || mimeType.includes('pdf')) return FileText;
   return File;
-};
-
-const formatFileSize = (bytes: number) => {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
 export default function Files() {
@@ -245,9 +236,9 @@ export default function Files() {
   const handleUpload = async (fileList: FileList | null) => {
     if (!fileList || !userId) return;
 
-    const filesToUpload = Array.from(fileList).filter(f => f.size <= MAX_FILE_SIZE);
+    const filesToUpload = Array.from(fileList).filter(f => f.size <= MAX_FILE_SIZE_BYTES);
     if (filesToUpload.length === 0) {
-      toast.error('Dateien sind zu groß (max. 100MB)');
+      toast.error('Dateien sind zu groß (max. 50MB)');
       return;
     }
 

@@ -1,7 +1,8 @@
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import DOMPurify from 'dompurify';
 
 interface MarkdownRendererProps {
   content: string;
@@ -9,15 +10,44 @@ interface MarkdownRendererProps {
   showTitle?: boolean;
 }
 
+/**
+ * Sanitize content to prevent XSS attacks
+ * DOMPurify removes dangerous HTML/JS while preserving safe Markdown
+ */
+const sanitizeContent = (content: string): string => {
+  // Configure DOMPurify to allow safe Markdown elements
+  return DOMPurify.sanitize(content, {
+    ALLOWED_TAGS: [
+      'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'p', 'br', 'hr',
+      'ul', 'ol', 'li',
+      'blockquote', 'pre', 'code',
+      'strong', 'em', 'b', 'i', 'u', 's', 'del',
+      'a', 'img',
+      'table', 'thead', 'tbody', 'tr', 'th', 'td',
+      'span', 'div',
+    ],
+    ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'id', 'target', 'rel'],
+    ALLOW_DATA_ATTR: false,
+    // Force all links to open in new tab with noopener
+    ADD_ATTR: ['target', 'rel'],
+  });
+};
+
 export const MarkdownRenderer = memo(function MarkdownRenderer({
   content,
   title,
   showTitle = true,
 }: MarkdownRendererProps) {
+  // Sanitize content to prevent XSS
+  const sanitizedContent = useMemo(() => {
+    return sanitizeContent(content || '');
+  }, [content]);
+
   return (
     <div className="prose prose-neutral dark:prose-invert max-w-none">
       {showTitle && title && (
-        <h1 className="text-2xl font-bold text-foreground mb-6">{title}</h1>
+        <h1 className="text-2xl font-bold text-foreground mb-6">{DOMPurify.sanitize(title)}</h1>
       )}
       <ReactMarkdown
         components={{
@@ -66,7 +96,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
             if (text.startsWith('[ ] ')) {
               return (
                 <li className="flex items-center gap-2">
-                  <span className="w-4 h-4 border border-muted-foreground rounded" />
+                  <span className="w-4 h-4 border border-muted-foreground rounded" aria-label="Nicht erledigt" />
                   {text.slice(4)}
                 </li>
               );
@@ -74,7 +104,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
             if (text.startsWith('[x] ')) {
               return (
                 <li className="flex items-center gap-2">
-                  <span className="w-4 h-4 bg-primary rounded flex items-center justify-center text-xs text-primary-foreground">✓</span>
+                  <span className="w-4 h-4 bg-primary rounded flex items-center justify-center text-xs text-primary-foreground" aria-label="Erledigt">✓</span>
                   {text.slice(4)}
                 </li>
               );
@@ -82,7 +112,13 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
             return <li>{children}</li>;
           },
           a: ({ href, children }) => (
-            <a href={href} className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">
+            <a 
+              href={href} 
+              className="text-primary hover:underline" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              aria-label={`Link zu ${href}`}
+            >
               {children}
             </a>
           ),
@@ -93,7 +129,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
           ),
         }}
       >
-        {content || '*Keine Inhalte*'}
+        {sanitizedContent || '*Keine Inhalte*'}
       </ReactMarkdown>
     </div>
   );

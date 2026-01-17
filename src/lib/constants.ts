@@ -13,10 +13,21 @@ export {
   SESSION_VALIDITY_HOURS,
   MAX_FILE_SIZE_MB,
   MAX_FILE_SIZE_BYTES,
+  MAX_VIDEO_SIZE_MB,
+  MAX_VIDEO_SIZE_BYTES,
+  RESUMABLE_THRESHOLD_BYTES,
+  PIN_LENGTH,
+  MAX_LOGIN_ATTEMPTS,
+  LOCKOUT_DURATION_MINUTES,
+  LOCKOUT_DURATION_MS,
+  SIGNED_URL_EXPIRY_SECONDS,
   APP_NAME,
   APP_VERSION,
   DEFAULT_LOCALE,
 } from '@/config';
+
+// Re-export utility functions
+export { formatFileSize, formatDisplayDate, truncateText } from '@/lib/utils';
 
 // ==================== Colors ====================
 

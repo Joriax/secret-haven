@@ -29,16 +29,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useDuplicateFinder, ScanMode, DuplicateGroup, DuplicateItem } from '@/hooks/useDuplicateFinder';
-import { cn } from '@/lib/utils';
+import { cn, formatFileSize } from '@/lib/utils';
 import { toast } from 'sonner';
-
-const formatSize = (bytes: number) => {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-};
 
 const VIDEO_EXTENSIONS = /\.(mp4|mov|webm|avi|mkv|m4v|3gp)$/i;
 
@@ -221,7 +213,7 @@ export default function DuplicateFinder() {
               </h2>
               <p className="text-muted-foreground text-sm">
                 {duplicates.length > 0 
-                  ? `${formatSize(totalDuplicateSize)} können freigegeben werden`
+                  ? `${formatFileSize(totalDuplicateSize, 1)} können freigegeben werden`
                   : 'Starte einen Scan um Duplikate zu finden'
                 }
               </p>
@@ -299,7 +291,7 @@ export default function DuplicateFinder() {
               <div className="text-xs text-muted-foreground">Ähnliche</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-primary">{formatSize(totalDuplicateSize)}</div>
+              <div className="text-2xl font-bold text-primary">{formatFileSize(totalDuplicateSize, 1)}</div>
               <div className="text-xs text-muted-foreground">Einsparung</div>
             </div>
           </div>
@@ -422,7 +414,7 @@ export default function DuplicateFinder() {
                       {getMatchTypeBadge(group.matchType)}
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      {group.items.length} Kopien • {formatSize(group.size)} pro Datei
+                      {group.items.length} Kopien • {formatFileSize(group.size, 1)} pro Datei
                     </p>
                   </div>
                 </div>
@@ -497,7 +489,7 @@ export default function DuplicateFinder() {
                       </p>
                       {item.size > 0 && (
                         <p className="text-xs text-white/60">
-                          {formatSize(item.size)}
+                          {formatFileSize(item.size, 1)}
                         </p>
                       )}
                     </div>
@@ -509,7 +501,7 @@ export default function DuplicateFinder() {
               <div className="mt-3 pt-3 border-t border-border flex items-center gap-2 text-sm text-muted-foreground">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>
-                  Mögliche Einsparung: <span className="text-primary font-medium">{formatSize(group.size * (group.items.length - 1))}</span>
+                  Mögliche Einsparung: <span className="text-primary font-medium">{formatFileSize(group.size * (group.items.length - 1), 1)}</span>
                 </span>
               </div>
             </motion.div>

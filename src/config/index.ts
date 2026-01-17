@@ -121,6 +121,12 @@ export const MAX_LOGIN_ATTEMPTS = 5;
 /** Sperrzeit nach zu vielen Versuchen (Minuten) */
 export const LOCKOUT_DURATION_MINUTES = 15;
 
+/** PIN-Länge für Login */
+export const PIN_LENGTH = 6;
+
+/** Lockout-Dauer in Millisekunden */
+export const LOCKOUT_DURATION_MS = LOCKOUT_DURATION_MINUTES * 60 * 1000;
+
 // =====================================================
 //  UPLOAD LIMITS
 // =====================================================
@@ -131,8 +137,17 @@ export const MAX_FILE_SIZE_MB = 50;
 /** Maximale Dateigröße in Bytes */
 export const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
+/** Maximale Video-Dateigröße in MB */
+export const MAX_VIDEO_SIZE_MB = 500;
+
+/** Maximale Video-Dateigröße in Bytes */
+export const MAX_VIDEO_SIZE_BYTES = MAX_VIDEO_SIZE_MB * 1024 * 1024;
+
 /** Chunk-Größe für resumierbare Uploads (MB) */
 export const UPLOAD_CHUNK_SIZE_MB = 6;
+
+/** Schwellenwert für resumierbare Uploads (Bytes) - 45MB */
+export const RESUMABLE_THRESHOLD_BYTES = 45 * 1024 * 1024;
 
 // =====================================================
 //  PAPIERKORB KONFIGURATION
@@ -150,6 +165,9 @@ export const API_TIMEOUT_MS = 30000;
 
 /** Upload Timeout in Millisekunden */
 export const UPLOAD_TIMEOUT_MS = 120000;
+
+/** Signed URL Gültigkeit in Sekunden */
+export const SIGNED_URL_EXPIRY_SECONDS = 3600;
 
 // =====================================================
 //  ENTWICKLER-MODUS
