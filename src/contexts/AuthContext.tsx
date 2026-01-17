@@ -2,9 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode, useCa
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
-
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://zbniouzrkbkyvkpnpwxa.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpibmlvdXpya2JreXZrcG5wd3hhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYzMTcyMzYsImV4cCI6MjA4MTg5MzIzNn0.gTU98s049QxA0ZCco4rJYFJG5B00LaRPJbFY_6j1es8";
+import { SUPABASE_URL, SUPABASE_ANON_KEY, SESSION_VALIDITY_HOURS } from '@/config';
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -76,7 +74,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         if (data?.success && data?.userId) {
           // Session is valid
           const expiry = new Date();
-          expiry.setHours(expiry.getHours() + 24);
+          expiry.setHours(expiry.getHours() + SESSION_VALIDITY_HOURS);
           
           setIsAuthenticated(true);
           setUserId(data.userId);
@@ -107,7 +105,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const login = useCallback((newUserId: string, isDecoy: boolean, newSessionToken: string) => {
     const expiry = new Date();
-    expiry.setHours(expiry.getHours() + 24);
+    expiry.setHours(expiry.getHours() + SESSION_VALIDITY_HOURS);
     
     // Store session token (server-validated) along with user info
     sessionStorage.setItem('vault_user_id', newUserId);
@@ -129,7 +127,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (!userId) return;
     
     const expiry = new Date();
-    expiry.setHours(expiry.getHours() + 24);
+    expiry.setHours(expiry.getHours() + SESSION_VALIDITY_HOURS);
     
     sessionStorage.setItem('vault_session_expiry', expiry.toISOString());
     setSessionExpiresAt(expiry);
@@ -170,7 +168,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Create an authenticated Supabase client with session token in headers
   const supabaseClient = useMemo(() => {
-    return createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+    return createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: {
         headers: sessionToken ? { 'x-session-token': sessionToken } : {}
       },

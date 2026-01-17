@@ -1,7 +1,22 @@
 /**
  * Shared constants used across the application
  * Centralizes magic values for maintainability
+ * 
+ * HINWEIS: Für Self-Hosting relevante Einstellungen
+ * befinden sich in src/config/index.ts
  */
+
+// Re-export config values for convenience
+export { 
+  TRASH_RETENTION_DAYS,
+  AUTO_LOCK_TIMEOUT_MINUTES,
+  SESSION_VALIDITY_HOURS,
+  MAX_FILE_SIZE_MB,
+  MAX_FILE_SIZE_BYTES,
+  APP_NAME,
+  APP_VERSION,
+  DEFAULT_LOCALE,
+} from '@/config';
 
 // ==================== Colors ====================
 
@@ -92,12 +107,12 @@ export const DEBOUNCE_DELAYS = {
 
 // ==================== Dates ====================
 
-/** Locale for date formatting */
-export const DATE_LOCALE = 'de-DE';
+/** Locale for date formatting - uses DEFAULT_LOCALE from config */
+import { DEFAULT_LOCALE } from '@/config';
 
 /** Format date for display */
 export const formatDate = (dateString: string): string => {
-  return new Date(dateString).toLocaleDateString(DATE_LOCALE, {
+  return new Date(dateString).toLocaleDateString(DEFAULT_LOCALE, {
     day: '2-digit',
     month: 'short',
     hour: '2-digit',
@@ -107,7 +122,7 @@ export const formatDate = (dateString: string): string => {
 
 /** Format date without time */
 export const formatDateOnly = (dateString: string): string => {
-  return new Date(dateString).toLocaleDateString(DATE_LOCALE, {
+  return new Date(dateString).toLocaleDateString(DEFAULT_LOCALE, {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
