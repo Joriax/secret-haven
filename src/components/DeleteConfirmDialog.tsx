@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,7 +20,7 @@ interface DeleteConfirmDialogProps {
   isPermanent?: boolean;
 }
 
-export const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({
+export const DeleteConfirmDialog = memo(function DeleteConfirmDialog({
   isOpen,
   onClose,
   onConfirm,
@@ -28,7 +28,7 @@ export const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({
   description,
   itemName,
   isPermanent = false,
-}) => {
+}: DeleteConfirmDialogProps) {
   const defaultDescription = isPermanent
     ? `Möchtest du "${itemName || 'dieses Element'}" wirklich endgültig löschen? Diese Aktion kann nicht rückgängig gemacht werden.`
     : `Möchtest du "${itemName || 'dieses Element'}" wirklich löschen? Das Element wird in den Papierkorb verschoben.`;
@@ -59,4 +59,4 @@ export const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({
       </AlertDialogContent>
     </AlertDialog>
   );
-};
+});

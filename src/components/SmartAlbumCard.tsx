@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { motion } from 'framer-motion';
-import { 
+import {
   Heart, 
   Clock, 
   Calendar, 
@@ -38,7 +38,7 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   Zap,
 };
 
-export function SmartAlbumCard({ album, isSelected, onClick }: SmartAlbumCardProps) {
+export const SmartAlbumCard = memo(function SmartAlbumCard({ album, isSelected, onClick }: SmartAlbumCardProps) {
   const IconComponent = iconMap[album.icon] || Sparkles;
 
   return (
@@ -95,7 +95,7 @@ export function SmartAlbumCard({ album, isSelected, onClick }: SmartAlbumCardPro
       </div>
     </motion.button>
   );
-}
+});
 
 interface SmartAlbumListProps {
   albums: SmartAlbum[];
@@ -104,7 +104,7 @@ interface SmartAlbumListProps {
   compact?: boolean;
 }
 
-export function SmartAlbumList({ albums, selectedId, onSelect, compact }: SmartAlbumListProps) {
+export const SmartAlbumList = memo(function SmartAlbumList({ albums, selectedId, onSelect, compact }: SmartAlbumListProps) {
   if (albums.length === 0) {
     return null;
   }
@@ -168,4 +168,4 @@ export function SmartAlbumList({ albums, selectedId, onSelect, compact }: SmartA
       ))}
     </div>
   );
-}
+});
