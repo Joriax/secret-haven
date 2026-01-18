@@ -98,6 +98,34 @@ export const useTags = () => {
 
   const deleteTag = async (id: string) => {
     try {
+      // First, remove the tag ID from all items that reference it
+      // This prevents stale tag references in photos, files, notes, and links
+      const removeTagFromTable = async (table: 'photos' | 'files' | 'notes' | 'links') => {
+        const { data: items } = await supabase
+          .from(table)
+          .select('id, tags')
+          .contains('tags', [id]);
+        
+        if (items && items.length > 0) {
+          for (const item of items) {
+            const newTags = (item.tags || []).filter((t: string) => t !== id);
+            await supabase
+              .from(table)
+              .update({ tags: newTags })
+              .eq('id', item.id);
+          }
+        }
+      };
+
+      // Clean up tag references from all tables in parallel
+      await Promise.all([
+        removeTagFromTable('photos'),
+        removeTagFromTable('files'),
+        removeTagFromTable('notes'),
+        removeTagFromTable('links'),
+      ]);
+
+      // Now delete the tag itself
       const { error } = await supabase
         .from('tags')
         .delete()
