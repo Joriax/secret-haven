@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Outlet, Navigate } from 'react-router-dom';
+import { Outlet, Navigate, useLocation } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { GlobalSearch } from '../GlobalSearch';
 import { useAuth } from '@/contexts/AuthContext';
@@ -8,6 +8,13 @@ export const MainLayout: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const { isAuthenticated } = useAuth();
+  const location = useLocation();
+
+  // Close sidebar and search when route changes to prevent blur overlay persisting
+  useEffect(() => {
+    setSidebarOpen(false);
+    setSearchOpen(false);
+  }, [location.pathname]);
 
   // Cmd+K shortcut for global search
   useEffect(() => {

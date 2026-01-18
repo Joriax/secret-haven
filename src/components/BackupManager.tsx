@@ -288,26 +288,41 @@ export function BackupManager() {
     setExportStatus('Lade Daten...');
 
     try {
-      // Fetch all metadata
+      // Fetch all metadata with error handling for each table
       setExportStatus('Lade Metadaten...');
+      
+      const fetchWithFallback = async (table: string) => {
+        try {
+          const { data, error } = await supabaseClient.from(table as any).select('*').eq('user_id', userId);
+          if (error) {
+            console.warn(`Warning: Could not fetch ${table}:`, error.message);
+            return [];
+          }
+          return data || [];
+        } catch (e) {
+          console.warn(`Warning: Error fetching ${table}:`, e);
+          return [];
+        }
+      };
+
       const [
-        notesRes, photosRes, filesRes, linksRes,
-        tiktoksRes, secretsRes, tagsRes,
-        albumsRes, fileAlbumsRes, noteFoldersRes,
-        linkFoldersRes, tiktokFoldersRes
+        notes, photos, files, links,
+        tiktok_videos, secret_texts, tags,
+        albums, file_albums, note_folders,
+        link_folders, tiktok_folders
       ] = await Promise.all([
-        supabaseClient.from('notes').select('*').eq('user_id', userId),
-        supabaseClient.from('photos').select('*').eq('user_id', userId),
-        supabaseClient.from('files').select('*').eq('user_id', userId),
-        supabaseClient.from('links').select('*').eq('user_id', userId),
-        supabaseClient.from('tiktok_videos').select('*').eq('user_id', userId),
-        supabaseClient.from('secret_texts').select('*').eq('user_id', userId),
-        supabaseClient.from('tags').select('*').eq('user_id', userId),
-        supabaseClient.from('albums').select('*').eq('user_id', userId),
-        supabaseClient.from('file_albums').select('*').eq('user_id', userId),
-        supabaseClient.from('note_folders').select('*').eq('user_id', userId),
-        supabaseClient.from('link_folders').select('*').eq('user_id', userId),
-        supabaseClient.from('tiktok_folders').select('*').eq('user_id', userId),
+        fetchWithFallback('notes'),
+        fetchWithFallback('photos'),
+        fetchWithFallback('files'),
+        fetchWithFallback('links'),
+        fetchWithFallback('tiktok_videos'),
+        fetchWithFallback('secret_texts'),
+        fetchWithFallback('tags'),
+        fetchWithFallback('albums'),
+        fetchWithFallback('file_albums'),
+        fetchWithFallback('note_folders'),
+        fetchWithFallback('link_folders'),
+        fetchWithFallback('tiktok_folders'),
       ]);
 
       setExportProgress(15);
@@ -316,18 +331,18 @@ export function BackupManager() {
         version: '3.0',
         exported_at: new Date().toISOString(),
         user_id: userId,
-        notes: notesRes.data || [],
-        photos: photosRes.data || [],
-        files: filesRes.data || [],
-        links: linksRes.data || [],
-        tiktok_videos: tiktoksRes.data || [],
-        secret_texts: secretsRes.data || [],
-        tags: tagsRes.data || [],
-        albums: albumsRes.data || [],
-        file_albums: fileAlbumsRes.data || [],
-        note_folders: noteFoldersRes.data || [],
-        link_folders: linkFoldersRes.data || [],
-        tiktok_folders: tiktokFoldersRes.data || [],
+        notes,
+        photos,
+        files,
+        links,
+        tiktok_videos,
+        secret_texts,
+        tags,
+        albums,
+        file_albums,
+        note_folders,
+        link_folders,
+        tiktok_folders,
         media_files: [],
       };
 
@@ -335,9 +350,9 @@ export function BackupManager() {
       const shouldIncludeMedia = isAutoBackup ? backupSettings.include_media : includeMedia;
       
       if (shouldIncludeMedia) {
-        const photos = photosRes.data || [];
-        const files = filesRes.data || [];
-        const totalMedia = photos.length + files.length;
+        const photosForMedia = photos as any[];
+        const filesForMedia = files as any[];
+        const totalMedia = photosForMedia.length + filesForMedia.length;
         
         if (totalMedia > 0) {
           let downloaded = 0;
@@ -365,9 +380,9 @@ export function BackupManager() {
           };
 
           // Download photos
-          for (let i = 0; i < photos.length; i += BATCH_SIZE) {
-            const batch = photos.slice(i, i + BATCH_SIZE);
-            setExportStatus(`Lade Fotos: ${Math.min(i + BATCH_SIZE, photos.length)}/${photos.length}`);
+          for (let i = 0; i < photosForMedia.length; i += BATCH_SIZE) {
+            const batch = photosForMedia.slice(i, i + BATCH_SIZE);
+            setExportStatus(`Lade Fotos: ${Math.min(i + BATCH_SIZE, photosForMedia.length)}/${photosForMedia.length}`);
             
             const results = await Promise.allSettled(
               batch.map(async (photo: any) => {
@@ -390,9 +405,9 @@ export function BackupManager() {
           }
 
           // Download files
-          for (let i = 0; i < files.length; i += BATCH_SIZE) {
-            const batch = files.slice(i, i + BATCH_SIZE);
-            setExportStatus(`Lade Dateien: ${Math.min(i + BATCH_SIZE, files.length)}/${files.length}`);
+          for (let i = 0; i < filesForMedia.length; i += BATCH_SIZE) {
+            const batch = filesForMedia.slice(i, i + BATCH_SIZE);
+            setExportStatus(`Lade Dateien: ${Math.min(i + BATCH_SIZE, filesForMedia.length)}/${filesForMedia.length}`);
             
             const results = await Promise.allSettled(
               batch.map(async (file: any) => {
@@ -534,10 +549,11 @@ export function BackupManager() {
       }
 
       setPassword('');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Export error:', error);
       if (!isAutoBackup) {
-        toast.error('Fehler beim Exportieren');
+        const errorMessage = error?.message || 'Unbekannter Fehler';
+        toast.error(`Export fehlgeschlagen: ${errorMessage}`);
       }
     } finally {
       setIsExporting(false);
@@ -929,7 +945,8 @@ export function BackupManager() {
 
     } catch (error: any) {
       console.error('Import error:', error);
-      toast.error(error.message || 'Fehler beim Importieren');
+      const errorDetails = error?.message || 'Unbekannter Fehler beim Importieren';
+      toast.error(`Import fehlgeschlagen: ${errorDetails}`);
     } finally {
       setIsImporting(false);
       setImportProgress(0);
