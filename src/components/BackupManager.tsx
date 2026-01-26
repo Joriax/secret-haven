@@ -4,31 +4,20 @@ import {
   Download, 
   Upload, 
   Loader2, 
-  FileJson, 
   Archive,
   CheckCircle,
   AlertCircle,
   Eye,
   EyeOff,
   Cloud,
-  CloudOff,
   Trash2,
   RefreshCw,
   Clock,
-  HardDrive,
   Settings2,
-  Play,
   AlertTriangle,
-  XCircle,
   Calendar,
-  Database,
-  Image as ImageIcon,
-  FileText,
-  Link as LinkIcon,
-  Video,
-  Tag,
-  Folder,
-  Shield
+  Shield,
+  Package
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -37,21 +26,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { 
-  encryptBackup, 
-  decryptBackup, 
-  isNewEncryptionFormat, 
-  isOldEncryptionFormat,
-  decryptOldBackup,
-  EncryptedBackup 
-} from '@/lib/encryption';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter,
 } from '@/components/ui/dialog';
 import {
   Select,
@@ -70,28 +50,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  exportPhantomVault,
+  importPhantomVault,
+  type ExportProgress,
+  type ImportProgress,
+  type ImportStats,
+  PHANTOMVAULT_EXTENSION,
+} from '@/lib/phantomvault';
 
-type ExportFormat = 'json' | 'encrypted';
 type ConflictResolution = 'skip' | 'overwrite' | 'duplicate';
-
-interface ExportData {
-  version: string;
-  exported_at: string;
-  user_id: string;
-  notes: any[];
-  photos: any[];
-  files: any[];
-  links: any[];
-  tiktok_videos: any[];
-  secret_texts: any[];
-  tags: any[];
-  albums: any[];
-  file_albums: any[];
-  note_folders: any[];
-  link_folders: any[];
-  tiktok_folders: any[];
-  media_files?: { bucket: string; path: string; data: string }[];
-}
 
 interface BackupVersion {
   id: string;
@@ -112,33 +80,22 @@ interface BackupSettings {
   last_auto_backup: string | null;
 }
 
-interface ImportStats {
-  notes: { total: number; imported: number; skipped: number };
-  links: { total: number; imported: number; skipped: number };
-  tags: { total: number; imported: number; skipped: number };
-  albums: { total: number; imported: number; skipped: number };
-  folders: { total: number; imported: number; skipped: number };
-  secrets: { total: number; imported: number; skipped: number };
-}
-
 export function BackupManager() {
   const { userId, supabaseClient } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Export state
   const [isExporting, setIsExporting] = useState(false);
-  const [exportProgress, setExportProgress] = useState(0);
-  const [exportStatus, setExportStatus] = useState('');
-  const [format, setFormat] = useState<ExportFormat>('json');
+  const [exportProgress, setExportProgress] = useState<ExportProgress>({ phase: 'init', percent: 0, message: '' });
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [includeMedia, setIncludeMedia] = useState(false);
   const [saveToCloud, setSaveToCloud] = useState(true);
+  const [useEncryption, setUseEncryption] = useState(false);
   
   // Import state
   const [isImporting, setIsImporting] = useState(false);
-  const [importProgress, setImportProgress] = useState(0);
-  const [importStatus, setImportStatus] = useState('');
+  const [importProgress, setImportProgress] = useState<ImportProgress>({ phase: 'init', percent: 0, message: '' });
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   const [importPassword, setImportPassword] = useState('');
   const [showImportPassword, setShowImportPassword] = useState(false);
@@ -205,10 +162,10 @@ export function BackupManager() {
     fetchBackupData();
   }, [fetchBackupData]);
 
-  // Check if auto-backup is needed
+  // Auto-backup check
   useEffect(() => {
     const checkAutoBackup = async () => {
-      if (!userId || !backupSettings.auto_backup_enabled) return;
+      if (!userId || !backupSettings.auto_backup_enabled || isExporting) return;
       
       const lastBackup = backupSettings.last_auto_backup 
         ? new Date(backupSettings.last_auto_backup) 
@@ -224,29 +181,22 @@ export function BackupManager() {
         const diffDays = diffMs / (1000 * 60 * 60 * 24);
         
         switch (backupSettings.backup_frequency) {
-          case 'daily':
-            shouldBackup = diffDays >= 1;
-            break;
-          case 'weekly':
-            shouldBackup = diffDays >= 7;
-            break;
-          case 'monthly':
-            shouldBackup = diffDays >= 30;
-            break;
+          case 'daily': shouldBackup = diffDays >= 1; break;
+          case 'weekly': shouldBackup = diffDays >= 7; break;
+          case 'monthly': shouldBackup = diffDays >= 30; break;
         }
       }
       
-      if (shouldBackup && !isExporting) {
+      if (shouldBackup) {
         console.log('Auto-backup triggered');
         await handleExport(true);
       }
     };
     
-    // Check on mount and every 5 minutes
     checkAutoBackup();
     const interval = setInterval(checkAutoBackup, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [userId, backupSettings.auto_backup_enabled, backupSettings.backup_frequency, backupSettings.last_auto_backup]);
+  }, [userId, backupSettings.auto_backup_enabled, backupSettings.backup_frequency, backupSettings.last_auto_backup, isExporting]);
 
   // Update backup settings
   const updateBackupSettings = async (updates: Partial<BackupSettings>) => {
@@ -256,7 +206,7 @@ export function BackupManager() {
     setBackupSettings(newSettings);
     
     try {
-      const { error } = await supabaseClient
+      await supabaseClient
         .from('backup_settings')
         .upsert({
           user_id: userId,
@@ -267,7 +217,6 @@ export function BackupManager() {
           updated_at: new Date().toISOString(),
         }, { onConflict: 'user_id' });
       
-      if (error) throw error;
       toast.success('Einstellungen gespeichert');
     } catch (error) {
       console.error('Error updating backup settings:', error);
@@ -278,288 +227,40 @@ export function BackupManager() {
   // Export handler
   const handleExport = async (isAutoBackup = false) => {
     if (!userId) return;
-    if (format === 'encrypted' && !password && !isAutoBackup) {
+    if (useEncryption && !password && !isAutoBackup) {
       toast.error('Bitte gib ein Passwort ein');
       return;
     }
 
     setIsExporting(true);
-    setExportProgress(0);
-    setExportStatus('Lade Daten...');
 
-    try {
-      // Fetch all metadata with error handling for each table
-      setExportStatus('Lade Metadaten...');
-      
-      const fetchWithFallback = async (table: string) => {
-        try {
-          const { data, error } = await supabaseClient.from(table as any).select('*').eq('user_id', userId);
-          if (error) {
-            console.warn(`Warning: Could not fetch ${table}:`, error.message);
-            return [];
-          }
-          return data || [];
-        } catch (e) {
-          console.warn(`Warning: Error fetching ${table}:`, e);
-          return [];
-        }
-      };
+    const result = await exportPhantomVault(
+      supabaseClient,
+      userId,
+      {
+        includeMedia: isAutoBackup ? backupSettings.include_media : includeMedia,
+        password: useEncryption && !isAutoBackup ? password : undefined,
+        saveToCloud: isAutoBackup || saveToCloud,
+        isAutoBackup,
+      },
+      (progress) => setExportProgress(progress)
+    );
 
-      const [
-        notes, photos, files, links,
-        tiktok_videos, secret_texts, tags,
-        albums, file_albums, note_folders,
-        link_folders, tiktok_folders
-      ] = await Promise.all([
-        fetchWithFallback('notes'),
-        fetchWithFallback('photos'),
-        fetchWithFallback('files'),
-        fetchWithFallback('links'),
-        fetchWithFallback('tiktok_videos'),
-        fetchWithFallback('secret_texts'),
-        fetchWithFallback('tags'),
-        fetchWithFallback('albums'),
-        fetchWithFallback('file_albums'),
-        fetchWithFallback('note_folders'),
-        fetchWithFallback('link_folders'),
-        fetchWithFallback('tiktok_folders'),
-      ]);
-
-      setExportProgress(15);
-
-      const exportData: ExportData = {
-        version: '3.0',
-        exported_at: new Date().toISOString(),
-        user_id: userId,
-        notes,
-        photos,
-        files,
-        links,
-        tiktok_videos,
-        secret_texts,
-        tags,
-        albums,
-        file_albums,
-        note_folders,
-        link_folders,
-        tiktok_folders,
-        media_files: [],
-      };
-
-      // Include media if requested
-      const shouldIncludeMedia = isAutoBackup ? backupSettings.include_media : includeMedia;
-      
-      if (shouldIncludeMedia) {
-        const photosForMedia = photos as any[];
-        const filesForMedia = files as any[];
-        const totalMedia = photosForMedia.length + filesForMedia.length;
-        
-        if (totalMedia > 0) {
-          let downloaded = 0;
-          let failed = 0;
-          const BATCH_SIZE = 5;
-          const TIMEOUT_MS = 20000;
-          
-          const downloadWithTimeout = async (bucket: string, path: string): Promise<string | null> => {
-            try {
-              const { data, error } = await supabaseClient.storage
-                .from(bucket)
-                .download(path);
-              
-              if (error || !data) return null;
-              
-              return new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result as string);
-                reader.onerror = () => resolve(null);
-                reader.readAsDataURL(data);
-              });
-            } catch {
-              return null;
-            }
-          };
-
-          // Download photos
-          for (let i = 0; i < photosForMedia.length; i += BATCH_SIZE) {
-            const batch = photosForMedia.slice(i, i + BATCH_SIZE);
-            setExportStatus(`Lade Fotos: ${Math.min(i + BATCH_SIZE, photosForMedia.length)}/${photosForMedia.length}`);
-            
-            const results = await Promise.allSettled(
-              batch.map(async (photo: any) => {
-                const data = await downloadWithTimeout('photos', `${userId}/${photo.filename}`);
-                if (data) return { bucket: 'photos', path: `${userId}/${photo.filename}`, data };
-                return null;
-              })
-            );
-            
-            results.forEach(r => {
-              if (r.status === 'fulfilled' && r.value) {
-                exportData.media_files!.push(r.value);
-                downloaded++;
-              } else {
-                failed++;
-              }
-            });
-            
-            setExportProgress(15 + Math.round((downloaded / totalMedia) * 40));
-          }
-
-          // Download files
-          for (let i = 0; i < filesForMedia.length; i += BATCH_SIZE) {
-            const batch = filesForMedia.slice(i, i + BATCH_SIZE);
-            setExportStatus(`Lade Dateien: ${Math.min(i + BATCH_SIZE, filesForMedia.length)}/${filesForMedia.length}`);
-            
-            const results = await Promise.allSettled(
-              batch.map(async (file: any) => {
-                const data = await downloadWithTimeout('files', `${userId}/${file.filename}`);
-                if (data) return { bucket: 'files', path: `${userId}/${file.filename}`, data };
-                return null;
-              })
-            );
-            
-            results.forEach(r => {
-              if (r.status === 'fulfilled' && r.value) {
-                exportData.media_files!.push(r.value);
-                downloaded++;
-              } else {
-                failed++;
-              }
-            });
-            
-            setExportProgress(15 + Math.round((downloaded / totalMedia) * 40));
-          }
-          
-          if (failed > 0) {
-            toast.warning(`${failed} Medien konnten nicht heruntergeladen werden`);
-          }
-        }
-      }
-
-      setExportProgress(60);
-      setExportStatus('Erstelle Backup-Datei...');
-
-      // Create export file
-      let fileContent: string;
-      let filename: string;
-      let mimeType: string;
-
-      const usePassword = !isAutoBackup && format === 'encrypted' && password;
-      
-      if (usePassword) {
-        const jsonStr = JSON.stringify(exportData);
-        const encryptedData = await encryptBackup(jsonStr, password);
-        fileContent = JSON.stringify(encryptedData);
-        filename = `vault-backup-${new Date().toISOString().split('T')[0]}.vault`;
-        mimeType = 'application/octet-stream';
-      } else {
-        fileContent = JSON.stringify(exportData, null, 2);
-        filename = `vault-backup-${new Date().toISOString().split('T')[0]}${isAutoBackup ? '-auto' : ''}.json`;
-        mimeType = 'application/json';
-      }
-
-      setExportProgress(75);
-
-      // Save to cloud if enabled
-      const shouldSaveToCloud = isAutoBackup || saveToCloud;
-      
-      if (shouldSaveToCloud) {
-        setExportStatus('Speichere in Cloud...');
-        const storagePath = `${userId}/${filename}`;
-        const blob = new Blob([fileContent], { type: mimeType });
-        
-        const { error: uploadError } = await supabaseClient.storage
-          .from('backups')
-          .upload(storagePath, blob, { upsert: true });
-        
-        if (uploadError) {
-          console.error('Cloud upload error:', uploadError);
-          if (!isAutoBackup) {
-            toast.error('Cloud-Upload fehlgeschlagen');
-          }
-        } else {
-          // Save version record
-          const itemCounts = {
-            notes: exportData.notes.length,
-            photos: exportData.photos.length,
-            files: exportData.files.length,
-            links: exportData.links.length,
-            tiktoks: exportData.tiktok_videos.length,
-            secrets: exportData.secret_texts.length,
-            tags: exportData.tags.length,
-          };
-          
-          await supabaseClient.from('backup_versions').insert({
-            user_id: userId,
-            filename,
-            storage_path: storagePath,
-            size_bytes: blob.size,
-            item_counts: itemCounts,
-            includes_media: shouldIncludeMedia,
-            is_auto_backup: isAutoBackup,
-          });
-          
-          // Update last auto backup time
-          if (isAutoBackup) {
-            await supabaseClient
-              .from('backup_settings')
-              .upsert({
-                user_id: userId,
-                last_auto_backup: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-              }, { onConflict: 'user_id' });
-          }
-          
-          // Clean up old versions
-          await cleanupOldVersions();
-          
-          await fetchBackupData();
-          
-          if (!isAutoBackup) {
-            toast.success('Backup in Cloud gespeichert');
-          }
-        }
-      }
-
-      setExportProgress(90);
-
-      // Trigger download for manual backups
+    if (result.success) {
       if (!isAutoBackup) {
-        setExportStatus('Starte Download...');
-        const blob = new Blob([fileContent], { type: mimeType });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        toast.success('Backup erstellt!');
       }
-
-      setExportProgress(100);
-      setExportStatus('Fertig!');
-
-      const totalItems = exportData.notes.length + exportData.photos.length + 
-                        exportData.files.length + exportData.links.length;
-      
+      await fetchBackupData();
+      await cleanupOldVersions();
+    } else {
       if (!isAutoBackup) {
-        toast.success(`Backup erstellt: ${totalItems} Elemente`);
-      } else {
-        console.log(`Auto-backup completed: ${totalItems} items`);
+        toast.error(result.error || 'Export fehlgeschlagen');
       }
-
-      setPassword('');
-    } catch (error: any) {
-      console.error('Export error:', error);
-      if (!isAutoBackup) {
-        const errorMessage = error?.message || 'Unbekannter Fehler';
-        toast.error(`Export fehlgeschlagen: ${errorMessage}`);
-      }
-    } finally {
-      setIsExporting(false);
-      setExportProgress(0);
-      setExportStatus('');
     }
+
+    setIsExporting(false);
+    setPassword('');
+    setExportProgress({ phase: 'init', percent: 0, message: '' });
   };
 
   // Cleanup old backup versions
@@ -587,13 +288,25 @@ export function BackupManager() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.name.endsWith('.vault')) {
-      setPendingFile(file);
-      setShowPasswordDialog(true);
-    } else if (file.name.endsWith('.json')) {
+    const isPhantomVault = file.name.endsWith(PHANTOMVAULT_EXTENSION);
+    const isEncryptedVault = file.name.endsWith('.vault');
+    const isJson = file.name.endsWith('.json');
+
+    if (isPhantomVault || isEncryptedVault) {
+      // Check if file might be encrypted by trying to read first bytes
+      const firstBytes = await file.slice(0, 10).text();
+      const looksLikeJson = firstBytes.startsWith('{');
+      
+      if (looksLikeJson || isEncryptedVault) {
+        setPendingFile(file);
+        setShowPasswordDialog(true);
+      } else {
+        await processImport(file);
+      }
+    } else if (isJson) {
       await processImport(file);
     } else {
-      toast.error('Ungültiges Format. Nur .json oder .vault');
+      toast.error(`Ungültiges Format. Unterstützt: ${PHANTOMVAULT_EXTENSION}, .vault, .json`);
     }
 
     if (fileInputRef.current) {
@@ -606,355 +319,39 @@ export function BackupManager() {
     if (!userId) return;
 
     setIsImporting(true);
-    setImportProgress(0);
-    setImportStatus('Lese Datei...');
+    setShowPasswordDialog(false);
 
-    try {
-      const text = await file.text();
-      let importData: ExportData;
+    const result = await importPhantomVault(
+      supabaseClient,
+      userId,
+      file,
+      {
+        conflictResolution,
+        password: encryptionPassword,
+      },
+      (progress) => setImportProgress(progress)
+    );
 
-      if (encryptionPassword) {
-        try {
-          const encrypted = JSON.parse(text);
-          
-          // Try new encryption format first
-          if (isNewEncryptionFormat(encrypted)) {
-            const decrypted = await decryptBackup(encrypted, encryptionPassword);
-            if (!decrypted) {
-              throw new Error('Falsches Passwort');
-            }
-            importData = JSON.parse(decrypted);
-          } 
-          // Fall back to old format for backwards compatibility
-          else if (isOldEncryptionFormat(encrypted)) {
-            const decrypted = decryptOldBackup(encrypted, encryptionPassword);
-            if (!decrypted) {
-              throw new Error('Falsches Passwort');
-            }
-            importData = JSON.parse(decrypted);
-            toast.warning('Dieses Backup verwendet ein veraltetes Verschlüsselungsformat. Bitte erstelle ein neues verschlüsseltes Backup.');
-          } else {
-            throw new Error('Ungültiges verschlüsseltes Format');
-          }
-        } catch (err: any) {
-          throw new Error(err.message || 'Entschlüsselung fehlgeschlagen');
-        }
-      } else {
-        importData = JSON.parse(text);
-      }
-
-      if (!importData.version || !importData.exported_at) {
-        throw new Error('Ungültiges Backup-Format');
-      }
-
-      setImportProgress(10);
-
-      const stats: ImportStats = {
-        notes: { total: 0, imported: 0, skipped: 0 },
-        links: { total: 0, imported: 0, skipped: 0 },
-        tags: { total: 0, imported: 0, skipped: 0 },
-        albums: { total: 0, imported: 0, skipped: 0 },
-        folders: { total: 0, imported: 0, skipped: 0 },
-        secrets: { total: 0, imported: 0, skipped: 0 },
-      };
-
-      // ID mapping for maintaining album/folder relationships
-      const folderIdMap: Record<string, Record<string, string>> = {
-        note_folders: {},
-        link_folders: {},
-        tiktok_folders: {},
-      };
-      const albumIdMap: Record<string, Record<string, string>> = {
-        albums: {},
-        file_albums: {},
-      };
-
-      // Import tags
-      setImportStatus('Importiere Tags...');
-      if (importData.tags?.length > 0) {
-        stats.tags.total = importData.tags.length;
-        const { data: existingTags } = await supabaseClient
-          .from('tags')
-          .select('name')
-          .eq('user_id', userId);
-        
-        const existingNames = new Set((existingTags || []).map(t => t.name.toLowerCase()));
-        
-        for (const tag of importData.tags) {
-          if (existingNames.has(tag.name.toLowerCase()) && conflictResolution === 'skip') {
-            stats.tags.skipped++;
-            continue;
-          }
-          
-          const { error } = await supabaseClient.from('tags').insert({
-            user_id: userId,
-            name: conflictResolution === 'duplicate' && existingNames.has(tag.name.toLowerCase()) 
-              ? `${tag.name} (Import)` 
-              : tag.name,
-            color: tag.color,
-          });
-          
-          if (!error) stats.tags.imported++;
-          else stats.tags.skipped++;
-        }
-      }
-      setImportProgress(20);
-
-      // Import folders with ID mapping for later reference
-      setImportStatus('Importiere Ordner...');
-      const folderTypes = ['note_folders', 'link_folders', 'tiktok_folders'] as const;
-      for (const folderType of folderTypes) {
-        const folders = (importData as any)[folderType] as any[];
-        if (folders?.length > 0) {
-          stats.folders.total += folders.length;
-          
-          for (const folder of folders) {
-            const oldId = folder.id;
-            const { data: newFolder, error } = await supabaseClient.from(folderType).insert({
-              user_id: userId,
-              name: folder.name,
-              color: folder.color,
-              icon: folder.icon,
-            }).select('id').single();
-            
-            if (!error && newFolder) {
-              stats.folders.imported++;
-              // Store ID mapping for later use
-              folderIdMap[folderType][oldId] = newFolder.id;
-            } else {
-              stats.folders.skipped++;
-            }
-          }
-        }
-      }
-      setImportProgress(35);
-
-      // Import albums with ID mapping
-      setImportStatus('Importiere Alben...');
-      const albumTypes = ['albums', 'file_albums'] as const;
-      for (const albumType of albumTypes) {
-        const albums = (importData as any)[albumType] as any[];
-        if (albums?.length > 0) {
-          stats.albums.total += albums.length;
-          
-          for (const album of albums) {
-            const oldId = album.id;
-            const { data: newAlbum, error } = await supabaseClient.from(albumType).insert({
-              user_id: userId,
-              name: album.name,
-              color: album.color,
-              icon: album.icon,
-              is_pinned: album.is_pinned,
-            }).select('id').single();
-            
-            if (!error && newAlbum) {
-              stats.albums.imported++;
-              // Store ID mapping for later use
-              albumIdMap[albumType][oldId] = newAlbum.id;
-            } else {
-              stats.albums.skipped++;
-            }
-          }
-        }
-      }
-      setImportProgress(50);
-
-      // Import notes (with folder mapping)
-      setImportStatus('Importiere Notizen...');
-      if (importData.notes?.length > 0) {
-        stats.notes.total = importData.notes.length;
-        
-        for (const note of importData.notes) {
-          if (note.deleted_at) {
-            stats.notes.skipped++;
-            continue;
-          }
-          
-          // Map old folder_id to new folder_id
-          const newFolderId = note.folder_id ? folderIdMap['note_folders'][note.folder_id] : null;
-          
-          const { error } = await supabaseClient.from('notes').insert({
-            user_id: userId,
-            title: note.title || 'Importierte Notiz',
-            content: note.content,
-            folder_id: newFolderId || null,
-            is_favorite: note.is_favorite,
-            is_secure: note.is_secure,
-            secure_content: note.secure_content,
-            tags: note.tags,
-          });
-          
-          if (!error) stats.notes.imported++;
-          else stats.notes.skipped++;
-        }
-      }
-      setImportProgress(65);
-
-      // Import links (with folder mapping)
-      setImportStatus('Importiere Links...');
-      if (importData.links?.length > 0) {
-        stats.links.total = importData.links.length;
-        
-        for (const link of importData.links) {
-          if (link.deleted_at) {
-            stats.links.skipped++;
-            continue;
-          }
-          
-          // Map old folder_id to new folder_id
-          const newFolderId = link.folder_id ? folderIdMap['link_folders'][link.folder_id] : null;
-          
-          const { error } = await supabaseClient.from('links').insert({
-            user_id: userId,
-            url: link.url,
-            title: link.title || 'Importierter Link',
-            description: link.description,
-            favicon_url: link.favicon_url,
-            image_url: link.image_url,
-            folder_id: newFolderId || null,
-            is_favorite: link.is_favorite,
-            tags: link.tags,
-          });
-          
-          if (!error) stats.links.imported++;
-          else stats.links.skipped++;
-        }
-      }
-      setImportProgress(80);
-
-      // Import TikTok videos (with folder mapping)
-      setImportStatus('Importiere TikTok Videos...');
-      if (importData.tiktok_videos?.length > 0) {
-        for (const tiktok of importData.tiktok_videos) {
-          if (tiktok.deleted_at) continue;
-          
-          // Map old folder_id to new folder_id
-          const newFolderId = tiktok.folder_id ? folderIdMap['tiktok_folders'][tiktok.folder_id] : null;
-          
-          await supabaseClient.from('tiktok_videos').insert({
-            user_id: userId,
-            url: tiktok.url,
-            title: tiktok.title,
-            author_name: tiktok.author_name,
-            thumbnail_url: tiktok.thumbnail_url,
-            video_id: tiktok.video_id,
-            folder_id: newFolderId || null,
-            is_favorite: tiktok.is_favorite,
-          });
-        }
-      }
-
-      // Import photos (with album mapping) - metadata only, files are handled separately
-      if (importData.photos?.length > 0) {
-        for (const photo of importData.photos) {
-          if (photo.deleted_at) continue;
-          
-          // Map old album_id to new album_id
-          const newAlbumId = photo.album_id ? albumIdMap['albums'][photo.album_id] : null;
-          
-          await supabaseClient.from('photos').insert({
-            user_id: userId,
-            filename: photo.filename,
-            caption: photo.caption,
-            taken_at: photo.taken_at,
-            album_id: newAlbumId || null,
-            is_favorite: photo.is_favorite,
-            tags: photo.tags,
-            thumbnail_filename: photo.thumbnail_filename,
-          });
-        }
-      }
-
-      // Import files (with album mapping) - metadata only, files are handled separately
-      if (importData.files?.length > 0) {
-        for (const file of importData.files) {
-          if (file.deleted_at) continue;
-          
-          // Map old album_id to new album_id
-          const newAlbumId = file.album_id ? albumIdMap['file_albums'][file.album_id] : null;
-          
-          await supabaseClient.from('files').insert({
-            user_id: userId,
-            filename: file.filename,
-            mime_type: file.mime_type,
-            size: file.size,
-            album_id: newAlbumId || null,
-            is_favorite: file.is_favorite,
-            tags: file.tags,
-          });
-        }
-      }
-
-      // Import secret texts
-      setImportStatus('Importiere geheime Texte...');
-      if (importData.secret_texts?.length > 0) {
-        stats.secrets.total = importData.secret_texts.length;
-        
-        for (const secret of importData.secret_texts) {
-          const { error } = await supabaseClient.from('secret_texts').insert({
-            user_id: userId,
-            title: secret.title || 'Importierter Text',
-            encrypted_content: secret.encrypted_content,
-          });
-          
-          if (!error) stats.secrets.imported++;
-          else stats.secrets.skipped++;
-        }
-      }
-      setImportProgress(90);
-
-      // Upload media files if present
-      if (importData.media_files?.length > 0) {
-        setImportStatus('Lade Medien hoch...');
-        let uploaded = 0;
-        const BATCH_SIZE = 3;
-        
-        for (let i = 0; i < importData.media_files.length; i += BATCH_SIZE) {
-          const batch = importData.media_files.slice(i, i + BATCH_SIZE);
-          
-          await Promise.allSettled(
-            batch.map(async (media) => {
-              try {
-                const response = await fetch(media.data);
-                const blob = await response.blob();
-                
-                await supabaseClient.storage
-                  .from(media.bucket)
-                  .upload(media.path, blob, { upsert: true });
-                
-                uploaded++;
-              } catch (err) {
-                console.error('Media upload error:', err);
-              }
-            })
-          );
-          
-          setImportProgress(90 + Math.round((uploaded / importData.media_files.length) * 10));
-        }
-      }
-
-      setImportProgress(100);
-      setImportStats(stats);
+    if (result.success && result.stats) {
+      setImportStats(result.stats);
       setShowStatsDialog(true);
-
-      const totalImported = stats.notes.imported + stats.links.imported + 
-                           stats.tags.imported + stats.albums.imported + 
-                           stats.folders.imported + stats.secrets.imported;
+      
+      const totalImported = 
+        result.stats.notes.imported + 
+        result.stats.links.imported + 
+        result.stats.tags.imported + 
+        result.stats.albums.imported + 
+        result.stats.folders.imported;
       
       toast.success(`Import abgeschlossen: ${totalImported} Elemente`);
-
-    } catch (error: any) {
-      console.error('Import error:', error);
-      const errorDetails = error?.message || 'Unbekannter Fehler beim Importieren';
-      toast.error(`Import fehlgeschlagen: ${errorDetails}`);
-    } finally {
-      setIsImporting(false);
-      setImportProgress(0);
-      setImportStatus('');
-      setShowPasswordDialog(false);
-      setPendingFile(null);
-      setImportPassword('');
+    } else {
+      toast.error(result.error || 'Import fehlgeschlagen');
     }
+
+    setIsImporting(false);
+    setPendingFile(null);
+    setImportPassword('');
+    setImportProgress({ phase: 'init', percent: 0, message: '' });
   };
 
   // Restore from cloud version
@@ -962,7 +359,7 @@ export function BackupManager() {
     if (!userId) return;
     
     setIsImporting(true);
-    setImportStatus('Lade Backup aus Cloud...');
+    setImportProgress({ phase: 'reading', percent: 5, message: 'Lade Backup aus Cloud...' });
     
     try {
       const { data, error } = await supabaseClient.storage
@@ -973,7 +370,7 @@ export function BackupManager() {
         throw new Error('Backup konnte nicht geladen werden');
       }
       
-      const file = new File([data], version.filename, { type: 'application/json' });
+      const file = new File([data], version.filename, { type: 'application/octet-stream' });
       await processImport(file);
     } catch (error: any) {
       console.error('Restore error:', error);
@@ -1004,115 +401,83 @@ export function BackupManager() {
     setVersionToDelete(null);
   };
 
-  const formatSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  const formatBytes = (bytes: number): string => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   };
 
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('de-DE', {
+  const formatDate = (dateStr: string): string => {
+    return new Date(dateStr).toLocaleString('de-DE', {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
     });
   };
 
   return (
-    <div className="glass-card p-6">
-      <div className="flex items-center justify-between mb-6">
+    <>
+      <div className="glass-card p-6 space-y-6">
         <div className="flex items-center gap-3">
-          <Database className="w-5 h-5 text-primary" />
-          <h2 className="text-lg font-semibold text-foreground">Backup & Wiederherstellung</h2>
+          <Package className="w-5 h-5 text-primary" />
+          <h2 className="text-lg font-semibold text-foreground">Backup & Restore</h2>
+          <span className="text-xs px-2 py-0.5 rounded-full bg-primary/20 text-primary">
+            .phantomvault
+          </span>
         </div>
-        
-        {/* Quick Backup Button */}
-        <Button
-          onClick={() => handleExport(false)}
-          disabled={isExporting || isImporting}
-          className="gap-2"
-          size="sm"
-        >
-          {isExporting ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <Play className="w-4 h-4" />
-          )}
-          Backup jetzt erstellen
-        </Button>
-      </div>
 
-      <Tabs defaultValue="backup" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3 bg-muted/50">
-          <TabsTrigger value="backup" className="gap-2">
-            <Download className="w-4 h-4" />
-            <span className="hidden sm:inline">Export</span>
-          </TabsTrigger>
-          <TabsTrigger value="restore" className="gap-2">
-            <Upload className="w-4 h-4" />
-            <span className="hidden sm:inline">Import</span>
-          </TabsTrigger>
-          <TabsTrigger value="cloud" className="gap-2">
-            <Cloud className="w-4 h-4" />
-            <span className="hidden sm:inline">Cloud</span>
-          </TabsTrigger>
-        </TabsList>
+        <Tabs defaultValue="export" className="w-full">
+          <TabsList className="grid w-full grid-cols-3 mb-4">
+            <TabsTrigger value="export">Export</TabsTrigger>
+            <TabsTrigger value="import">Import</TabsTrigger>
+            <TabsTrigger value="cloud">Cloud</TabsTrigger>
+          </TabsList>
 
-        {/* Export Tab */}
-        <TabsContent value="backup" className="space-y-4">
-          {/* Format Selection */}
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              onClick={() => setFormat('json')}
-              className={cn(
-                "flex items-center gap-3 p-4 rounded-xl transition-all border-2",
-                format === 'json'
-                  ? "border-primary bg-primary/10"
-                  : "border-transparent bg-muted/50 hover:bg-muted"
-              )}
-            >
-              <FileJson className={cn("w-5 h-5", format === 'json' ? "text-primary" : "text-muted-foreground")} />
-              <div className="text-left">
-                <p className="font-medium text-foreground text-sm">JSON</p>
-                <p className="text-xs text-muted-foreground">Lesbar</p>
+          {/* Export Tab */}
+          <TabsContent value="export" className="space-y-4">
+            {/* Options */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Archive className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-sm">Medien einschließen</span>
+                </div>
+                <Switch checked={includeMedia} onCheckedChange={setIncludeMedia} />
               </div>
-            </button>
 
-            <button
-              onClick={() => setFormat('encrypted')}
-              className={cn(
-                "flex items-center gap-3 p-4 rounded-xl transition-all border-2",
-                format === 'encrypted'
-                  ? "border-primary bg-primary/10"
-                  : "border-transparent bg-muted/50 hover:bg-muted"
-              )}
-            >
-              <Archive className={cn("w-5 h-5", format === 'encrypted' ? "text-primary" : "text-muted-foreground")} />
-              <div className="text-left">
-                <p className="font-medium text-foreground text-sm">Verschlüsselt</p>
-                <p className="text-xs text-muted-foreground">Mit Passwort</p>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Cloud className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-sm">In Cloud speichern</span>
+                </div>
+                <Switch checked={saveToCloud} onCheckedChange={setSaveToCloud} />
               </div>
-            </button>
-          </div>
 
-          {/* Password Input */}
-          <AnimatePresence>
-            {format === 'encrypted' && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="overflow-hidden"
-              >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-sm">Verschlüsseln</span>
+                </div>
+                <Switch checked={useEncryption} onCheckedChange={setUseEncryption} />
+              </div>
+
+              {useEncryption && (
                 <div className="relative">
                   <input
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Backup-Passwort..."
-                    className="w-full px-4 py-3 pr-10 rounded-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
+                    className={cn(
+                      "w-full px-4 py-2.5 pr-10 rounded-lg",
+                      "bg-muted border border-border",
+                      "text-foreground placeholder:text-muted-foreground text-sm",
+                      "focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
+                    )}
                   />
                   <button
                     type="button"
@@ -1122,158 +487,151 @@ export function BackupManager() {
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Options */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 rounded-xl bg-muted/30">
-              <div className="flex items-center gap-2">
-                <ImageIcon className="w-4 h-4 text-muted-foreground" />
-                <span className="text-sm">Medien einschließen</span>
-              </div>
-              <Switch checked={includeMedia} onCheckedChange={setIncludeMedia} />
-            </div>
-            
-            <div className="flex items-center justify-between p-3 rounded-xl bg-muted/30">
-              <div className="flex items-center gap-2">
-                <Cloud className="w-4 h-4 text-muted-foreground" />
-                <span className="text-sm">In Cloud speichern</span>
-              </div>
-              <Switch checked={saveToCloud} onCheckedChange={setSaveToCloud} />
-            </div>
-          </div>
-
-          {/* Progress */}
-          <AnimatePresence>
-            {isExporting && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="space-y-2"
-              >
-                <div className="flex items-center justify-between text-sm text-muted-foreground">
-                  <span>{exportStatus}</span>
-                  <span>{Math.round(exportProgress)}%</span>
-                </div>
-                <Progress value={exportProgress} className="h-2" />
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Export Button */}
-          <Button
-            onClick={() => handleExport(false)}
-            disabled={isExporting || (format === 'encrypted' && !password)}
-            className="w-full gap-2"
-          >
-            {isExporting ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Download className="w-4 h-4" />
-            )}
-            {isExporting ? exportStatus || 'Exportiere...' : 'Backup erstellen & herunterladen'}
-          </Button>
-        </TabsContent>
-
-        {/* Import Tab */}
-        <TabsContent value="restore" className="space-y-4">
-          {/* Conflict Resolution */}
-          <div>
-            <label className="text-sm text-muted-foreground mb-2 block">Bei Konflikten:</label>
-            <Select value={conflictResolution} onValueChange={(v) => setConflictResolution(v as ConflictResolution)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="skip">Überspringen</SelectItem>
-                <SelectItem value="overwrite">Überschreiben</SelectItem>
-                <SelectItem value="duplicate">Duplizieren</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Progress */}
-          <AnimatePresence>
-            {isImporting && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="space-y-2"
-              >
-                <div className="flex items-center justify-between text-sm text-muted-foreground">
-                  <span>{importStatus}</span>
-                  <span>{Math.round(importProgress)}%</span>
-                </div>
-                <Progress value={importProgress} className="h-2" />
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Import Button */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".json,.vault"
-            onChange={handleFileSelect}
-            className="hidden"
-          />
-          
-          <Button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isImporting}
-            variant="outline"
-            className="w-full gap-2"
-          >
-            {isImporting ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Upload className="w-4 h-4" />
-            )}
-            {isImporting ? importStatus || 'Importiere...' : 'Backup-Datei auswählen'}
-          </Button>
-
-          <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 text-sm">
-            <AlertCircle className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-            <p className="text-muted-foreground">
-              Unterstützt .json und .vault Dateien
-            </p>
-          </div>
-        </TabsContent>
-
-        {/* Cloud Tab */}
-        <TabsContent value="cloud" className="space-y-4">
-          {/* Auto-Backup Settings */}
-          <div className="space-y-4 p-4 rounded-xl bg-muted/30">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-muted-foreground" />
-                <span className="font-medium">Automatische Backups</span>
-              </div>
-              <Switch
-                checked={backupSettings.auto_backup_enabled}
-                onCheckedChange={(v) => updateBackupSettings({ auto_backup_enabled: v })}
-              />
+              )}
             </div>
 
+            {/* Progress */}
             <AnimatePresence>
-              {backupSettings.auto_backup_enabled && (
+              {isExporting && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
-                  className="space-y-3"
+                  className="space-y-2"
                 >
-                  <div>
-                    <label className="text-sm text-muted-foreground mb-1 block">Häufigkeit:</label>
-                    <Select
-                      value={backupSettings.backup_frequency}
-                      onValueChange={(v: 'daily' | 'weekly' | 'monthly') => updateBackupSettings({ backup_frequency: v })}
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">{exportProgress.message}</span>
+                    <span className="text-foreground font-medium">{exportProgress.percent}%</span>
+                  </div>
+                  <Progress value={exportProgress.percent} className="h-2" />
+                  {exportProgress.current !== undefined && exportProgress.total !== undefined && (
+                    <p className="text-xs text-muted-foreground text-center">
+                      {exportProgress.current} / {exportProgress.total}
+                    </p>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Export Button */}
+            <Button
+              onClick={() => handleExport(false)}
+              disabled={isExporting || (useEncryption && !password)}
+              className="w-full"
+            >
+              {isExporting ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4 mr-2" />
+              )}
+              {isExporting ? 'Exportiere...' : 'Backup erstellen'}
+            </Button>
+
+            {/* Info */}
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 text-xs">
+              <AlertCircle className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+              <p className="text-muted-foreground">
+                Erstellt eine {PHANTOMVAULT_EXTENSION}-Datei mit allen Daten. Medien werden als separate Dateien im Archiv gespeichert.
+              </p>
+            </div>
+          </TabsContent>
+
+          {/* Import Tab */}
+          <TabsContent value="import" className="space-y-4">
+            {/* Conflict Resolution */}
+            <div>
+              <label className="text-sm text-muted-foreground mb-2 block">Bei Konflikten:</label>
+              <Select value={conflictResolution} onValueChange={(v) => setConflictResolution(v as ConflictResolution)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="skip">Überspringen</SelectItem>
+                  <SelectItem value="overwrite">Überschreiben</SelectItem>
+                  <SelectItem value="duplicate">Duplizieren</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Progress */}
+            <AnimatePresence>
+              {isImporting && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="space-y-2"
+                >
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">{importProgress.message}</span>
+                    <span className="text-foreground font-medium">{importProgress.percent}%</span>
+                  </div>
+                  <Progress value={importProgress.percent} className="h-2" />
+                  {importProgress.current !== undefined && importProgress.total !== undefined && (
+                    <p className="text-xs text-muted-foreground text-center">
+                      {importProgress.current} / {importProgress.total}
+                    </p>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Import Button */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".phantomvault,.vault,.json"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+            
+            <Button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isImporting}
+              variant="outline"
+              className="w-full"
+            >
+              {isImporting ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Upload className="w-4 h-4 mr-2" />
+              )}
+              {isImporting ? 'Importiere...' : 'Backup wiederherstellen'}
+            </Button>
+
+            {/* Info */}
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 text-xs">
+              <AlertCircle className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+              <p className="text-muted-foreground">
+                Unterstützt {PHANTOMVAULT_EXTENSION}, .vault und .json Dateien. Legacy-Backups werden automatisch konvertiert.
+              </p>
+            </div>
+          </TabsContent>
+
+          {/* Cloud Tab */}
+          <TabsContent value="cloud" className="space-y-4">
+            {/* Auto-Backup Settings */}
+            <div className="space-y-3 p-3 rounded-lg bg-muted/30">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-sm">Auto-Backup</span>
+                </div>
+                <Switch 
+                  checked={backupSettings.auto_backup_enabled} 
+                  onCheckedChange={(v) => updateBackupSettings({ auto_backup_enabled: v })} 
+                />
+              </div>
+
+              {backupSettings.auto_backup_enabled && (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Häufigkeit</span>
+                    <Select 
+                      value={backupSettings.backup_frequency} 
+                      onValueChange={(v) => updateBackupSettings({ backup_frequency: v })}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className="w-32">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -1283,135 +641,114 @@ export function BackupManager() {
                       </SelectContent>
                     </Select>
                   </div>
-                  
+
                   <div className="flex items-center justify-between">
-                    <span className="text-sm">Medien einschließen</span>
-                    <Switch
-                      checked={backupSettings.include_media}
-                      onCheckedChange={(v) => updateBackupSettings({ include_media: v })}
-                    />
+                    <span className="text-sm text-muted-foreground">Max. Versionen</span>
+                    <Select 
+                      value={String(backupSettings.max_versions)} 
+                      onValueChange={(v) => updateBackupSettings({ max_versions: parseInt(v) })}
+                    >
+                      <SelectTrigger className="w-20">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[3, 5, 10, 15, 20].map(n => (
+                          <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
-                  
-                  <div>
-                    <label className="text-sm text-muted-foreground mb-1 block">Max. Versionen: {backupSettings.max_versions}</label>
-                    <input
-                      type="range"
-                      min={1}
-                      max={20}
-                      value={backupSettings.max_versions}
-                      onChange={(e) => updateBackupSettings({ max_versions: parseInt(e.target.value) })}
-                      className="w-full"
-                    />
-                  </div>
-                  
+
                   {backupSettings.last_auto_backup && (
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Calendar className="w-3 h-3" />
                       Letztes Backup: {formatDate(backupSettings.last_auto_backup)}
                     </p>
                   )}
-                </motion.div>
+                </>
               )}
-            </AnimatePresence>
-          </div>
-
-          {/* Backup Versions */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="font-medium text-sm">Cloud-Backups</h3>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={fetchBackupData}
-                disabled={isLoadingVersions}
-                className="gap-2"
-              >
-                <RefreshCw className={cn("w-4 h-4", isLoadingVersions && "animate-spin")} />
-              </Button>
             </div>
 
-            {isLoadingVersions ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            {/* Cloud Versions */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-medium">Cloud-Backups</h3>
+                <Button variant="ghost" size="sm" onClick={fetchBackupData} disabled={isLoadingVersions}>
+                  <RefreshCw className={cn("w-4 h-4", isLoadingVersions && "animate-spin")} />
+                </Button>
               </div>
-            ) : backupVersions.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <CloudOff className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">Keine Cloud-Backups vorhanden</p>
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {backupVersions.map((version) => (
-                  <div
-                    key={version.id}
-                    className="flex items-center justify-between p-3 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors"
-                  >
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <div className={cn(
-                        "w-8 h-8 rounded-lg flex items-center justify-center",
-                        version.is_auto_backup ? "bg-blue-500/20" : "bg-green-500/20"
-                      )}>
-                        {version.is_auto_backup ? (
-                          <Clock className="w-4 h-4 text-blue-500" />
-                        ) : (
-                          <Download className="w-4 h-4 text-green-500" />
-                        )}
-                      </div>
-                      
+
+              {isLoadingVersions ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : backupVersions.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground text-sm">
+                  <Cloud className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p>Keine Cloud-Backups vorhanden</p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                  {backupVersions.map((version) => (
+                    <div 
+                      key={version.id}
+                      className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+                    >
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{version.filename}</p>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <span>{formatDate(version.created_at)}</span>
-                          <span>•</span>
-                          <span>{formatSize(version.size_bytes)}</span>
-                          {version.includes_media && (
-                            <>
-                              <span>•</span>
-                              <ImageIcon className="w-3 h-3" />
-                            </>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium truncate">{version.filename}</p>
+                          {version.is_auto_backup && (
+                            <span className="text-xs px-1.5 py-0.5 rounded bg-primary/20 text-primary">
+                              Auto
+                            </span>
                           )}
                         </div>
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                          <span>{formatDate(version.created_at)}</span>
+                          <span>{formatBytes(version.size_bytes)}</span>
+                          {version.includes_media && <span>+ Medien</span>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button 
+                          variant="ghost" 
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => {
+                            setSelectedVersion(version);
+                            setShowRestoreDialog(true);
+                          }}
+                        >
+                          <RefreshCw className="w-4 h-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          onClick={() => {
+                            setVersionToDelete(version);
+                            setShowDeleteDialog(true);
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
                       </div>
                     </div>
-                    
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => {
-                          setSelectedVersion(version);
-                          setShowRestoreDialog(true);
-                        }}
-                      >
-                        <Upload className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive hover:text-destructive"
-                        onClick={() => {
-                          setVersionToDelete(version);
-                          setShowDeleteDialog(true);
-                        }}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </TabsContent>
-      </Tabs>
+                  ))}
+                </div>
+              )}
+            </div>
+          </TabsContent>
+        </Tabs>
+      </div>
 
-      {/* Password Dialog for encrypted import */}
+      {/* Password Dialog for encrypted imports */}
       <Dialog open={showPasswordDialog} onOpenChange={setShowPasswordDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Passwort eingeben</DialogTitle>
             <DialogDescription>
-              Diese Backup-Datei ist verschlüsselt.
+              Diese Backup-Datei ist verschlüsselt. Bitte gib das Passwort ein.
             </DialogDescription>
           </DialogHeader>
           
@@ -1422,8 +759,17 @@ export function BackupManager() {
                 value={importPassword}
                 onChange={(e) => setImportPassword(e.target.value)}
                 placeholder="Backup-Passwort..."
-                className="w-full px-4 py-3 pr-10 rounded-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
-                onKeyDown={(e) => e.key === 'Enter' && pendingFile && processImport(pendingFile, importPassword)}
+                className={cn(
+                  "w-full px-4 py-3 pr-10 rounded-xl",
+                  "bg-muted border border-border",
+                  "text-foreground placeholder:text-muted-foreground",
+                  "focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                )}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && pendingFile && importPassword) {
+                    processImport(pendingFile, importPassword);
+                  }
+                }}
                 autoFocus
               />
               <button
@@ -1448,7 +794,11 @@ export function BackupManager() {
                 Abbrechen
               </Button>
               <Button
-                onClick={() => pendingFile && processImport(pendingFile, importPassword)}
+                onClick={() => {
+                  if (pendingFile) {
+                    processImport(pendingFile, importPassword);
+                  }
+                }}
                 disabled={!importPassword}
                 className="flex-1"
               >
@@ -1473,10 +823,31 @@ export function BackupManager() {
             <div className="space-y-2 py-4">
               <StatRow label="Notizen" stats={importStats.notes} />
               <StatRow label="Links" stats={importStats.links} />
+              <StatRow label="Fotos" stats={importStats.photos} />
+              <StatRow label="Dateien" stats={importStats.files} />
+              <StatRow label="TikToks" stats={importStats.tiktoks} />
+              <StatRow label="Secrets" stats={importStats.secrets} />
               <StatRow label="Tags" stats={importStats.tags} />
               <StatRow label="Alben" stats={importStats.albums} />
               <StatRow label="Ordner" stats={importStats.folders} />
-              <StatRow label="Geheime Texte" stats={importStats.secrets} />
+              {importStats.media.total > 0 && (
+                <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                  <span className="text-foreground font-medium">Medien</span>
+                  <div className="flex items-center gap-3 text-sm">
+                    <span className="text-green-500 flex items-center gap-1">
+                      <CheckCircle className="w-3 h-3" />
+                      {importStats.media.uploaded}
+                    </span>
+                    {importStats.media.failed > 0 && (
+                      <span className="text-destructive flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3" />
+                        {importStats.media.failed}
+                      </span>
+                    )}
+                    <span className="text-muted-foreground">/ {importStats.media.total}</span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
           
@@ -1492,8 +863,13 @@ export function BackupManager() {
           <AlertDialogHeader>
             <AlertDialogTitle>Backup wiederherstellen?</AlertDialogTitle>
             <AlertDialogDescription>
-              Dieses Backup vom {selectedVersion && formatDate(selectedVersion.created_at)} wird importiert. 
-              Bestehende Daten können überschrieben werden.
+              {selectedVersion && (
+                <>
+                  Möchtest du das Backup "{selectedVersion.filename}" wiederherstellen?
+                  <br /><br />
+                  <strong>Hinweis:</strong> Vorhandene Daten werden je nach Konflikt-Einstellung übersprungen oder überschrieben.
+                </>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1511,18 +887,25 @@ export function BackupManager() {
           <AlertDialogHeader>
             <AlertDialogTitle>Backup löschen?</AlertDialogTitle>
             <AlertDialogDescription>
-              Das Backup "{versionToDelete?.filename}" wird dauerhaft gelöscht.
+              {versionToDelete && (
+                <>
+                  Möchtest du das Backup "{versionToDelete.filename}" unwiderruflich löschen?
+                </>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteVersion} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogAction 
+              onClick={handleDeleteVersion}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
               Löschen
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </>
   );
 }
 
