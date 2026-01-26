@@ -13,6 +13,7 @@ import { PWAUpdatePrompt } from "@/components/PWAUpdatePrompt";
 import { PanicButton } from "@/components/PanicButton";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { LoadingFallback } from "@/components/LoadingFallback";
+import { RouteUIReset } from "@/components/RouteUIReset";
 
 // Eagerly loaded pages (critical path)
 import Index from "./pages/Index";
@@ -68,6 +69,7 @@ const App = () => (
               <PWAInstallPrompt />
               <PWAUpdatePrompt />
               <BrowserRouter>
+                <RouteUIReset />
                 <Suspense fallback={<LoadingFallback />}>
                   <Routes>
                     <Route path="/" element={<Index />} />
