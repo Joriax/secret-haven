@@ -52,6 +52,7 @@
     "dexie-react-hooks": "^4.2.0",
     "dompurify": "^3.3.1",
     "embla-carousel-react": "^8.6.0",
+    "fflate": "^0.8.2",
     "framer-motion": "^12.23.26",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.462.0",
