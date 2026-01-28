@@ -1,7 +1,10 @@
 /**
- * PhantomVault Import Module
+ * PhantomVault Import Module - Optimized for Performance
  * 
- * Imports data from .phantomvault ZIP format with chunked media handling
+ * Imports data from .phantomvault ZIP format with:
+ * - Bulk database inserts
+ * - Parallel media uploads
+ * - Memory-efficient streaming
  */
 
 import { unzipSync, strFromU8 } from 'fflate';
@@ -13,15 +16,19 @@ import type {
   ImportStats,
   IdMappings
 } from './types';
-import { parseManifest, validateManifest } from './manifest';
+import { 
+  MEDIA_UPLOAD_BATCH_SIZE, 
+  DB_INSERT_BATCH_SIZE,
+  batchItems,
+  yieldToMain
+} from './types';
+import { parseManifest } from './manifest';
 import { 
   decryptBackup, 
   isNewEncryptionFormat, 
   isOldEncryptionFormat, 
   decryptOldBackup 
 } from '@/lib/encryption';
-
-const MEDIA_UPLOAD_BATCH_SIZE = 3;
 
 export type ProgressCallback = (progress: ImportProgress) => void;
 
@@ -44,15 +51,10 @@ function createInitialStats(): ImportStats {
 }
 
 /**
- * Read and parse file content
+ * Read file content efficiently
  */
 async function readFileContent(file: File): Promise<ArrayBuffer> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as ArrayBuffer);
-    reader.onerror = () => reject(new Error('Datei konnte nicht gelesen werden'));
-    reader.readAsArrayBuffer(file);
-  });
+  return file.arrayBuffer();
 }
 
 /**
@@ -74,8 +76,7 @@ function extractManifest(unzipped: Record<string, Uint8Array>): PhantomVaultMani
  */
 async function importLegacyFormat(
   text: string,
-  password: string | undefined,
-  onProgress: ProgressCallback
+  password: string | undefined
 ): Promise<{ data: any; isLegacy: true }> {
   let importData: any;
 
@@ -105,7 +106,63 @@ async function importLegacyFormat(
 }
 
 /**
- * Import tags
+ * Bulk insert helper with conflict handling
+ */
+async function bulkInsert(
+  supabase: SupabaseClient,
+  table: string,
+  items: any[],
+  userId: string,
+  prepareItem: (item: any) => any
+): Promise<{ imported: number; skipped: number; idMappings: Record<string, string> }> {
+  const idMappings: Record<string, string> = {};
+  let imported = 0;
+  let skipped = 0;
+  
+  if (!items?.length) return { imported, skipped, idMappings };
+  
+  const batches = batchItems(items, DB_INSERT_BATCH_SIZE);
+  
+  for (const batch of batches) {
+    const preparedItems = batch
+      .filter(item => !item.deleted_at)
+      .map(item => {
+        const oldId = item.id;
+        const prepared = prepareItem(item);
+        return { oldId, prepared };
+      });
+    
+    if (preparedItems.length === 0) {
+      skipped += batch.length;
+      continue;
+    }
+    
+    const { data, error } = await supabase
+      .from(table)
+      .insert(preparedItems.map(p => p.prepared))
+      .select('id');
+    
+    if (error) {
+      console.warn(`Bulk insert to ${table} failed:`, error.message);
+      skipped += batch.length;
+    } else if (data) {
+      data.forEach((newItem, idx) => {
+        if (preparedItems[idx]) {
+          idMappings[preparedItems[idx].oldId] = newItem.id;
+        }
+      });
+      imported += data.length;
+      skipped += batch.length - preparedItems.length;
+    }
+    
+    await yieldToMain();
+  }
+  
+  return { imported, skipped, idMappings };
+}
+
+/**
+ * Import tags with bulk insert
  */
 async function importTags(
   supabase: SupabaseClient,
@@ -125,29 +182,31 @@ async function importTags(
   
   const existingNames = new Set((existingTags || []).map(t => t.name.toLowerCase()));
   
-  for (const tag of tags) {
-    if (existingNames.has(tag.name.toLowerCase()) && options.conflictResolution === 'skip') {
-      stats.tags.skipped++;
-      continue;
-    }
-    
-    const name = options.conflictResolution === 'duplicate' && existingNames.has(tag.name.toLowerCase())
-      ? `${tag.name} (Import)`
-      : tag.name;
-    
-    const { error } = await supabase.from('tags').insert({
+  const tagsToInsert = tags
+    .filter(tag => {
+      if (existingNames.has(tag.name.toLowerCase()) && options.conflictResolution === 'skip') {
+        stats.tags.skipped++;
+        return false;
+      }
+      return true;
+    })
+    .map(tag => ({
       user_id: userId,
-      name,
+      name: options.conflictResolution === 'duplicate' && existingNames.has(tag.name.toLowerCase())
+        ? `${tag.name} (Import)`
+        : tag.name,
       color: tag.color,
-    });
-    
-    if (!error) stats.tags.imported++;
-    else stats.tags.skipped++;
+    }));
+  
+  if (tagsToInsert.length > 0) {
+    const { data, error } = await supabase.from('tags').insert(tagsToInsert).select('id');
+    if (data) stats.tags.imported = data.length;
+    if (error) stats.tags.skipped += tagsToInsert.length;
   }
 }
 
 /**
- * Import folders with ID mapping
+ * Import folders with bulk insert
  */
 async function importFolders(
   supabase: SupabaseClient,
@@ -156,35 +215,39 @@ async function importFolders(
   stats: ImportStats,
   idMappings: IdMappings
 ): Promise<void> {
-  const folderTypes = ['note_folders', 'link_folders', 'tiktok_folders'] as const;
+  const folderTypes = [
+    { key: 'note_folders', table: 'note_folders' },
+    { key: 'link_folders', table: 'link_folders' },
+    { key: 'tiktok_folders', table: 'tiktok_folders' },
+  ] as const;
   
-  for (const folderType of folderTypes) {
-    const folders = data[folderType] as any[];
+  for (const { key, table } of folderTypes) {
+    const folders = data[key] as any[];
     if (!folders?.length) continue;
     
     stats.folders.total += folders.length;
     
-    for (const folder of folders) {
-      const oldId = folder.id;
-      const { data: newFolder, error } = await supabase.from(folderType).insert({
+    const result = await bulkInsert(
+      supabase,
+      table,
+      folders,
+      userId,
+      (folder) => ({
         user_id: userId,
         name: folder.name,
         color: folder.color,
         icon: folder.icon,
-      }).select('id').single();
-      
-      if (!error && newFolder) {
-        stats.folders.imported++;
-        idMappings[folderType][oldId] = newFolder.id;
-      } else {
-        stats.folders.skipped++;
-      }
-    }
+      })
+    );
+    
+    stats.folders.imported += result.imported;
+    stats.folders.skipped += result.skipped;
+    Object.assign(idMappings[key], result.idMappings);
   }
 }
 
 /**
- * Import albums with ID mapping
+ * Import albums with bulk insert
  */
 async function importAlbums(
   supabase: SupabaseClient,
@@ -193,36 +256,39 @@ async function importAlbums(
   stats: ImportStats,
   idMappings: IdMappings
 ): Promise<void> {
-  const albumTypes = ['albums', 'file_albums'] as const;
+  const albumTypes = [
+    { key: 'albums', table: 'albums' },
+    { key: 'file_albums', table: 'file_albums' },
+  ] as const;
   
-  for (const albumType of albumTypes) {
-    const albums = data[albumType] as any[];
+  for (const { key, table } of albumTypes) {
+    const albums = data[key] as any[];
     if (!albums?.length) continue;
     
     stats.albums.total += albums.length;
     
-    for (const album of albums) {
-      const oldId = album.id;
-      const { data: newAlbum, error } = await supabase.from(albumType).insert({
+    const result = await bulkInsert(
+      supabase,
+      table,
+      albums,
+      userId,
+      (album) => ({
         user_id: userId,
         name: album.name,
         color: album.color,
         icon: album.icon,
         is_pinned: album.is_pinned,
-      }).select('id').single();
-      
-      if (!error && newAlbum) {
-        stats.albums.imported++;
-        idMappings[albumType][oldId] = newAlbum.id;
-      } else {
-        stats.albums.skipped++;
-      }
-    }
+      })
+    );
+    
+    stats.albums.imported += result.imported;
+    stats.albums.skipped += result.skipped;
+    Object.assign(idMappings[key], result.idMappings);
   }
 }
 
 /**
- * Import notes with folder mapping
+ * Import notes with folder mapping and bulk insert
  */
 async function importNotes(
   supabase: SupabaseClient,
@@ -235,32 +301,29 @@ async function importNotes(
   
   stats.notes.total = notes.length;
   
-  for (const note of notes) {
-    if (note.deleted_at) {
-      stats.notes.skipped++;
-      continue;
-    }
-    
-    const newFolderId = note.folder_id ? idMappings.note_folders[note.folder_id] : null;
-    
-    const { error } = await supabase.from('notes').insert({
+  const result = await bulkInsert(
+    supabase,
+    'notes',
+    notes,
+    userId,
+    (note) => ({
       user_id: userId,
       title: note.title || 'Importierte Notiz',
       content: note.content,
-      folder_id: newFolderId || null,
+      folder_id: note.folder_id ? idMappings.note_folders[note.folder_id] || null : null,
       is_favorite: note.is_favorite,
       is_secure: note.is_secure,
       secure_content: note.secure_content,
       tags: note.tags,
-    });
-    
-    if (!error) stats.notes.imported++;
-    else stats.notes.skipped++;
-  }
+    })
+  );
+  
+  stats.notes.imported = result.imported;
+  stats.notes.skipped = result.skipped;
 }
 
 /**
- * Import links with folder mapping
+ * Import links with folder mapping and bulk insert
  */
 async function importLinks(
   supabase: SupabaseClient,
@@ -273,33 +336,30 @@ async function importLinks(
   
   stats.links.total = links.length;
   
-  for (const link of links) {
-    if (link.deleted_at) {
-      stats.links.skipped++;
-      continue;
-    }
-    
-    const newFolderId = link.folder_id ? idMappings.link_folders[link.folder_id] : null;
-    
-    const { error } = await supabase.from('links').insert({
+  const result = await bulkInsert(
+    supabase,
+    'links',
+    links,
+    userId,
+    (link) => ({
       user_id: userId,
       url: link.url,
       title: link.title || 'Importierter Link',
       description: link.description,
       favicon_url: link.favicon_url,
       image_url: link.image_url,
-      folder_id: newFolderId || null,
+      folder_id: link.folder_id ? idMappings.link_folders[link.folder_id] || null : null,
       is_favorite: link.is_favorite,
       tags: link.tags,
-    });
-    
-    if (!error) stats.links.imported++;
-    else stats.links.skipped++;
-  }
+    })
+  );
+  
+  stats.links.imported = result.imported;
+  stats.links.skipped = result.skipped;
 }
 
 /**
- * Import TikTok videos with folder mapping
+ * Import TikTok videos with bulk insert
  */
 async function importTikToks(
   supabase: SupabaseClient,
@@ -312,32 +372,29 @@ async function importTikToks(
   
   stats.tiktoks.total = videos.length;
   
-  for (const video of videos) {
-    if (video.deleted_at) {
-      stats.tiktoks.skipped++;
-      continue;
-    }
-    
-    const newFolderId = video.folder_id ? idMappings.tiktok_folders[video.folder_id] : null;
-    
-    const { error } = await supabase.from('tiktok_videos').insert({
+  const result = await bulkInsert(
+    supabase,
+    'tiktok_videos',
+    videos,
+    userId,
+    (video) => ({
       user_id: userId,
       url: video.url,
       title: video.title,
       author_name: video.author_name,
       thumbnail_url: video.thumbnail_url,
       video_id: video.video_id,
-      folder_id: newFolderId || null,
+      folder_id: video.folder_id ? idMappings.tiktok_folders[video.folder_id] || null : null,
       is_favorite: video.is_favorite,
-    });
-    
-    if (!error) stats.tiktoks.imported++;
-    else stats.tiktoks.skipped++;
-  }
+    })
+  );
+  
+  stats.tiktoks.imported = result.imported;
+  stats.tiktoks.skipped = result.skipped;
 }
 
 /**
- * Import photos metadata with album mapping
+ * Import photos metadata with bulk insert
  */
 async function importPhotos(
   supabase: SupabaseClient,
@@ -350,37 +407,30 @@ async function importPhotos(
   
   stats.photos.total = photos.length;
   
-  for (const photo of photos) {
-    if (photo.deleted_at) {
-      stats.photos.skipped++;
-      continue;
-    }
-    
-    const newAlbumId = photo.album_id ? idMappings.albums[photo.album_id] : null;
-    const oldId = photo.id;
-    
-    const { data: newPhoto, error } = await supabase.from('photos').insert({
+  const result = await bulkInsert(
+    supabase,
+    'photos',
+    photos,
+    userId,
+    (photo) => ({
       user_id: userId,
       filename: photo.filename,
       caption: photo.caption,
       taken_at: photo.taken_at,
-      album_id: newAlbumId || null,
+      album_id: photo.album_id ? idMappings.albums[photo.album_id] || null : null,
       is_favorite: photo.is_favorite,
       tags: photo.tags,
       thumbnail_filename: photo.thumbnail_filename,
-    }).select('id').single();
-    
-    if (!error && newPhoto) {
-      stats.photos.imported++;
-      idMappings.photos[oldId] = newPhoto.id;
-    } else {
-      stats.photos.skipped++;
-    }
-  }
+    })
+  );
+  
+  stats.photos.imported = result.imported;
+  stats.photos.skipped = result.skipped;
+  Object.assign(idMappings.photos, result.idMappings);
 }
 
 /**
- * Import files metadata with album mapping
+ * Import files metadata with bulk insert
  */
 async function importFiles(
   supabase: SupabaseClient,
@@ -393,36 +443,29 @@ async function importFiles(
   
   stats.files.total = files.length;
   
-  for (const file of files) {
-    if (file.deleted_at) {
-      stats.files.skipped++;
-      continue;
-    }
-    
-    const newAlbumId = file.album_id ? idMappings.file_albums[file.album_id] : null;
-    const oldId = file.id;
-    
-    const { data: newFile, error } = await supabase.from('files').insert({
+  const result = await bulkInsert(
+    supabase,
+    'files',
+    files,
+    userId,
+    (file) => ({
       user_id: userId,
       filename: file.filename,
       mime_type: file.mime_type,
       size: file.size,
-      album_id: newAlbumId || null,
+      album_id: file.album_id ? idMappings.file_albums[file.album_id] || null : null,
       is_favorite: file.is_favorite,
       tags: file.tags,
-    }).select('id').single();
-    
-    if (!error && newFile) {
-      stats.files.imported++;
-      idMappings.files[oldId] = newFile.id;
-    } else {
-      stats.files.skipped++;
-    }
-  }
+    })
+  );
+  
+  stats.files.imported = result.imported;
+  stats.files.skipped = result.skipped;
+  Object.assign(idMappings.files, result.idMappings);
 }
 
 /**
- * Import secret texts
+ * Import secret texts with bulk insert
  */
 async function importSecrets(
   supabase: SupabaseClient,
@@ -434,20 +477,20 @@ async function importSecrets(
   
   stats.secrets.total = secrets.length;
   
-  for (const secret of secrets) {
-    const { error } = await supabase.from('secret_texts').insert({
-      user_id: userId,
-      title: secret.title || 'Importierter Text',
-      encrypted_content: secret.encrypted_content,
-    });
-    
-    if (!error) stats.secrets.imported++;
-    else stats.secrets.skipped++;
-  }
+  const toInsert = secrets.map(secret => ({
+    user_id: userId,
+    title: secret.title || 'Importierter Text',
+    encrypted_content: secret.encrypted_content,
+  }));
+  
+  const { data, error } = await supabase.from('secret_texts').insert(toInsert).select('id');
+  
+  if (data) stats.secrets.imported = data.length;
+  if (error) stats.secrets.skipped = secrets.length;
 }
 
 /**
- * Upload media files from ZIP
+ * Upload media files with optimized parallel batching
  */
 async function uploadMediaFiles(
   supabase: SupabaseClient,
@@ -462,12 +505,12 @@ async function uploadMediaFiles(
   stats.media.total = manifest.media.length;
   let processed = 0;
   
-  for (let i = 0; i < manifest.media.length; i += MEDIA_UPLOAD_BATCH_SIZE) {
-    const batch = manifest.media.slice(i, i + MEDIA_UPLOAD_BATCH_SIZE);
-    
+  const batches = batchItems(manifest.media, MEDIA_UPLOAD_BATCH_SIZE);
+  
+  for (const batch of batches) {
     onProgress({
       phase: 'media',
-      percent: 80 + Math.round((processed / manifest.media.length) * 18),
+      percent: 75 + Math.round((processed / manifest.media.length) * 23),
       message: `Lade Medien hoch: ${processed}/${manifest.media.length}`,
       current: processed,
       total: manifest.media.length,
@@ -482,7 +525,7 @@ async function uploadMediaFiles(
         }
         
         try {
-          const blob = new Blob([new Uint8Array(fileData)]);
+          const blob = new Blob([new Uint8Array(fileData).buffer]);
           const storagePath = `${userId}/${entry.filename}`;
           
           const { error } = await supabase.storage
@@ -490,19 +533,18 @@ async function uploadMediaFiles(
             .upload(storagePath, blob, { upsert: true });
           
           if (error) {
-            console.warn(`Failed to upload ${entry.path_in_zip}:`, error.message);
             stats.media.failed++;
           } else {
             stats.media.uploaded++;
           }
-        } catch (e) {
-          console.warn(`Error uploading ${entry.path_in_zip}:`, e);
+        } catch {
           stats.media.failed++;
         }
       })
     );
     
     processed += batch.length;
+    await yieldToMain();
   }
 }
 
@@ -521,12 +563,12 @@ async function uploadLegacyMedia(
   stats.media.total = mediaFiles.length;
   let uploaded = 0;
   
-  for (let i = 0; i < mediaFiles.length; i += MEDIA_UPLOAD_BATCH_SIZE) {
-    const batch = mediaFiles.slice(i, i + MEDIA_UPLOAD_BATCH_SIZE);
-    
+  const batches = batchItems(mediaFiles, MEDIA_UPLOAD_BATCH_SIZE);
+  
+  for (const batch of batches) {
     onProgress({
       phase: 'media',
-      percent: 80 + Math.round((uploaded / mediaFiles.length) * 18),
+      percent: 75 + Math.round((uploaded / mediaFiles.length) * 23),
       message: `Lade Medien hoch: ${uploaded}/${mediaFiles.length}`,
       current: uploaded,
       total: mediaFiles.length,
@@ -548,17 +590,19 @@ async function uploadLegacyMedia(
             stats.media.uploaded++;
           }
           uploaded++;
-        } catch (e) {
+        } catch {
           stats.media.failed++;
           uploaded++;
         }
       })
     );
+    
+    await yieldToMain();
   }
 }
 
 /**
- * Main import function
+ * Main import function - optimized for large datasets
  */
 export async function importPhantomVault(
   supabase: SupabaseClient,
@@ -612,7 +656,7 @@ export async function importPhantomVault(
         
         // Check if it's an encrypted PhantomVault
         if (isNewEncryptionFormat(parsed) && options.password) {
-          onProgress({ phase: 'reading', percent: 10, message: 'Entschlüssele Backup...' });
+          onProgress({ phase: 'reading', percent: 10, message: 'Entschlüssele...' });
           const decrypted = await decryptBackup(parsed, options.password);
           if (!decrypted) throw new Error('Falsches Passwort');
           
@@ -631,7 +675,7 @@ export async function importPhantomVault(
           }
         } else {
           // Legacy format
-          const legacy = await importLegacyFormat(text, options.password, onProgress);
+          const legacy = await importLegacyFormat(text, options.password);
           legacyData = legacy.data;
         }
       } catch (e: any) {
@@ -648,32 +692,32 @@ export async function importPhantomVault(
       throw new Error('Keine Daten im Backup gefunden');
     }
 
-    // Import database data
+    // Import database data with bulk inserts
     onProgress({ phase: 'database', percent: 20, message: 'Importiere Tags...' });
     await importTags(supabase, userId, data.tags, options, stats);
 
-    onProgress({ phase: 'database', percent: 30, message: 'Importiere Ordner...' });
+    onProgress({ phase: 'database', percent: 28, message: 'Importiere Ordner...' });
     await importFolders(supabase, userId, data, stats, idMappings);
 
-    onProgress({ phase: 'database', percent: 40, message: 'Importiere Alben...' });
+    onProgress({ phase: 'database', percent: 36, message: 'Importiere Alben...' });
     await importAlbums(supabase, userId, data, stats, idMappings);
 
-    onProgress({ phase: 'database', percent: 50, message: 'Importiere Notizen...' });
+    onProgress({ phase: 'database', percent: 44, message: 'Importiere Notizen...' });
     await importNotes(supabase, userId, data.notes, stats, idMappings);
 
-    onProgress({ phase: 'database', percent: 55, message: 'Importiere Links...' });
+    onProgress({ phase: 'database', percent: 52, message: 'Importiere Links...' });
     await importLinks(supabase, userId, data.links, stats, idMappings);
 
-    onProgress({ phase: 'database', percent: 60, message: 'Importiere TikToks...' });
+    onProgress({ phase: 'database', percent: 58, message: 'Importiere TikToks...' });
     await importTikToks(supabase, userId, data.tiktok_videos, stats, idMappings);
 
-    onProgress({ phase: 'database', percent: 65, message: 'Importiere Fotos-Metadaten...' });
+    onProgress({ phase: 'database', percent: 64, message: 'Importiere Fotos...' });
     await importPhotos(supabase, userId, data.photos, stats, idMappings);
 
-    onProgress({ phase: 'database', percent: 70, message: 'Importiere Dateien-Metadaten...' });
+    onProgress({ phase: 'database', percent: 70, message: 'Importiere Dateien...' });
     await importFiles(supabase, userId, data.files, stats, idMappings);
 
-    onProgress({ phase: 'database', percent: 75, message: 'Importiere geheime Texte...' });
+    onProgress({ phase: 'database', percent: 74, message: 'Importiere Secrets...' });
     await importSecrets(supabase, userId, data.secret_texts, stats);
 
     // Upload media files

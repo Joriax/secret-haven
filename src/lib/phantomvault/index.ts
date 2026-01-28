@@ -1,11 +1,12 @@
 /**
- * PhantomVault Backup System
+ * PhantomVault Backup System v1.1
  * 
  * A robust ZIP-based backup format for Vault data with:
  * - manifest.json for metadata and table data
- * - Separate media files (chunked) to prevent memory issues
+ * - Separate media files with parallel chunked processing
  * - AES-256-GCM encryption support
- * - Progress tracking for large backups
+ * - Bulk database operations for performance
+ * - Progress tracking with UI yielding
  */
 
 export * from './types';
