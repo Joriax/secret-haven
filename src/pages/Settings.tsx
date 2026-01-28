@@ -31,6 +31,7 @@ import { useBiometric } from '@/hooks/useBiometric';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { ThemeCustomizer } from '@/components/ThemeCustomizer';
+import { FullThemeCustomizer } from '@/components/FullThemeCustomizer';
 import { BackupManager } from '@/components/BackupManager';
 import { ImportBackup } from '@/components/ImportBackup';
 import { DeleteAccountDialog } from '@/components/DeleteAccountDialog';
@@ -731,7 +732,9 @@ export default function Settings() {
       </div>
 
       {/* Theme Customizer */}
-      <ThemeCustomizer />
+      <div className="glass-card p-6">
+        <FullThemeCustomizer />
+      </div>
 
       {/* Backup Manager */}
       <BackupManager />
