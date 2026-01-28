@@ -219,6 +219,8 @@ export default function Photos() {
   const [sortMode, setSortMode] = useState<SortMode>('date-desc');
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [isSlideshow, setIsSlideshow] = useState(false);
+  const [isRandomSlideshow, setIsRandomSlideshow] = useState(false);
+  const [shuffledMediaOrder, setShuffledMediaOrder] = useState<number[]>([]);
   const [slideshowInterval, setSlideshowInterval] = useState(3000);
   const slideshowTimerRef = useRef<NodeJS.Timeout | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
@@ -1330,22 +1332,38 @@ export default function Photos() {
   const [slideshowVideoPlaying, setSlideshowVideoPlaying] = useState(false);
 
   // Slideshow functions
-  const startSlideshow = async () => {
+  const startSlideshow = async (random: boolean = false) => {
     if (filteredMedia.length === 0) return;
     
-    if (lightboxIndex === null) {
-      setLightboxIndex(0);
+    setIsRandomSlideshow(random);
+    
+    if (random) {
+      // Create shuffled order using Fisher-Yates algorithm
+      const indices = Array.from({ length: filteredMedia.length }, (_, i) => i);
+      for (let i = indices.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [indices[i], indices[j]] = [indices[j], indices[i]];
+      }
+      setShuffledMediaOrder(indices);
+      setLightboxIndex(indices[0]);
+    } else {
+      setShuffledMediaOrder([]);
+      if (lightboxIndex === null) {
+        setLightboxIndex(0);
+      }
     }
     
     // Request wake lock to prevent screen from sleeping
     await requestWakeLock();
     
     setIsSlideshow(true);
-    toast.success('Slideshow gestartet');
+    toast.success(random ? 'Zufällige Slideshow gestartet' : 'Slideshow gestartet');
   };
 
   const stopSlideshow = async () => {
     setIsSlideshow(false);
+    setIsRandomSlideshow(false);
+    setShuffledMediaOrder([]);
     setSlideshowVideoPlaying(false);
     if (slideshowTimerRef.current) {
       clearTimeout(slideshowTimerRef.current);
@@ -1355,15 +1373,25 @@ export default function Photos() {
     await releaseWakeLock();
   };
 
+  // Get next slideshow index based on mode
+  const getNextSlideshowIndex = useCallback((currentIndex: number) => {
+    if (isRandomSlideshow && shuffledMediaOrder.length > 0) {
+      const currentShuffledPosition = shuffledMediaOrder.indexOf(currentIndex);
+      const nextPosition = (currentShuffledPosition + 1) % shuffledMediaOrder.length;
+      return shuffledMediaOrder[nextPosition];
+    }
+    return (currentIndex + 1) % filteredMedia.length;
+  }, [isRandomSlideshow, shuffledMediaOrder, filteredMedia.length]);
+
   // Handle video ended in slideshow - move to next
   const handleSlideshowVideoEnded = useCallback(() => {
     if (isSlideshow && lightboxIndex !== null) {
       setSlideshowVideoPlaying(false);
-      // Move to next item
-      const nextIndex = (lightboxIndex + 1) % filteredMedia.length;
+      // Move to next item using the appropriate order
+      const nextIndex = getNextSlideshowIndex(lightboxIndex);
       setLightboxIndex(nextIndex);
     }
-  }, [isSlideshow, lightboxIndex, filteredMedia.length]);
+  }, [isSlideshow, lightboxIndex, getNextSlideshowIndex]);
 
   // Slideshow timer - now handles both photos and videos
   useEffect(() => {
@@ -1381,7 +1409,7 @@ export default function Photos() {
     // For photos, use the interval timer
     setSlideshowVideoPlaying(false);
     slideshowTimerRef.current = setTimeout(() => {
-      const nextIndex = (lightboxIndex + 1) % filteredMedia.length;
+      const nextIndex = getNextSlideshowIndex(lightboxIndex);
       setLightboxIndex(nextIndex);
     }, slideshowInterval);
 
@@ -1390,7 +1418,7 @@ export default function Photos() {
         clearTimeout(slideshowTimerRef.current);
       }
     };
-  }, [isSlideshow, lightboxIndex, slideshowInterval, filteredMedia]);
+  }, [isSlideshow, lightboxIndex, slideshowInterval, filteredMedia, getNextSlideshowIndex]);
 
   // Cleanup slideshow and wake lock on unmount
   useEffect(() => {
@@ -1485,15 +1513,26 @@ export default function Photos() {
               </button>
             )}
 
-            {/* Slideshow button */}
-            {viewMode !== 'albums' && filteredMedia.filter(m => m.type === 'photo').length > 0 && (
-              <button
-                onClick={startSlideshow}
-                className="flex items-center justify-center gap-2 h-9 px-3 rounded-lg border border-border hover:bg-muted transition-all text-sm font-medium"
-              >
-                <PlayCircle className="w-4 h-4" />
-                <span className="hidden sm:inline">Slideshow</span>
-              </button>
+            {/* Slideshow dropdown */}
+            {viewMode !== 'albums' && filteredMedia.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="flex items-center justify-center gap-2 h-9 px-3 rounded-lg border border-border hover:bg-muted transition-all text-sm font-medium">
+                    <PlayCircle className="w-4 h-4" />
+                    <span className="hidden sm:inline">Slideshow</span>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" side="bottom" className="w-48 z-50">
+                  <DropdownMenuItem onClick={() => startSlideshow(false)}>
+                    <PlayCircle className="w-4 h-4 mr-2" />
+                    Normal starten
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => startSlideshow(true)}>
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    Zufällig starten
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
 
             {/* Sort dropdown - show when viewing media (not album-only view at root) */}
