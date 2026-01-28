@@ -73,21 +73,22 @@ export function useOfflineSync() {
       for (const item of pendingItems) {
         try {
           const tableName = item.table as 'notes' | 'photos' | 'files' | 'albums';
+          const data = item.data as any;
           switch (item.operation) {
             case 'INSERT':
-              await supabase.from(tableName).insert([item.data]);
+              await supabase.from(tableName).insert(data);
               break;
             case 'UPDATE':
               await supabase
                 .from(tableName)
-                .update(item.data)
-                .eq('id', item.data.id);
+                .update(data)
+                .eq('id', data.id);
               break;
             case 'DELETE':
               await supabase
                 .from(tableName)
                 .delete()
-                .eq('id', item.data.id);
+                .eq('id', data.id);
               break;
           }
           
