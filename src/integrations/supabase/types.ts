@@ -943,6 +943,45 @@ export type Database = {
         }
         Relationships: []
       }
+      temp_shares: {
+        Row: {
+          click_count: number
+          created_at: string
+          expires_at: string
+          id: string
+          item_id: string
+          item_type: string
+          max_clicks: number | null
+          password_hash: string | null
+          token: string
+          user_id: string
+        }
+        Insert: {
+          click_count?: number
+          created_at?: string
+          expires_at: string
+          id?: string
+          item_id: string
+          item_type: string
+          max_clicks?: number | null
+          password_hash?: string | null
+          token?: string
+          user_id: string
+        }
+        Update: {
+          click_count?: number
+          created_at?: string
+          expires_at?: string
+          id?: string
+          item_id?: string
+          item_type?: string
+          max_clicks?: number | null
+          password_hash?: string | null
+          token?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       tiktok_folders: {
         Row: {
           color: string | null

@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.verify-shared-album]
 verify_jwt = false
+
+[functions.access-shared]
+verify_jwt = false

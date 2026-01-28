@@ -39,6 +39,7 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 const SharedAlbum = lazy(() => import("./pages/SharedAlbum"));
 const SharedAlbums = lazy(() => import("./pages/SharedAlbums"));
 const SharedAlbumView = lazy(() => import("./pages/SharedAlbumView"));
+const SharedItemView = lazy(() => import("./pages/SharedItemView"));
 const BreakTracker = lazy(() => import("./pages/BreakTracker"));
 const DuplicateFinder = lazy(() => import("./pages/DuplicateFinder"));
 const StorageAnalysis = lazy(() => import("./pages/StorageAnalysis"));
@@ -194,6 +195,11 @@ const App = () => (
                     <Route path="/shared/:token" element={
                       <ErrorBoundary>
                         <SharedAlbum />
+                      </ErrorBoundary>
+                    } />
+                    <Route path="/share/:token" element={
+                      <ErrorBoundary>
+                        <SharedItemView />
                       </ErrorBoundary>
                     } />
                     <Route path="*" element={<NotFound />} />

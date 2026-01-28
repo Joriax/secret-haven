@@ -1,7 +1,14 @@
 import React, { memo, useRef, useCallback, useState, useEffect } from 'react';
-import { Play, Heart, CheckSquare, Square, Tag, Folder, Share2, Download, Trash2 } from 'lucide-react';
+import { Play, Heart, CheckSquare, Square, Tag, Folder, Share2, Download, Trash2, MoreVertical, Clock, QrCode, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDuration } from '@/hooks/useVideoThumbnail';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface TagData {
   id: string;
@@ -25,11 +32,13 @@ interface LazyMediaItemProps {
   onDelete: (item: any) => void;
   onDragStart: (e: React.DragEvent, item: any) => void;
   onDragEnd: () => void;
+  onTempShare?: (item: any) => void;
+  onRename?: (item: any) => void;
 }
 
 /**
  * Lazy-loaded media item component using Intersection Observer
- * Optimized for large photo grids
+ * Optimized for large photo grids with 3-dot dropdown menu
  */
 export const LazyMediaItem = memo(function LazyMediaItem({
   item,
@@ -47,9 +56,12 @@ export const LazyMediaItem = memo(function LazyMediaItem({
   onDelete,
   onDragStart,
   onDragEnd,
+  onTempShare,
+  onRename,
 }: LazyMediaItemProps) {
   const [isInView, setIsInView] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   const elementRef = useRef<HTMLDivElement>(null);
 
   // Intersection Observer for lazy loading
@@ -89,6 +101,18 @@ export const LazyMediaItem = memo(function LazyMediaItem({
     setIsLoaded(true);
   }, []);
 
+  // Handle touch for mobile - show menu on tap
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    // Don't trigger if multi-select mode
+    if (isMultiSelectMode) return;
+    
+    // Only show menu if it was a quick tap (not a scroll)
+    const touch = e.changedTouches[0];
+    if (touch) {
+      // Let the dropdown handle opening
+    }
+  }, [isMultiSelectMode]);
+
   return (
     <div
       ref={elementRef}
@@ -102,7 +126,7 @@ export const LazyMediaItem = memo(function LazyMediaItem({
     >
       <div
         onClick={handleClick}
-        className="glass-card-hover overflow-hidden cursor-pointer w-full h-full"
+        className="glass-card-hover overflow-hidden cursor-pointer w-full h-full rounded-xl"
       >
         {/* Multi-select checkbox */}
         {isMultiSelectMode && (
@@ -124,7 +148,7 @@ export const LazyMediaItem = memo(function LazyMediaItem({
 
         {/* Skeleton loader while not in view or loading */}
         {(!isInView || !isLoaded) && (
-          <div className="absolute inset-0 bg-muted animate-pulse" />
+          <div className="absolute inset-0 bg-muted animate-pulse rounded-xl" />
         )}
 
         {isInView && (
@@ -190,73 +214,161 @@ export const LazyMediaItem = memo(function LazyMediaItem({
 
         {/* Favorite indicator */}
         {item.is_favorite && (
-          <div className="absolute top-2 right-2">
-            <Heart className="w-5 h-5 text-red-500 fill-red-500" />
+          <div className="absolute top-2 right-10">
+            <Heart className="w-5 h-5 text-red-500 fill-red-500 drop-shadow-md" />
           </div>
         )}
 
         {/* Tags indicator */}
         {item.tags && item.tags.length > 0 && !isMultiSelectMode && (
           <div className="absolute top-2 left-2 flex gap-1">
-            {item.tags.slice(0, 2).map(tagId => {
+            {item.tags.slice(0, 2).map((tagId: string) => {
               const tag = tags.find(t => t.id === tagId);
               return tag ? (
-                <span key={tagId} className="w-3 h-3 rounded-full" style={{ backgroundColor: tag.color }} />
+                <span key={tagId} className="w-3 h-3 rounded-full shadow-sm" style={{ backgroundColor: tag.color }} />
               ) : null;
             })}
           </div>
         )}
 
-        {/* Hover overlay with actions */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-          <div className="absolute bottom-0 left-0 right-0 p-2">
-            <p className="text-white text-xs truncate mb-2">
-              {item.caption || item.filename.replace(/^\d+-/, '')}
-            </p>
-            {!isMultiSelectMode && (
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={(e) => { e.stopPropagation(); onToggleFavorite(item); }}
-                  className="p-1.5 hover:bg-white/20 rounded-lg transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center"
+        {/* 3-dot menu button - visible on hover (desktop) or always visible on mobile */}
+        {!isMultiSelectMode && (
+          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 sm:opacity-0 transition-opacity z-20">
+            <DropdownMenu open={showMenu} onOpenChange={setShowMenu}>
+              <DropdownMenuTrigger asChild>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); setShowMenu(true); }}
+                  className="p-1.5 rounded-lg bg-black/60 hover:bg-black/80 backdrop-blur-sm transition-colors"
                 >
-                  <Heart className={cn("w-4 h-4", item.is_favorite ? "text-red-500 fill-red-500" : "text-white")} />
+                  <MoreVertical className="w-4 h-4 text-white" />
                 </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); onShowTagSelector(item.id); }}
-                  className="p-1.5 hover:bg-white/20 rounded-lg transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center"
+              </DropdownMenuTrigger>
+              <DropdownMenuContent 
+                align="end" 
+                className="w-52 bg-card border-border"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <DropdownMenuItem onClick={() => { onToggleFavorite(item); setShowMenu(false); }}>
+                  <Heart className={cn("w-4 h-4 mr-2", item.is_favorite && "text-red-500 fill-red-500")} />
+                  {item.is_favorite ? 'Von Favoriten entfernen' : 'Zu Favoriten'}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => { onShowTagSelector(item.id); setShowMenu(false); }}>
+                  <Tag className="w-4 h-4 mr-2" />
+                  Tags bearbeiten
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => { onShowAlbumPicker(item); setShowMenu(false); }}>
+                  <Folder className="w-4 h-4 mr-2" />
+                  In Album verschieben
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => { onShareToAlbum(item); setShowMenu(false); }}>
+                  <Share2 className="w-4 h-4 mr-2" />
+                  Zu geteiltem Album
+                </DropdownMenuItem>
+                {onTempShare && (
+                  <DropdownMenuItem onClick={() => { onTempShare(item); setShowMenu(false); }}>
+                    <Clock className="w-4 h-4 mr-2" />
+                    Temporär teilen
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                {onRename && (
+                  <DropdownMenuItem onClick={() => { onRename(item); setShowMenu(false); }}>
+                    <Pencil className="w-4 h-4 mr-2" />
+                    Umbenennen
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem onClick={() => { onDownload(item); setShowMenu(false); }}>
+                  <Download className="w-4 h-4 mr-2" />
+                  Herunterladen
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem 
+                  onClick={() => { onDelete(item); setShowMenu(false); }}
+                  className="text-destructive focus:text-destructive"
                 >
-                  <Tag className="w-4 h-4 text-white" />
-                </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); onShowAlbumPicker(item); }}
-                  className="p-1.5 hover:bg-white/20 rounded-lg transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center"
-                >
-                  <Folder className="w-4 h-4 text-white" />
-                </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); onShareToAlbum(item); }}
-                  className="p-1.5 hover:bg-white/20 rounded-lg transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center"
-                  title="Zu geteiltem Album hinzufügen"
-                >
-                  <Share2 className="w-4 h-4 text-white" />
-                </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); onDownload(item); }}
-                  className="p-1.5 hover:bg-white/20 rounded-lg transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center"
-                >
-                  <Download className="w-4 h-4 text-white" />
-                </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); onDelete(item); }}
-                  className="p-1.5 hover:bg-red-500/30 rounded-lg transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center"
-                >
-                  <Trash2 className="w-4 h-4 text-red-400" />
-                </button>
-              </div>
-            )}
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Löschen
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
+        )}
+
+        {/* Caption overlay on hover */}
+        <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+          <p className="text-white text-xs truncate">
+            {item.caption || item.filename.replace(/^\d+-/, '')}
+          </p>
         </div>
       </div>
+
+      {/* Mobile tap area for menu - shown on first tap */}
+      {!isMultiSelectMode && (
+        <div 
+          className="absolute top-2 right-2 sm:hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button 
+                className="p-2 rounded-lg bg-black/50 backdrop-blur-sm"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <MoreVertical className="w-4 h-4 text-white" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent 
+              align="end" 
+              className="w-52 bg-card border-border"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <DropdownMenuItem onClick={() => onToggleFavorite(item)}>
+                <Heart className={cn("w-4 h-4 mr-2", item.is_favorite && "text-red-500 fill-red-500")} />
+                {item.is_favorite ? 'Von Favoriten entfernen' : 'Zu Favoriten'}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onShowTagSelector(item.id)}>
+                <Tag className="w-4 h-4 mr-2" />
+                Tags bearbeiten
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onShowAlbumPicker(item)}>
+                <Folder className="w-4 h-4 mr-2" />
+                In Album verschieben
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => onShareToAlbum(item)}>
+                <Share2 className="w-4 h-4 mr-2" />
+                Zu geteiltem Album
+              </DropdownMenuItem>
+              {onTempShare && (
+                <DropdownMenuItem onClick={() => onTempShare(item)}>
+                  <Clock className="w-4 h-4 mr-2" />
+                  Temporär teilen
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              {onRename && (
+                <DropdownMenuItem onClick={() => onRename(item)}>
+                  <Pencil className="w-4 h-4 mr-2" />
+                  Umbenennen
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem onClick={() => onDownload(item)}>
+                <Download className="w-4 h-4 mr-2" />
+                Herunterladen
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem 
+                onClick={() => onDelete(item)}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Löschen
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
     </div>
   );
 });
