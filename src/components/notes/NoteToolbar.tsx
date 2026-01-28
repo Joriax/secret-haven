@@ -1,4 +1,4 @@
-import React, { memo, useMemo, useCallback } from 'react';
+import React, { memo, useCallback, useState } from 'react';
 import { 
   Bold, 
   Italic, 
@@ -12,9 +12,17 @@ import {
   Heading3, 
   Eye, 
   EyeOff, 
-  CheckSquare 
+  CheckSquare,
+  Download,
+  FileDown
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface FormatAction {
   icon: React.ComponentType<{ className?: string }>;
@@ -29,6 +37,8 @@ interface NoteToolbarProps {
   onTogglePreview: () => void;
   onInsertMarkdown: (prefix: string, suffix?: string, placeholder?: string) => void;
   children?: React.ReactNode;
+  noteTitle?: string;
+  noteContent?: string;
 }
 
 const FORMAT_ACTIONS: FormatAction[] = [
@@ -50,10 +60,55 @@ export const NoteToolbar = memo(function NoteToolbar({
   onTogglePreview,
   onInsertMarkdown,
   children,
+  noteTitle,
+  noteContent,
 }: NoteToolbarProps) {
   const handleAction = useCallback((action: FormatAction) => {
     onInsertMarkdown(action.prefix, action.suffix, action.placeholder);
   }, [onInsertMarkdown]);
+
+  const exportAs = useCallback((format: 'md' | 'txt' | 'html' | 'json') => {
+    if (!noteTitle || !noteContent) return;
+    
+    let content = '';
+    let mimeType = 'text/plain';
+    let extension = format;
+    
+    switch (format) {
+      case 'md':
+        content = `# ${noteTitle}\n\n${noteContent}`;
+        mimeType = 'text/markdown';
+        break;
+      case 'txt':
+        content = `${noteTitle}\n\n${noteContent}`;
+        break;
+      case 'html':
+        content = `<!DOCTYPE html>
+<html>
+<head><title>${noteTitle}</title></head>
+<body>
+<h1>${noteTitle}</h1>
+<div>${noteContent.replace(/\n/g, '<br>')}</div>
+</body>
+</html>`;
+        mimeType = 'text/html';
+        break;
+      case 'json':
+        content = JSON.stringify({ title: noteTitle, content: noteContent, exportedAt: new Date().toISOString() }, null, 2);
+        mimeType = 'application/json';
+        break;
+    }
+    
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${noteTitle.replace(/[^a-zA-Z0-9]/g, '_')}.${extension}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [noteTitle, noteContent]);
 
   return (
     <div className="flex items-center gap-1 px-6 py-3 border-b border-border bg-muted/30 flex-wrap">
@@ -70,6 +125,38 @@ export const NoteToolbar = memo(function NoteToolbar({
       
       {/* Additional buttons slot (e.g., OCR Scanner) */}
       {children}
+      
+      {/* Export Dropdown */}
+      {noteTitle && noteContent && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              title="Exportieren"
+            >
+              <FileDown className="w-4 h-4" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onClick={() => exportAs('md')}>
+              <Download className="w-4 h-4 mr-2" />
+              Als Markdown (.md)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => exportAs('txt')}>
+              <Download className="w-4 h-4 mr-2" />
+              Als Text (.txt)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => exportAs('html')}>
+              <Download className="w-4 h-4 mr-2" />
+              Als HTML (.html)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => exportAs('json')}>
+              <Download className="w-4 h-4 mr-2" />
+              Als JSON (.json)
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
       
       <div className="flex-1" />
       <button
