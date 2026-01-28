@@ -30,6 +30,26 @@ export const MainLayout: React.FC = () => {
   useEffect(() => {
     setSidebarOpen(false);
     setSearchOpen(false);
+    
+    // Force cleanup of any stale blur/overlay artifacts
+    const cleanup = () => {
+      document.body.style.removeProperty('overflow');
+      document.body.style.removeProperty('pointer-events');
+      document.body.classList.remove('overflow-hidden');
+      document.body.removeAttribute('data-scroll-locked');
+      
+      // Remove any orphaned backdrop elements
+      document.querySelectorAll('.backdrop-blur-sm').forEach(el => {
+        const style = window.getComputedStyle(el);
+        if (style.position === 'fixed' && !el.closest('[data-sidebar]')) {
+          el.remove();
+        }
+      });
+    };
+    
+    cleanup();
+    // Run again after React render cycle
+    requestAnimationFrame(cleanup);
   }, [location.pathname]);
 
   // Cmd+K shortcut for global search
