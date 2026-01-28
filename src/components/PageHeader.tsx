@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { forwardRef } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -14,7 +14,7 @@ interface PageHeaderProps {
   className?: string;
 }
 
-export const PageHeader: React.FC<PageHeaderProps> = ({
+export const PageHeader = forwardRef<HTMLDivElement, PageHeaderProps>(({
   title,
   subtitle,
   icon,
@@ -22,7 +22,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   backTo,
   actions,
   className
-}) => {
+}, ref) => {
   const navigate = useNavigate();
 
   const handleBack = () => {
@@ -35,6 +35,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
 
   return (
     <motion.div
+      ref={ref}
       initial={{ opacity: 0, y: -10 }}
       animate={{ opacity: 1, y: 0 }}
       className={cn("flex items-center justify-between gap-4", className)}
@@ -70,4 +71,6 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
       )}
     </motion.div>
   );
-};
+});
+
+PageHeader.displayName = 'PageHeader';
