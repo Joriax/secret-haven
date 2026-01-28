@@ -1,4 +1,4 @@
-import React, { useState, memo, useCallback } from 'react';
+import React, { useState, memo, useCallback, forwardRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ChevronRight, 
@@ -87,8 +87,16 @@ const AlbumTreeItem = memo(function AlbumTreeItem({
 
   return (
     <div>
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => onSelect(album.id)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onSelect(album.id);
+          }
+        }}
         className={cn(
           "w-full flex items-center gap-2 p-2.5 rounded-xl transition-all text-left group",
           isSelected 
@@ -99,6 +107,9 @@ const AlbumTreeItem = memo(function AlbumTreeItem({
       >
         {/* Expand/Collapse button */}
         <button
+          type="button"
+          aria-label={hasChildren ? (isExpanded ? 'Ordner einklappen' : 'Ordner ausklappen') : undefined}
+          aria-expanded={hasChildren ? isExpanded : undefined}
           onClick={(e) => {
             e.stopPropagation();
             if (hasChildren) onToggleExpand(album.id);
@@ -141,7 +152,7 @@ const AlbumTreeItem = memo(function AlbumTreeItem({
             <Check className="w-3 h-3 text-primary-foreground" />
           </div>
         )}
-      </button>
+      </div>
 
       {/* Children */}
       <AnimatePresence>
@@ -207,15 +218,19 @@ function buildAlbumTree(albums: Album[]): Album[] {
   return roots;
 }
 
-export const HierarchicalAlbumPicker = memo(function HierarchicalAlbumPicker({
-  albums,
-  selectedAlbumId,
-  onSelect,
-  onClose,
-  title = 'In Album verschieben',
-  showNoAlbumOption = true,
-  itemName,
-}: HierarchicalAlbumPickerProps) {
+export const HierarchicalAlbumPicker = memo(
+  forwardRef<HTMLDivElement, HierarchicalAlbumPickerProps>(function HierarchicalAlbumPicker(
+    {
+      albums,
+      selectedAlbumId,
+      onSelect,
+      onClose,
+      title = 'In Album verschieben',
+      showNoAlbumOption = true,
+      itemName,
+    },
+    ref
+  ) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => {
     // Auto-expand parent of selected album
     if (!selectedAlbumId) return new Set<string>();
@@ -249,6 +264,7 @@ export const HierarchicalAlbumPicker = memo(function HierarchicalAlbumPicker({
 
   return (
     <motion.div
+      ref={ref}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -339,6 +355,7 @@ export const HierarchicalAlbumPicker = memo(function HierarchicalAlbumPicker({
       </motion.div>
     </motion.div>
   );
-});
+  })
+);
 
 export default HierarchicalAlbumPicker;

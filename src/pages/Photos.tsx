@@ -238,6 +238,7 @@ export default function Photos() {
   const { userId, isDecoyMode, sessionToken, supabaseClient: supabase } = useAuth();
   const location = useLocation();
   const { tags } = useTags();
+  const validTagIds = useMemo(() => new Set(tags.map((t) => t.id)), [tags]);
   const { logEvent } = useSecurityLogs();
   const { recordView } = useViewHistory();
   const { generateThumbnail } = useVideoThumbnail();
@@ -1043,11 +1044,12 @@ export default function Photos() {
       created_at: m.taken_at,
       uploaded_at: m.uploaded_at,
       is_favorite: m.is_favorite,
-      tags: m.tags,
+      // Only count tags that still exist. This avoids "Mit Tags" showing items with stale/orphan tag IDs.
+      tags: (m.tags || []).filter((tagId) => validTagIds.has(tagId)),
       type: m.type,
       mime_type: m.mime_type,
     }));
-  }, [media]);
+  }, [media, validTagIds]);
 
   const { smartAlbums, getItemsForSmartAlbum } = useSmartAlbums(smartAlbumItems);
 
