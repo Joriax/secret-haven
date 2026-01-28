@@ -46,6 +46,7 @@ const StorageAnalysis = lazy(() => import("./pages/StorageAnalysis"));
 const ActivityTimeline = lazy(() => import("./pages/ActivityTimeline"));
 const UsageStats = lazy(() => import("./pages/UsageStats"));
 const TagCloud = lazy(() => import("./pages/TagCloud"));
+const CalendarView = lazy(() => import("./pages/CalendarView"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -179,6 +180,11 @@ const App = () => (
                       <Route path="/usage-stats" element={
                         <ErrorBoundary>
                           <UsageStats />
+                        </ErrorBoundary>
+                      } />
+                      <Route path="/calendar" element={
+                        <ErrorBoundary>
+                          <CalendarView />
                         </ErrorBoundary>
                       } />
                       <Route path="/settings" element={
