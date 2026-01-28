@@ -123,10 +123,10 @@ Deno.serve(async (req) => {
         .maybeSingle();
 
       if (photo) {
-        // Generate signed URL for the photo
+        // Generate signed URL for the photo - shorter TTL (10 min) for public shared content
         const { data: urlData } = await supabaseAdmin.storage
           .from('photos')
-          .createSignedUrl(`${share.user_id}/${photo.filename}`, 3600); // 1 hour
+          .createSignedUrl(`${share.user_id}/${photo.filename}`, 600); // 10 minutes
 
         signedUrl = urlData?.signedUrl;
         itemData = { ...photo, url: signedUrl };
@@ -139,9 +139,10 @@ Deno.serve(async (req) => {
         .maybeSingle();
 
       if (file) {
+        // Shorter TTL (10 min) for public shared content
         const { data: urlData } = await supabaseAdmin.storage
           .from('files')
-          .createSignedUrl(`${share.user_id}/${file.filename}`, 3600);
+          .createSignedUrl(`${share.user_id}/${file.filename}`, 600); // 10 minutes
 
         signedUrl = urlData?.signedUrl;
         itemData = { ...file, url: signedUrl };

@@ -2,10 +2,14 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-cleanup-key',
 }
 
 const TRASH_RETENTION_DAYS = 30
+
+// Secret key for authorizing cleanup operations
+// This should match an environment variable or be called only by scheduled jobs
+const CLEANUP_SECRET_KEY = Deno.env.get('CLEANUP_SECRET_KEY') || 'internal-cleanup-key-' + Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')?.substring(0, 16)
 
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
@@ -13,12 +17,71 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders })
   }
 
+  // Security: Verify authorization
+  // Accept either:
+  // 1. The cleanup secret key in x-cleanup-key header
+  // 2. A valid admin session token
+  // 3. Service role key in Authorization header (for cron jobs)
+  const cleanupKey = req.headers.get('x-cleanup-key')
+  const authHeader = req.headers.get('authorization')
+  
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  
+  let isAuthorized = false
+  
+  // Check cleanup secret key
+  if (cleanupKey === CLEANUP_SECRET_KEY) {
+    isAuthorized = true
+    console.log('Authorized via cleanup secret key')
+  }
+  
+  // Check if called with service role key (for cron/scheduled jobs)
+  if (!isAuthorized && authHeader?.includes(supabaseServiceKey)) {
+    isAuthorized = true
+    console.log('Authorized via service role key')
+  }
+  
+  // Check for admin session token
+  if (!isAuthorized) {
+    const sessionToken = req.headers.get('x-session-token')
+    if (sessionToken) {
+      const supabaseCheck = createClient(supabaseUrl, supabaseServiceKey)
+      
+      // Validate session and check admin role
+      const { data: session } = await supabaseCheck
+        .from('vault_sessions')
+        .select('user_id, expires_at')
+        .eq('session_token', sessionToken)
+        .single()
+      
+      if (session && new Date(session.expires_at) > new Date()) {
+        const { data: adminRole } = await supabaseCheck
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', session.user_id)
+          .eq('role', 'admin')
+          .single()
+        
+        if (adminRole) {
+          isAuthorized = true
+          console.log('Authorized via admin session')
+        }
+      }
+    }
+  }
+  
+  if (!isAuthorized) {
+    console.log('Unauthorized cleanup attempt')
+    return new Response(
+      JSON.stringify({ error: 'Unauthorized - Admin access required' }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+    )
+  }
+
   console.log('Starting trash cleanup job...')
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
     
     const cutoffDate = new Date()
