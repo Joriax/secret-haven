@@ -125,17 +125,26 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onSearchOpen
     ? securityNavItems.filter(item => !['Geheimer Safe', 'Sicherheit'].includes(item.label))
     : securityNavItems;
 
+  // Force cleanup when sidebar closes
+  React.useEffect(() => {
+    if (!isOpen) {
+      // Reset any lingering body styles
+      document.body.style.removeProperty('overflow');
+      document.body.style.removeProperty('pointer-events');
+      document.body.classList.remove('overflow-hidden');
+    }
+  }, [isOpen]);
+
   return (
     <>
-      {/* Mobile overlay - using CSS transitions instead of Framer Motion to prevent unmount issues */}
-      <div
-        className={cn(
-          "fixed inset-0 bg-background/80 backdrop-blur-sm z-40 lg:hidden transition-opacity duration-300",
-          isOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
-        )}
-        onClick={onToggle}
-        aria-hidden={!isOpen}
-      />
+      {/* Mobile overlay - only render when open to prevent blur persistence */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40 lg:hidden animate-fade-in"
+          onClick={onToggle}
+          aria-hidden="true"
+        />
+      )}
 
       {/* Mobile menu button - only on mobile */}
       <button
@@ -151,6 +160,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onSearchOpen
 
       {/* Sidebar - always visible on desktop, animated on mobile */}
       <aside
+        data-sidebar="true"
         className={cn(
           "fixed left-0 top-0 h-full w-[260px] z-50",
           "bg-sidebar border-r border-border flex flex-col",
