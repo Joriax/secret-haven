@@ -212,16 +212,16 @@ export const LazyMediaItem = memo(function LazyMediaItem({
           </>
         )}
 
-        {/* Favorite indicator */}
-        {item.is_favorite && (
-          <div className="absolute top-2 right-10">
+        {/* Favorite indicator - top left when not in multi-select */}
+        {item.is_favorite && !isMultiSelectMode && (
+          <div className="absolute top-2 left-2 z-10">
             <Heart className="w-5 h-5 text-red-500 fill-red-500 drop-shadow-md" />
           </div>
         )}
 
-        {/* Tags indicator */}
+        {/* Tags indicator - next to favorite */}
         {item.tags && item.tags.length > 0 && !isMultiSelectMode && (
-          <div className="absolute top-2 left-2 flex gap-1">
+          <div className={cn("absolute top-2 flex gap-1 z-10", item.is_favorite ? "left-9" : "left-2")}>
             {item.tags.slice(0, 2).map((tagId: string) => {
               const tag = tags.find(t => t.id === tagId);
               return tag ? (
@@ -231,9 +231,9 @@ export const LazyMediaItem = memo(function LazyMediaItem({
           </div>
         )}
 
-        {/* 3-dot menu button - visible on hover (desktop) or always visible on mobile */}
+        {/* 3-dot menu - only visible on hover (desktop) */}
         {!isMultiSelectMode && (
-          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 sm:opacity-0 transition-opacity z-20">
+          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-20 hidden sm:block">
             <DropdownMenu open={showMenu} onOpenChange={setShowMenu}>
               <DropdownMenuTrigger asChild>
                 <button 
@@ -303,10 +303,10 @@ export const LazyMediaItem = memo(function LazyMediaItem({
         </div>
       </div>
 
-      {/* Mobile tap area for menu - shown on first tap */}
+      {/* Mobile menu - always visible */}
       {!isMultiSelectMode && (
         <div 
-          className="absolute top-2 right-2 sm:hidden"
+          className="absolute top-2 right-2 sm:hidden z-20"
           onClick={(e) => e.stopPropagation()}
         >
           <DropdownMenu>
