@@ -14,15 +14,18 @@ export interface HiddenAlbumsHook {
   refetch: () => Promise<void>;
 }
 
-// Simple in-memory cache for hidden albums
-const hiddenAlbumsCache = new Map<string, {
-  data: Array<{ id: string; parent_id: string | null; is_hidden: boolean }>;
-  timestamp: number;
-}>();
-const CACHE_TTL = 30000; // 30 seconds
+// Global singleton cache
+const globalCache = {
+  data: null as {
+    userId: string;
+    albums: Array<{ id: string; parent_id: string | null; is_hidden: boolean }>;
+    timestamp: number;
+  } | null,
+};
+const CACHE_TTL = 60000; // 1 minute
 
 /**
- * Hook to manage hidden albums with caching and optimized renders.
+ * Optimized hook to manage hidden albums with global caching.
  */
 export function useHiddenAlbums(): HiddenAlbumsHook {
   const [hiddenAlbumIds, setHiddenAlbumIds] = useState<Set<string>>(new Set());
@@ -30,8 +33,9 @@ export function useHiddenAlbums(): HiddenAlbumsHook {
   const [isLoading, setIsLoading] = useState(true);
   const { userId, isDecoyMode, supabaseClient: supabase } = useAuth();
   const isFetchingRef = useRef(false);
+  const mountedRef = useRef(true);
 
-  const fetchHiddenAlbums = useCallback(async () => {
+  const fetchHiddenAlbums = useCallback(async (skipCache = false) => {
     if (!userId || isDecoyMode) {
       setHiddenAlbumIds(new Set());
       setAllAlbums([]);
@@ -39,10 +43,11 @@ export function useHiddenAlbums(): HiddenAlbumsHook {
       return;
     }
 
-    // Check cache first
-    const cached = hiddenAlbumsCache.get(userId);
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-      const albums = cached.data;
+    // Check global cache
+    if (!skipCache && globalCache.data && 
+        globalCache.data.userId === userId && 
+        Date.now() - globalCache.data.timestamp < CACHE_TTL) {
+      const albums = globalCache.data.albums;
       setAllAlbums(albums);
       const hidden = new Set<string>();
       albums.forEach(a => { if (a.is_hidden) hidden.add(a.id); });
@@ -51,7 +56,6 @@ export function useHiddenAlbums(): HiddenAlbumsHook {
       return;
     }
 
-    // Prevent duplicate fetches
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
 
@@ -69,31 +73,38 @@ export function useHiddenAlbums(): HiddenAlbumsHook {
         is_hidden: a.is_hidden ?? false,
       }));
 
-      // Update cache
-      hiddenAlbumsCache.set(userId, { data: albums, timestamp: Date.now() });
+      // Update global cache
+      globalCache.data = { userId, albums, timestamp: Date.now() };
 
-      setAllAlbums(albums);
-
-      const hidden = new Set<string>();
-      albums.forEach(a => { if (a.is_hidden) hidden.add(a.id); });
-      setHiddenAlbumIds(hidden);
+      if (mountedRef.current) {
+        setAllAlbums(albums);
+        const hidden = new Set<string>();
+        albums.forEach(a => { if (a.is_hidden) hidden.add(a.id); });
+        setHiddenAlbumIds(hidden);
+      }
     } catch (error) {
       console.error('Error fetching hidden albums:', error);
     } finally {
-      setIsLoading(false);
+      if (mountedRef.current) {
+        setIsLoading(false);
+      }
       isFetchingRef.current = false;
     }
   }, [userId, isDecoyMode, supabase]);
 
   useEffect(() => {
+    mountedRef.current = true;
     fetchHiddenAlbums();
+    return () => { mountedRef.current = false; };
   }, [fetchHiddenAlbums]);
 
-  // Compute all hidden album IDs including children of hidden parents
+  // Compute all hidden album IDs including children - memoized
   const allHiddenAlbumIds = useMemo(() => {
+    if (hiddenAlbumIds.size === 0) return new Set<string>();
+    
     const result = new Set<string>();
     
-    // Create parent->children map for O(n) traversal
+    // Create parent->children map
     const childrenMap = new Map<string | null, string[]>();
     allAlbums.forEach(a => {
       const children = childrenMap.get(a.parent_id) || [];
@@ -103,8 +114,10 @@ export function useHiddenAlbums(): HiddenAlbumsHook {
     
     const collectDescendants = (albumId: string) => {
       result.add(albumId);
-      const children = childrenMap.get(albumId) || [];
-      children.forEach(childId => collectDescendants(childId));
+      const children = childrenMap.get(albumId);
+      if (children) {
+        children.forEach(childId => collectDescendants(childId));
+      }
     };
 
     hiddenAlbumIds.forEach(id => collectDescendants(id));
@@ -145,14 +158,14 @@ export function useHiddenAlbums(): HiddenAlbumsHook {
       if (error) throw error;
 
       // Invalidate cache
-      hiddenAlbumsCache.delete(userId);
+      globalCache.data = null;
 
       toast.success(hidden ? 'Album ausgeblendet' : 'Album eingeblendet');
     } catch (error) {
       console.error('Error toggling hidden:', error);
       toast.error('Fehler beim Ändern der Sichtbarkeit');
       // Rollback on error
-      fetchHiddenAlbums();
+      fetchHiddenAlbums(true);
     }
   }, [userId, supabase, fetchHiddenAlbums]);
 
@@ -164,6 +177,7 @@ export function useHiddenAlbums(): HiddenAlbumsHook {
   const getVisibleAlbums = useCallback(<T extends { id: string; parent_id?: string | null; is_hidden?: boolean }>(
     albums: T[]
   ): T[] => {
+    if (allHiddenAlbumIds.size === 0) return albums;
     return albums.filter(album => !allHiddenAlbumIds.has(album.id));
   }, [allHiddenAlbumIds]);
 
@@ -176,7 +190,7 @@ export function useHiddenAlbums(): HiddenAlbumsHook {
     setHidden,
     getVisibleAlbums,
     isLoading,
-    refetch: fetchHiddenAlbums,
+    refetch: () => fetchHiddenAlbums(true),
   };
 }
 
