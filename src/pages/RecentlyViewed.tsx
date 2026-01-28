@@ -144,10 +144,10 @@ export default function RecentlyViewed() {
         navigate('/notes', { state: { openNote: item.id } });
         break;
       case 'photo':
-        navigate('/photos');
+        navigate('/photos', { state: { openPhotoId: item.id } });
         break;
       case 'file':
-        navigate('/files');
+        navigate('/files', { state: { openFileId: item.id } });
         break;
       case 'secret_text':
         navigate('/secret-texts');
