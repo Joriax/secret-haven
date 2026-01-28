@@ -34,6 +34,8 @@ import { ThemeCustomizer } from '@/components/ThemeCustomizer';
 import { FullThemeCustomizer } from '@/components/FullThemeCustomizer';
 import { BackupManager } from '@/components/BackupManager';
 import { ImportBackup } from '@/components/ImportBackup';
+import { ImportManager } from '@/components/ImportManager';
+import { ScheduledBackups } from '@/components/ScheduledBackups';
 import { DeleteAccountDialog } from '@/components/DeleteAccountDialog';
 
 const PIN_LENGTH = 6;
@@ -55,6 +57,7 @@ export default function Settings() {
   const [showBackup, setShowBackup] = useState(false);
   const [showAutoLock, setShowAutoLock] = useState(false);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+  const [showImportManager, setShowImportManager] = useState(false);
   const [currentPin, setCurrentPin] = useState('');
   const [newPin, setNewPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
@@ -72,6 +75,37 @@ export default function Settings() {
   
   const [autoLockEnabled, setAutoLockEnabled] = useState(true);
   const [autoLockMinutes, setAutoLockMinutes] = useState(5);
+
+  // Handle import
+  const handleImport = async (items: any[]) => {
+    if (!userId) return { total: 0, imported: 0, skipped: 0, errors: [] };
+    
+    let imported = 0;
+    const errors: string[] = [];
+    
+    for (const item of items) {
+      try {
+        if (item.type === 'note') {
+          await supabase.from('notes').insert({
+            user_id: userId,
+            title: item.title,
+            content: item.content,
+            tags: item.tags || [],
+          });
+          imported++;
+        }
+      } catch (err: any) {
+        errors.push(err.message || 'Unknown error');
+      }
+    }
+    
+    return {
+      total: items.length,
+      imported,
+      skipped: items.length - imported - errors.length,
+      errors,
+    };
+  };
 
   // Initialize auto-lock settings
   useEffect(() => {
@@ -738,6 +772,39 @@ export default function Settings() {
 
       {/* Backup Manager */}
       <BackupManager />
+
+      {/* Scheduled Backups */}
+      <ScheduledBackups />
+
+      {/* Import Section */}
+      <div className="glass-card p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <Upload className="w-5 h-5 text-green-500" />
+          <h2 className="text-lg font-semibold text-foreground">Daten importieren</h2>
+        </div>
+        
+        <button
+          onClick={() => setShowImportManager(true)}
+          className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-muted/30 transition-colors group"
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
+              <Upload className="w-5 h-5 text-green-500" />
+            </div>
+            <div className="text-left">
+              <h3 className="font-medium text-foreground">Aus anderen Apps importieren</h3>
+              <p className="text-sm text-muted-foreground">Evernote, Notion, Google Keep, Apple Notes</p>
+            </div>
+          </div>
+        </button>
+      </div>
+
+      {/* Import Manager Dialog */}
+      <ImportManager 
+        open={showImportManager}
+        onClose={() => setShowImportManager(false)}
+        onImport={handleImport}
+      />
 
       {/* Danger Zone */}
       <div className="glass-card p-6 border-destructive/30">

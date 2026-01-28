@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Outlet, Navigate, useLocation } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { GlobalSearch } from '../GlobalSearch';
+import { PullToRefreshIndicator } from '../PullToRefreshIndicator';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { useAuth } from '@/contexts/AuthContext';
 
 export const MainLayout: React.FC = () => {
@@ -9,6 +11,18 @@ export const MainLayout: React.FC = () => {
   const [searchOpen, setSearchOpen] = useState(false);
   const { isAuthenticated } = useAuth();
   const location = useLocation();
+
+  // Pull-to-refresh handler
+  const handleRefresh = useCallback(async () => {
+    // Trigger a page reload or data refetch
+    window.location.reload();
+  }, []);
+
+  const { pullDistance, isRefreshing, isPulling, containerProps } = usePullToRefresh({
+    onRefresh: handleRefresh,
+    threshold: 80,
+    maxPull: 150,
+  });
 
   // Close sidebar and search when route changes to prevent blur overlay persisting
   useEffect(() => {
@@ -59,12 +73,27 @@ export const MainLayout: React.FC = () => {
       
       <main 
         id="main-content"
-        className="flex-1 min-h-screen lg:ml-0 overflow-x-hidden bg-gradient-subtle"
+        className="flex-1 min-h-screen lg:ml-0 overflow-x-hidden bg-gradient-subtle relative"
         tabIndex={-1}
         role="main"
         aria-label="Hauptinhalt"
+        {...containerProps}
       >
-        <div className="p-4 lg:p-6 pt-16 lg:pt-6">
+        {/* Pull-to-refresh indicator */}
+        <PullToRefreshIndicator 
+          pullDistance={pullDistance} 
+          isRefreshing={isRefreshing} 
+          isPulling={isPulling}
+          threshold={80}
+        />
+        
+        <div 
+          className="p-4 lg:p-6 pt-16 lg:pt-6"
+          style={{
+            transform: isPulling || isRefreshing ? `translateY(${pullDistance}px)` : 'none',
+            transition: isPulling ? 'none' : 'transform 0.3s ease-out',
+          }}
+        >
           <Outlet />
         </div>
       </main>
