@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AlertTriangle, X, LogOut, Trash2, EyeOff, Shield } from 'lucide-react';
+import { AlertTriangle, X, LogOut, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { useHaptics } from '@/hooks/useHaptics';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface PanicButtonProps {
   enabled?: boolean;
@@ -18,6 +20,8 @@ export const PanicButton: React.FC<PanicButtonProps> = ({ enabled = true }) => {
   const { logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { vibrateHeavy, vibrateWarning } = useHaptics();
+  const isMobile = useIsMobile();
 
   // Hide on login page
   const isLoginPage = location.pathname === '/login' || location.pathname === '/';
@@ -25,6 +29,9 @@ export const PanicButton: React.FC<PanicButtonProps> = ({ enabled = true }) => {
   const HOLD_DURATION = 1500; // 1.5 seconds
 
   const handlePanicAction = useCallback(() => {
+    // Heavy haptic feedback
+    vibrateHeavy();
+    
     // Clear session storage
     sessionStorage.clear();
     
@@ -38,20 +45,52 @@ export const PanicButton: React.FC<PanicButtonProps> = ({ enabled = true }) => {
     ];
     sensitiveKeys.forEach(key => localStorage.removeItem(key));
     
-    // Logout and redirect
-    logout();
-    navigate('/login', { replace: true });
+    // Clear all cookies
+    document.cookie.split(";").forEach((c) => {
+      document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+    });
     
-    // Optional: close tab (only works if opened by script)
-    if (window.opener) {
-      window.close();
+    // Logout
+    logout();
+    
+    // On mobile: Try to close the tab/app completely
+    if (isMobile) {
+      // Try multiple methods to close the tab
+      try {
+        // Method 1: window.close() - works if page was opened by script
+        window.close();
+        
+        // Method 2: Replace history and navigate away
+        window.history.replaceState(null, '', 'about:blank');
+        window.location.replace('about:blank');
+        
+        // Method 3: Open blank and close self (Safari workaround)
+        const win = window.open('about:blank', '_self');
+        win?.close();
+      } catch (e) {
+        // Fallback: Navigate to blank page
+        document.body.innerHTML = '';
+        document.head.innerHTML = '';
+        window.location.href = 'about:blank';
+      }
+    } else {
+      // Desktop: Navigate to login
+      navigate('/login', { replace: true });
+      
+      // Try to close if opened by script
+      if (window.opener) {
+        window.close();
+      }
     }
-  }, [logout, navigate]);
+  }, [logout, navigate, vibrateHeavy, isMobile]);
 
   const startPress = useCallback(() => {
     if (!enabled) return;
     setIsPressed(true);
     setProgress(0);
+    
+    // Warning vibration at start
+    vibrateWarning();
     
     const startTime = Date.now();
     const timer = setInterval(() => {
@@ -66,7 +105,7 @@ export const PanicButton: React.FC<PanicButtonProps> = ({ enabled = true }) => {
     }, 16);
     
     setPressTimer(timer);
-  }, [enabled, handlePanicAction]);
+  }, [enabled, handlePanicAction, vibrateWarning]);
 
   const endPress = useCallback(() => {
     setIsPressed(false);
