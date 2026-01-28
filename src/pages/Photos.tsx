@@ -82,6 +82,10 @@ import {
 import { useSmartAlbums, SmartAlbumItem } from '@/hooks/useSmartAlbums';
 import { SmartAlbumCard, SmartAlbumList } from '@/components/SmartAlbumCard';
 import { useHiddenAlbums } from '@/hooks/useHiddenAlbums';
+import { ImageEditor } from '@/components/photos/ImageEditor';
+import { VideoEditor } from '@/components/photos/VideoEditor';
+import { CollageCreator } from '@/components/photos/CollageCreator';
+import { PhotoTimeline } from '@/components/photos/PhotoTimeline';
 
 // Video file extensions and MIME types
 const VIDEO_EXTENSIONS = /\.(mp4|mov|webm|avi|mkv|m4v|3gp|ogv|wmv|flv)$/i;
@@ -258,6 +262,12 @@ export default function Photos() {
   const [shareItem, setShareItem] = useState<MediaItem | null>(null);
   const [selectedSmartAlbum, setSelectedSmartAlbum] = useState<string | null>(null);
   const { allHiddenAlbumIds, isContentHidden, setHidden } = useHiddenAlbums();
+  
+  // Editor states
+  const [imageEditorItem, setImageEditorItem] = useState<MediaItem | null>(null);
+  const [videoEditorItem, setVideoEditorItem] = useState<MediaItem | null>(null);
+  const [showCollageCreator, setShowCollageCreator] = useState(false);
+  const [showPhotoTimeline, setShowPhotoTimeline] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!userId) return;
@@ -369,11 +379,21 @@ export default function Photos() {
     localStorage.setItem('photos-video-muted', JSON.stringify(isMuted));
   }, [isMuted]);
 
+  // Handle navigation state (upload action or open specific photo)
   useEffect(() => {
     if (location.state?.action === 'upload-photo') {
       fileInputRef.current?.click();
     }
-  }, [location.state]);
+    // Handle direct navigation to a specific photo (e.g., from Trash, RecentlyViewed)
+    if (location.state?.openPhotoId && media.length > 0) {
+      const photoIndex = media.findIndex(m => m.id === location.state.openPhotoId);
+      if (photoIndex !== -1) {
+        setLightboxIndex(photoIndex);
+        // Clear the state to prevent re-opening on subsequent renders
+        window.history.replaceState({}, document.title);
+      }
+    }
+  }, [location.state, media]);
 
   const handleFileUpload = async (files: FileList | null) => {
     if (!files || !userId) return;
@@ -2418,6 +2438,20 @@ export default function Photos() {
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-56 z-[60] bg-popover">
+                    {/* Edit options */}
+                    {currentLightboxItem.type === 'photo' && (
+                      <DropdownMenuItem onClick={() => { setLightboxIndex(null); setImageEditorItem(currentLightboxItem); }}>
+                        <ImageIcon className="w-4 h-4 mr-2" />
+                        Bild bearbeiten
+                      </DropdownMenuItem>
+                    )}
+                    {currentLightboxItem.type === 'video' && (
+                      <DropdownMenuItem onClick={() => { setLightboxIndex(null); setVideoEditorItem(currentLightboxItem); }}>
+                        <Film className="w-4 h-4 mr-2" />
+                        Video bearbeiten
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => downloadMedia(currentLightboxItem)}>
                       <Download className="w-4 h-4 mr-2" />
                       Herunterladen
@@ -2960,6 +2994,138 @@ export default function Photos() {
           }}
         />
       )}
+
+      {/* Image Editor */}
+      <ImageEditor
+        isOpen={!!imageEditorItem}
+        imageUrl={imageEditorItem?.url || ''}
+        filename={imageEditorItem?.filename || ''}
+        onSave={async (blob, saveAsNew) => {
+          if (!imageEditorItem || !userId) return;
+          try {
+            const timestamp = Date.now();
+            const newFilename = saveAsNew 
+              ? `${timestamp}-edited-${imageEditorItem.filename.replace(/^\d+-/, '')}`
+              : imageEditorItem.filename;
+            
+            const objectPath = `${userId}/${newFilename}`;
+            
+            // Upload the edited image
+            const { error: uploadError } = await supabase.storage
+              .from('photos')
+              .upload(objectPath, blob, {
+                contentType: 'image/jpeg',
+                upsert: !saveAsNew,
+              });
+            
+            if (uploadError) throw uploadError;
+            
+            if (saveAsNew) {
+              // Create new photo record
+              const { data: newPhoto, error: dbError } = await supabase
+                .from('photos')
+                .insert({
+                  user_id: userId,
+                  filename: newFilename,
+                  caption: `${imageEditorItem.caption || ''} (bearbeitet)`,
+                  album_id: imageEditorItem.album_id,
+                })
+                .select()
+                .single();
+              
+              if (dbError) throw dbError;
+              fetchData();
+              toast.success('Bearbeitetes Bild als Kopie gespeichert');
+            } else {
+              toast.success('Bild aktualisiert');
+              fetchData();
+            }
+            
+            setImageEditorItem(null);
+          } catch (error) {
+            console.error('Error saving edited image:', error);
+            toast.error('Fehler beim Speichern');
+          }
+        }}
+        onClose={() => setImageEditorItem(null)}
+      />
+
+      {/* Video Editor */}
+      <VideoEditor
+        isOpen={!!videoEditorItem}
+        videoUrl={videoEditorItem?.url || ''}
+        filename={videoEditorItem?.filename || ''}
+        onSave={async (videoBlob, thumbnailBlob, startTime, endTime) => {
+          if (!videoEditorItem || !userId) return;
+          try {
+            // Save new thumbnail if generated
+            if (thumbnailBlob) {
+              const thumbFilename = `${Date.now()}-thumb-${videoEditorItem.filename.replace(/\.[^.]+$/, '.jpg')}`;
+              await supabase.storage
+                .from('photos')
+                .upload(`${userId}/thumbnails/${thumbFilename}`, thumbnailBlob, {
+                  contentType: 'image/jpeg',
+                });
+              
+              await supabase
+                .from('photos')
+                .update({ thumbnail_filename: thumbFilename })
+                .eq('id', videoEditorItem.id);
+            }
+            
+            toast.success('Video-Thumbnail aktualisiert');
+            fetchData();
+            setVideoEditorItem(null);
+          } catch (error) {
+            console.error('Error saving video edits:', error);
+            toast.error('Fehler beim Speichern');
+          }
+        }}
+        onClose={() => setVideoEditorItem(null)}
+      />
+
+      {/* Collage Creator */}
+      <CollageCreator
+        isOpen={showCollageCreator}
+        availablePhotos={media.filter(m => m.type === 'photo' && m.url).map(m => ({
+          id: m.id,
+          url: m.url!,
+          filename: m.filename,
+        }))}
+        onSave={async (blob) => {
+          if (!userId) return;
+          try {
+            const timestamp = Date.now();
+            const filename = `${timestamp}-collage.jpg`;
+            const objectPath = `${userId}/${filename}`;
+            
+            const { error: uploadError } = await supabase.storage
+              .from('photos')
+              .upload(objectPath, blob, {
+                contentType: 'image/jpeg',
+              });
+            
+            if (uploadError) throw uploadError;
+            
+            await supabase
+              .from('photos')
+              .insert({
+                user_id: userId,
+                filename,
+                caption: 'Collage',
+                album_id: selectedAlbum?.id || null,
+              });
+            
+            fetchData();
+            toast.success('Collage erstellt');
+            setShowCollageCreator(false);
+          } catch (error) {
+            console.error('Error creating collage:', error);
+            toast.error('Fehler beim Erstellen der Collage');
+          }
+        }}
+        onClose={() => setShowCollageCreator(false)}
+      />
     </div>
   );
 }

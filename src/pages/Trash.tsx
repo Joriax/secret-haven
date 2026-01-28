@@ -11,7 +11,8 @@ import {
   Video,
   CheckCircle2,
   Play,
-  Settings
+  Settings,
+  Eye
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
@@ -20,6 +21,7 @@ import { MultiSelectBar } from '@/components/MultiSelect';
 import { useTrashSettings } from '@/hooks/useTrashSettings';
 import { toast } from 'sonner';
 import { Slider } from '@/components/ui/slider';
+import { useNavigate } from 'react-router-dom';
 
 interface TrashItem {
   id: string;
@@ -40,6 +42,7 @@ export default function Trash() {
   const [showSettings, setShowSettings] = useState(false);
   const { userId, isDecoyMode, supabaseClient: supabase } = useAuth();
   const { retentionDays, updateRetentionDays } = useTrashSettings();
+  const navigate = useNavigate();
 
   // Auto-cleanup expired items (client-side backup for cron job)
   const cleanupExpiredItems = useCallback(async () => {
@@ -378,6 +381,19 @@ export default function Trash() {
     });
   };
 
+  // Navigate to the original item (for viewing before restore)
+  const handleViewItem = (item: TrashItem) => {
+    if (item.type === 'photo') {
+      navigate('/photos', { state: { openPhotoId: item.id } });
+    } else if (item.type === 'note') {
+      navigate('/notes', { state: { openNoteId: item.id } });
+    } else if (item.type === 'file') {
+      navigate('/files', { state: { openFileId: item.id } });
+    } else if (item.type === 'tiktok') {
+      navigate('/tiktok', { state: { openTikTokId: item.id } });
+    }
+  };
+
   if (isDecoyMode) {
     return (
       <motion.div
@@ -534,6 +550,13 @@ export default function Trash() {
                   </div>
 
                   <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={() => handleViewItem(item)}
+                      className="p-2 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-colors"
+                      title="Anzeigen"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
                     <button
                       onClick={() => restoreItem(item)}
                       className="p-2 rounded-lg bg-green-500/10 hover:bg-green-500/20 text-green-500 transition-colors"
