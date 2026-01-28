@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useVaultData } from './useVaultData';
 
@@ -43,12 +43,17 @@ export interface SharedAlbumAccess {
   created_at: string;
 }
 
+// Cache for shared albums
+const sharedAlbumsCache = new Map<string, { data: SharedAlbum[]; sharedWithMe: SharedAlbum[]; timestamp: number }>();
+const CACHE_TTL = 30000; // 30 seconds
+
 export function useSharedAlbums() {
   const [albums, setAlbums] = useState<SharedAlbum[]>([]);
   const [sharedWithMe, setSharedWithMe] = useState<SharedAlbum[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { userId } = useAuth();
   const { callVaultData } = useVaultData();
+  const isFetchingRef = useRef(false);
 
   const fetchAlbums = useCallback(async () => {
     if (!userId) {
@@ -56,17 +61,41 @@ export function useSharedAlbums() {
       return;
     }
 
+    // Check cache first
+    const cached = sharedAlbumsCache.get(userId);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      setAlbums(cached.data);
+      setSharedWithMe(cached.sharedWithMe);
+      setIsLoading(false);
+      return;
+    }
+
+    // Prevent duplicate fetches
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+
     try {
       const result = await callVaultData('get-shared-albums', {});
       
       if (result?.success && result.data) {
-        setAlbums((result.data.albums || []) as SharedAlbum[]);
-        setSharedWithMe((result.data.sharedWithMe || []) as SharedAlbum[]);
+        const albumsData = (result.data.albums || []) as SharedAlbum[];
+        const sharedWithMeData = (result.data.sharedWithMe || []) as SharedAlbum[];
+        
+        // Update cache
+        sharedAlbumsCache.set(userId, {
+          data: albumsData,
+          sharedWithMe: sharedWithMeData,
+          timestamp: Date.now(),
+        });
+        
+        setAlbums(albumsData);
+        setSharedWithMe(sharedWithMeData);
       }
     } catch (error) {
       console.error('Error fetching shared albums:', error);
     } finally {
       setIsLoading(false);
+      isFetchingRef.current = false;
     }
   }, [userId, callVaultData]);
 
@@ -74,7 +103,11 @@ export function useSharedAlbums() {
     fetchAlbums();
   }, [fetchAlbums]);
 
-  const createAlbum = async (
+  const invalidateCache = useCallback(() => {
+    if (userId) sharedAlbumsCache.delete(userId);
+  }, [userId]);
+
+  const createAlbum = useCallback(async (
     name: string,
     contentType: ContentType = 'mixed',
     color?: string,
@@ -93,6 +126,7 @@ export function useSharedAlbums() {
       if (result?.success && result.data) {
         const newAlbum = result.data as SharedAlbum;
         setAlbums(prev => [newAlbum, ...prev]);
+        invalidateCache();
         return newAlbum;
       }
       return null;
@@ -100,9 +134,9 @@ export function useSharedAlbums() {
       console.error('Error creating shared album:', error);
       return null;
     }
-  };
+  }, [userId, callVaultData, invalidateCache]);
 
-  const updateAlbum = async (
+  const updateAlbum = useCallback(async (
     albumId: string,
     updates: Partial<Pick<SharedAlbum, 'name' | 'description' | 'color' | 'icon'>>
   ): Promise<boolean> => {
@@ -110,9 +144,8 @@ export function useSharedAlbums() {
       const result = await callVaultData('update-shared-album', { id: albumId, updates });
 
       if (result?.success) {
-        setAlbums(prev =>
-          prev.map(a => (a.id === albumId ? { ...a, ...updates } : a))
-        );
+        setAlbums(prev => prev.map(a => (a.id === albumId ? { ...a, ...updates } : a)));
+        invalidateCache();
         return true;
       }
       return false;
@@ -120,14 +153,15 @@ export function useSharedAlbums() {
       console.error('Error updating shared album:', error);
       return false;
     }
-  };
+  }, [callVaultData, invalidateCache]);
 
-  const deleteAlbum = async (albumId: string): Promise<boolean> => {
+  const deleteAlbum = useCallback(async (albumId: string): Promise<boolean> => {
     try {
       const result = await callVaultData('delete-shared-album', { id: albumId });
 
       if (result?.success) {
         setAlbums(prev => prev.filter(a => a.id !== albumId));
+        invalidateCache();
         return true;
       }
       return false;
@@ -135,9 +169,9 @@ export function useSharedAlbums() {
       console.error('Error deleting shared album:', error);
       return false;
     }
-  };
+  }, [callVaultData, invalidateCache]);
 
-  const generatePublicLink = async (albumId: string): Promise<string | null> => {
+  const generatePublicLink = useCallback(async (albumId: string): Promise<string | null> => {
     try {
       const result = await callVaultData('generate-public-link', { id: albumId });
 
@@ -150,6 +184,7 @@ export function useSharedAlbums() {
               : a
           )
         );
+        invalidateCache();
         return `${window.location.origin}/shared/${token}`;
       }
       return null;
@@ -157,9 +192,9 @@ export function useSharedAlbums() {
       console.error('Error generating public link:', error);
       return null;
     }
-  };
+  }, [callVaultData, invalidateCache]);
 
-  const disablePublicLink = async (albumId: string): Promise<boolean> => {
+  const disablePublicLink = useCallback(async (albumId: string): Promise<boolean> => {
     try {
       const result = await callVaultData('disable-public-link', { id: albumId });
 
@@ -171,6 +206,7 @@ export function useSharedAlbums() {
               : a
           )
         );
+        invalidateCache();
         return true;
       }
       return false;
@@ -178,9 +214,9 @@ export function useSharedAlbums() {
       console.error('Error disabling public link:', error);
       return false;
     }
-  };
+  }, [callVaultData, invalidateCache]);
 
-  const shareWithUser = async (
+  const shareWithUser = useCallback(async (
     albumId: string,
     targetUserId: string,
     permission: Permission = 'view'
@@ -196,9 +232,9 @@ export function useSharedAlbums() {
       console.error('Error sharing album:', error);
       return false;
     }
-  };
+  }, [callVaultData]);
 
-  const removeUserAccess = async (
+  const removeUserAccess = useCallback(async (
     albumId: string,
     targetUserId: string
   ): Promise<boolean> => {
@@ -212,9 +248,9 @@ export function useSharedAlbums() {
       console.error('Error removing user access:', error);
       return false;
     }
-  };
+  }, [callVaultData]);
 
-  const getAlbumAccess = async (albumId: string): Promise<SharedAlbumAccess[]> => {
+  const getAlbumAccess = useCallback(async (albumId: string): Promise<SharedAlbumAccess[]> => {
     try {
       const result = await callVaultData('get-album-access', { album_id: albumId });
       if (result?.success) {
@@ -225,9 +261,9 @@ export function useSharedAlbums() {
       console.error('Error fetching album access:', error);
       return [];
     }
-  };
+  }, [callVaultData]);
 
-  const addItemToAlbum = async (
+  const addItemToAlbum = useCallback(async (
     albumId: string,
     itemType: 'photo' | 'note' | 'file' | 'link' | 'tiktok',
     itemId: string
@@ -245,9 +281,9 @@ export function useSharedAlbums() {
       console.error('Error adding item to album:', error);
       return false;
     }
-  };
+  }, [userId, callVaultData]);
 
-  const removeItemFromAlbum = async (
+  const removeItemFromAlbum = useCallback(async (
     albumId: string,
     itemType: 'photo' | 'note' | 'file' | 'link' | 'tiktok',
     itemId: string
@@ -263,9 +299,9 @@ export function useSharedAlbums() {
       console.error('Error removing item from album:', error);
       return false;
     }
-  };
+  }, [callVaultData]);
 
-  const getAlbumItems = async (albumId: string): Promise<SharedAlbumItem[]> => {
+  const getAlbumItems = useCallback(async (albumId: string): Promise<SharedAlbumItem[]> => {
     try {
       const result = await callVaultData('get-shared-album-items', { album_id: albumId });
       if (result?.success) {
@@ -276,9 +312,9 @@ export function useSharedAlbums() {
       console.error('Error fetching album items:', error);
       return [];
     }
-  };
+  }, [callVaultData]);
 
-  const togglePin = async (albumId: string): Promise<boolean> => {
+  const togglePin = useCallback(async (albumId: string): Promise<boolean> => {
     try {
       const album = albums.find(a => a.id === albumId);
       if (!album) return false;
@@ -291,19 +327,16 @@ export function useSharedAlbums() {
       });
 
       if (result?.success) {
-        // Update local state and re-sort
         setAlbums(prev => {
           const updated = prev.map(a =>
             a.id === albumId ? { ...a, is_pinned: newPinnedState } : a
           );
-          // Sort: pinned first, then by created_at descending
           return updated.sort((a, b) => {
-            if (a.is_pinned !== b.is_pinned) {
-              return a.is_pinned ? -1 : 1;
-            }
+            if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1;
             return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
           });
         });
+        invalidateCache();
         return true;
       }
       return false;
@@ -311,7 +344,7 @@ export function useSharedAlbums() {
       console.error('Error toggling pin:', error);
       return false;
     }
-  };
+  }, [albums, callVaultData, invalidateCache]);
 
   return {
     albums,
