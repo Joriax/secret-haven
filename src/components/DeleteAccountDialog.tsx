@@ -1,11 +1,9 @@
 import React, { useState, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { 
   AlertTriangle, 
   Trash2, 
   Shield, 
   CheckCircle, 
-  X, 
   Loader2,
   KeyRound,
   Type,
@@ -119,12 +117,7 @@ export const DeleteAccountDialog: React.FC<DeleteAccountDialogProps> = ({ open, 
     switch (step) {
       case 1:
         return (
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            className="space-y-6"
-          >
+          <div className="space-y-6">
             <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/20">
               <div className="flex items-start gap-3">
                 <AlertTriangle className="w-6 h-6 text-destructive flex-shrink-0 mt-0.5" />
@@ -194,17 +187,12 @@ export const DeleteAccountDialog: React.FC<DeleteAccountDialogProps> = ({ open, 
             >
               Weiter zu Schritt 2
             </Button>
-          </motion.div>
+          </div>
         );
 
       case 2:
         return (
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            className="space-y-6"
-          >
+          <div className="space-y-6">
             <div className="space-y-4">
               <h4 className="font-medium text-foreground flex items-center gap-2">
                 <Type className="w-4 h-4 text-primary" />
@@ -254,17 +242,12 @@ export const DeleteAccountDialog: React.FC<DeleteAccountDialogProps> = ({ open, 
                 Weiter zu Schritt 3
               </Button>
             </div>
-          </motion.div>
+          </div>
         );
 
       case 3:
         return (
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            className="space-y-6"
-          >
+          <div className="space-y-6">
             <div className="space-y-4">
               <h4 className="font-medium text-foreground flex items-center gap-2">
                 <KeyRound className="w-4 h-4 text-primary" />
@@ -306,17 +289,12 @@ export const DeleteAccountDialog: React.FC<DeleteAccountDialogProps> = ({ open, 
                 Weiter zu Schritt 4
               </Button>
             </div>
-          </motion.div>
+          </div>
         );
 
       case 4:
         return (
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            className="space-y-6"
-          >
+          <div className="space-y-6">
             <div className="p-4 rounded-xl bg-destructive/20 border border-destructive/30">
               <div className="flex items-start gap-3">
                 <FileWarning className="w-6 h-6 text-destructive flex-shrink-0 mt-0.5" />
@@ -382,7 +360,7 @@ export const DeleteAccountDialog: React.FC<DeleteAccountDialogProps> = ({ open, 
                 )}
               </Button>
             </div>
-          </motion.div>
+          </div>
         );
     }
   };
@@ -413,9 +391,7 @@ export const DeleteAccountDialog: React.FC<DeleteAccountDialogProps> = ({ open, 
           ))}
         </div>
 
-        <AnimatePresence mode="wait">
-          {renderStep()}
-        </AnimatePresence>
+        {renderStep()}
       </DialogContent>
     </Dialog>
   );
