@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Fingerprint, ArrowLeft, Trash2 } from 'lucide-react';
+import { Fingerprint, ArrowLeft, Trash2, Code, Palette, Shield as ShieldIcon, Monitor } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PageHeader } from '@/components/PageHeader';
 import { 
@@ -37,6 +37,9 @@ import { ImportBackup } from '@/components/ImportBackup';
 import { ImportManager } from '@/components/ImportManager';
 import { ScheduledBackups } from '@/components/ScheduledBackups';
 import { DeleteAccountDialog } from '@/components/DeleteAccountDialog';
+import { CustomCSSEditor } from '@/components/CustomCSSEditor';
+import { IconPackSelector } from '@/components/IconPackSelector';
+import { DecoyVaultManager } from '@/components/DecoyVaultManager';
 
 const PIN_LENGTH = 6;
 
@@ -768,6 +771,21 @@ export default function Settings() {
       {/* Theme Customizer */}
       <div className="glass-card p-6">
         <FullThemeCustomizer />
+      </div>
+
+      {/* Icon Pack Selector */}
+      <div className="glass-card p-6">
+        <IconPackSelector />
+      </div>
+
+      {/* Custom CSS Editor */}
+      <div className="glass-card p-6">
+        <CustomCSSEditor />
+      </div>
+
+      {/* Decoy Vault Manager */}
+      <div className="glass-card p-6">
+        <DecoyVaultManager />
       </div>
 
       {/* Backup Manager */}
