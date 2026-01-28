@@ -202,9 +202,16 @@ export default function Login() {
 
       if (invokeError) {
         console.error('Edge function error:', invokeError);
-        const errMsg = (invokeError as any)?.context?.body
-          ? JSON.parse((invokeError as any).context.body)?.error
-          : null;
+        let errMsg: string | null = null;
+        try {
+          const body = (invokeError as any)?.context?.body;
+          if (body) {
+            const parsed = typeof body === 'string' ? JSON.parse(body) : body;
+            errMsg = parsed?.error;
+          }
+        } catch {
+          // ignore parse errors
+        }
         throw new Error(errMsg || 'Verbindungsfehler');
       }
 
@@ -262,9 +269,16 @@ export default function Login() {
 
       if (invokeError) {
         console.error('Edge function error:', invokeError);
-        const errMsg = (invokeError as any)?.context?.body
-          ? JSON.parse((invokeError as any).context.body)?.error
-          : null;
+        let errMsg: string | null = null;
+        try {
+          const body = (invokeError as any)?.context?.body;
+          if (body) {
+            const parsed = typeof body === 'string' ? JSON.parse(body) : body;
+            errMsg = parsed?.error;
+          }
+        } catch {
+          // ignore parse errors
+        }
         throw new Error(errMsg || 'Verbindungsfehler');
       }
 
