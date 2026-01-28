@@ -13,7 +13,8 @@ import {
   Lock,
   Activity,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  PieChart
 } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -22,18 +23,44 @@ import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { format, subDays, eachDayOfInterval, startOfDay } from 'date-fns';
 import { de } from 'date-fns/locale';
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  ChartConfig,
+} from '@/components/ui/chart';
+import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, PieChart as RechartsPie, Pie, Cell } from 'recharts';
 
 interface UsageStat {
   feature: string;
   count: number;
   icon: React.ReactNode;
   color: string;
+  fill: string;
 }
 
 interface DailyActivity {
   date: string;
   count: number;
 }
+
+const chartConfig: ChartConfig = {
+  notes: { label: 'Notizen', color: 'hsl(var(--primary))' },
+  photos: { label: 'Fotos', color: 'hsl(330, 80%, 60%)' },
+  files: { label: 'Dateien', color: 'hsl(210, 80%, 60%)' },
+  links: { label: 'Links', color: 'hsl(30, 80%, 60%)' },
+  tiktoks: { label: 'TikToks', color: 'hsl(280, 80%, 60%)' },
+  secrets: { label: 'Geheimnisse', color: 'hsl(0, 80%, 60%)' },
+};
+
+const PIE_COLORS = [
+  'hsl(var(--primary))',
+  'hsl(330, 80%, 60%)',
+  'hsl(210, 80%, 60%)',
+  'hsl(30, 80%, 60%)',
+  'hsl(280, 80%, 60%)',
+  'hsl(0, 80%, 60%)',
+];
 
 export default function UsageStats() {
   const [stats, setStats] = useState<UsageStat[]>([]);
@@ -48,7 +75,6 @@ export default function UsageStats() {
     setLoading(true);
 
     try {
-      // Fetch counts from all tables
       const [
         notesRes, photosRes, filesRes, linksRes, tiktoksRes, secretsRes,
         logsRes, viewsRes
@@ -73,23 +99,20 @@ export default function UsageStats() {
       const total = notesCount + photosCount + filesCount + linksCount + tiktoksCount + secretsCount;
       setTotalItems(total);
 
-      // Count logins
       const logins = (logsRes.data || []).filter(l => l.event_type === 'login').length;
       setLoginCount(logins);
 
-      // Calculate feature stats
       const featureStats: UsageStat[] = [
-        { feature: 'Notizen', count: notesCount, icon: <FileText className="w-5 h-5" />, color: 'text-blue-400 bg-blue-500/20' },
-        { feature: 'Fotos', count: photosCount, icon: <Image className="w-5 h-5" />, color: 'text-pink-400 bg-pink-500/20' },
-        { feature: 'Dateien', count: filesCount, icon: <FolderOpen className="w-5 h-5" />, color: 'text-yellow-400 bg-yellow-500/20' },
-        { feature: 'Links', count: linksCount, icon: <Link2 className="w-5 h-5" />, color: 'text-green-400 bg-green-500/20' },
-        { feature: 'TikToks', count: tiktoksCount, icon: <Play className="w-5 h-5" />, color: 'text-purple-400 bg-purple-500/20' },
-        { feature: 'Geheimnisse', count: secretsCount, icon: <Lock className="w-5 h-5" />, color: 'text-red-400 bg-red-500/20' },
+        { feature: 'Notizen', count: notesCount, icon: <FileText className="w-5 h-5" />, color: 'text-primary bg-primary/20', fill: PIE_COLORS[0] },
+        { feature: 'Fotos', count: photosCount, icon: <Image className="w-5 h-5" />, color: 'text-pink-400 bg-pink-500/20', fill: PIE_COLORS[1] },
+        { feature: 'Dateien', count: filesCount, icon: <FolderOpen className="w-5 h-5" />, color: 'text-blue-400 bg-blue-500/20', fill: PIE_COLORS[2] },
+        { feature: 'Links', count: linksCount, icon: <Link2 className="w-5 h-5" />, color: 'text-orange-400 bg-orange-500/20', fill: PIE_COLORS[3] },
+        { feature: 'TikToks', count: tiktoksCount, icon: <Play className="w-5 h-5" />, color: 'text-purple-400 bg-purple-500/20', fill: PIE_COLORS[4] },
+        { feature: 'Geheimnisse', count: secretsCount, icon: <Lock className="w-5 h-5" />, color: 'text-red-400 bg-red-500/20', fill: PIE_COLORS[5] },
       ].sort((a, b) => b.count - a.count);
 
       setStats(featureStats);
 
-      // Calculate daily activity for last 30 days
       const last30Days = eachDayOfInterval({
         start: subDays(new Date(), 29),
         end: new Date()
@@ -131,8 +154,8 @@ export default function UsageStats() {
     fetchStats();
   }, [fetchStats]);
 
-  const maxDaily = Math.max(...dailyActivity.map(d => d.count), 1);
   const maxFeature = Math.max(...stats.map(s => s.count), 1);
+  const pieData = stats.filter(s => s.count > 0).map(s => ({ name: s.feature, value: s.count, fill: s.fill }));
 
   return (
     <motion.div
@@ -200,45 +223,90 @@ export default function UsageStats() {
             </div>
           </div>
 
-          {/* Feature Usage */}
-          <div className="glass-card p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <BarChart3 className="w-5 h-5 text-primary" />
-                <h2 className="text-lg font-semibold text-foreground">Feature-Nutzung</h2>
+          {/* Charts Row */}
+          <div className="grid md:grid-cols-2 gap-6">
+            {/* Feature Usage Bar Chart */}
+            <div className="glass-card p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <BarChart3 className="w-5 h-5 text-primary" />
+                  <h2 className="text-lg font-semibold text-foreground">Feature-Nutzung</h2>
+                </div>
+                <Button variant="ghost" size="icon" onClick={fetchStats}>
+                  <RefreshCw className="w-4 h-4" />
+                </Button>
               </div>
-              <Button variant="ghost" size="icon" onClick={fetchStats}>
-                <RefreshCw className="w-4 h-4" />
-              </Button>
+
+              <div className="space-y-4">
+                {stats.map((stat, index) => (
+                  <motion.div
+                    key={stat.feature}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    className="flex items-center gap-4"
+                  >
+                    <div className={cn(
+                      "w-10 h-10 rounded-lg flex items-center justify-center shrink-0",
+                      stat.color
+                    )}>
+                      {stat.icon}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-medium text-foreground">{stat.feature}</span>
+                        <span className="text-sm text-muted-foreground">{stat.count}</span>
+                      </div>
+                      <Progress 
+                        value={(stat.count / maxFeature) * 100} 
+                        className="h-2"
+                      />
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
             </div>
 
-            <div className="space-y-4">
-              {stats.map((stat, index) => (
-                <motion.div
-                  key={stat.feature}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                  className="flex items-center gap-4"
-                >
-                  <div className={cn(
-                    "w-10 h-10 rounded-lg flex items-center justify-center shrink-0",
-                    stat.color
-                  )}>
-                    {stat.icon}
+            {/* Pie Chart */}
+            <div className="glass-card p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <PieChart className="w-5 h-5 text-primary" />
+                <h2 className="text-lg font-semibold text-foreground">Verteilung</h2>
+              </div>
+
+              {pieData.length > 0 ? (
+                <ChartContainer config={chartConfig} className="h-64">
+                  <RechartsPie>
+                    <Pie
+                      data={pieData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={90}
+                      paddingAngle={2}
+                      dataKey="value"
+                    >
+                      {pieData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                      ))}
+                    </Pie>
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                  </RechartsPie>
+                </ChartContainer>
+              ) : (
+                <div className="h-64 flex items-center justify-center text-muted-foreground">
+                  Keine Daten vorhanden
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-3 mt-4 justify-center">
+                {pieData.map((item) => (
+                  <div key={item.name} className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.fill }} />
+                    <span className="text-xs text-muted-foreground">{item.name}</span>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-medium text-foreground">{stat.feature}</span>
-                      <span className="text-sm text-muted-foreground">{stat.count}</span>
-                    </div>
-                    <Progress 
-                      value={(stat.count / maxFeature) * 100} 
-                      className="h-2"
-                    />
-                  </div>
-                </motion.div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
 
@@ -246,33 +314,31 @@ export default function UsageStats() {
           <div className="glass-card p-6">
             <div className="flex items-center gap-3 mb-6">
               <Calendar className="w-5 h-5 text-primary" />
-              <h2 className="text-lg font-semibold text-foreground">Tägliche Aktivität</h2>
+              <h2 className="text-lg font-semibold text-foreground">Tägliche Aktivität (30 Tage)</h2>
             </div>
 
-            <div className="h-48 flex items-end gap-1">
-              {dailyActivity.map((day, index) => (
-                <div
-                  key={day.date}
-                  className="flex-1 flex flex-col items-center gap-1"
-                  title={`${day.date}: ${day.count} Aktionen`}
-                >
-                  <motion.div
-                    initial={{ height: 0 }}
-                    animate={{ height: `${Math.max((day.count / maxDaily) * 100, 4)}%` }}
-                    transition={{ delay: index * 0.01, duration: 0.3 }}
-                    className={cn(
-                      "w-full rounded-t-sm transition-colors cursor-pointer hover:opacity-80",
-                      day.count > 0 ? "bg-primary" : "bg-muted"
-                    )}
-                  />
-                  {index % 5 === 0 && (
-                    <span className="text-[9px] text-muted-foreground whitespace-nowrap">
-                      {day.date}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
+            <ChartContainer config={chartConfig} className="h-48">
+              <BarChart data={dailyActivity}>
+                <XAxis 
+                  dataKey="date" 
+                  tick={{ fontSize: 10 }} 
+                  interval={4}
+                  stroke="hsl(var(--muted-foreground))"
+                />
+                <YAxis 
+                  tick={{ fontSize: 10 }} 
+                  width={30}
+                  stroke="hsl(var(--muted-foreground))"
+                />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <Bar 
+                  dataKey="count" 
+                  fill="hsl(var(--primary))" 
+                  radius={[4, 4, 0, 0]}
+                  name="Aktionen"
+                />
+              </BarChart>
+            </ChartContainer>
           </div>
         </>
       )}
