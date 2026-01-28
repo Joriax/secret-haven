@@ -3,3 +3,8 @@ export { NoteToolbar } from './NoteToolbar';
 export { MarkdownRenderer } from './MarkdownRenderer';
 export { NoteSecureModal } from './NoteSecureModal';
 export { NoteVersionsModal } from './NoteVersionsModal';
+export { RichTextEditor } from './RichTextEditor';
+export { WikiLinkSuggestions } from './WikiLinkSuggestions';
+export { BacklinksPanel } from './BacklinksPanel';
+export { EnhancedVersionsModal } from './EnhancedVersionsModal';
+export { NestedChecklist, parseChecklistFromMarkdown, checklistToMarkdown, calculateProgress } from './NestedChecklist';
