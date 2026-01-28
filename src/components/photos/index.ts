@@ -5,3 +5,4 @@ export { PhotoContextMenu } from './PhotoContextMenu';
 export { ImageEditor } from './ImageEditor';
 export { VideoEditor } from './VideoEditor';
 export { CollageCreator } from './CollageCreator';
+export { PhotoTimeline } from './PhotoTimeline';
