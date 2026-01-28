@@ -57,13 +57,15 @@ const secondaryNavItems = [
   { icon: HardDrive, label: 'Speicheranalyse', path: '/storage-analysis' },
 ];
 
-import { Activity, BarChart3, Cloud, Calendar } from 'lucide-react';
+import { Activity, BarChart3, Cloud, Calendar, Lightbulb, Bell } from 'lucide-react';
+import { NotificationCenter } from '@/components/NotificationCenter';
 
 const analyticsNavItems = [
   { icon: Activity, label: 'Aktivität', path: '/activity' },
   { icon: BarChart3, label: 'Statistiken', path: '/usage-stats' },
   { icon: Cloud, label: 'Tag-Cloud', path: '/tag-cloud' },
   { icon: Calendar, label: 'Kalender', path: '/calendar' },
+  { icon: Lightbulb, label: 'Insights', path: '/content-insights' },
 ];
 
 import { Flame, FileSearch, Eye as EyeIcon } from 'lucide-react';
@@ -273,10 +275,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onSearchOpen
 
         {/* Footer */}
         <div className="p-4 border-t border-border space-y-2">
-          {/* Sync Status */}
+          {/* Notifications & Sync Status */}
           <div className="flex items-center justify-between px-3 py-2">
-            <span className="text-xs text-muted-foreground">Sync-Status</span>
-            <SyncStatusIndicator />
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Sync-Status</span>
+              <SyncStatusIndicator />
+            </div>
+            <NotificationCenter />
           </div>
           
           <NavLink
