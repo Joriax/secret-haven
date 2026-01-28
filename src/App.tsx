@@ -48,6 +48,9 @@ const UsageStats = lazy(() => import("./pages/UsageStats"));
 const TagCloud = lazy(() => import("./pages/TagCloud"));
 const CalendarView = lazy(() => import("./pages/CalendarView"));
 const NoteGraph = lazy(() => import("./pages/NoteGraph"));
+const SelfDestructingNotes = lazy(() => import("./pages/SelfDestructingNotes"));
+const SessionManagement = lazy(() => import("./pages/SessionManagement"));
+const PrivacyReport = lazy(() => import("./pages/PrivacyReport"));
 const Memories = lazy(() => import("./pages/Memories"));
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -196,6 +199,21 @@ const App = () => (
                       <Route path="/memories" element={
                         <ErrorBoundary>
                           <Memories />
+                        </ErrorBoundary>
+                      } />
+                      <Route path="/self-destructing-notes" element={
+                        <ErrorBoundary>
+                          <SelfDestructingNotes />
+                        </ErrorBoundary>
+                      } />
+                      <Route path="/sessions" element={
+                        <ErrorBoundary>
+                          <SessionManagement />
+                        </ErrorBoundary>
+                      } />
+                      <Route path="/privacy-report" element={
+                        <ErrorBoundary>
+                          <PrivacyReport />
                         </ErrorBoundary>
                       } />
                       <Route path="/settings" element={
