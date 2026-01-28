@@ -68,7 +68,7 @@ const analyticsNavItems = [
   { icon: Lightbulb, label: 'Insights', path: '/content-insights' },
 ];
 
-import { Flame, FileSearch, Eye as EyeIcon, Monitor } from 'lucide-react';
+import { Flame, FileSearch, Eye as EyeIcon, Monitor, Database } from 'lucide-react';
 
 const securityNavItems = [
   { icon: Lock, label: 'Geheimer Safe', path: '/secret-texts' },
@@ -76,6 +76,7 @@ const securityNavItems = [
   { icon: Shield, label: 'Sicherheit', path: '/security-logs' },
   { icon: Monitor, label: 'Sessions', path: '/sessions' },
   { icon: EyeIcon, label: 'Privacy Report', path: '/privacy-report' },
+  { icon: Database, label: 'DB Wartung', path: '/database-maintenance' },
   { icon: Trash2, label: 'Papierkorb', path: '/trash' },
 ];
 
