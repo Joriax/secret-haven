@@ -20,7 +20,8 @@ import {
   Folder,
   Share2,
   Scan,
-  Unlock
+  Unlock,
+  Printer
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTags } from '@/hooks/useTags';
@@ -35,6 +36,7 @@ import { NoteFolderSidebar } from '@/components/NoteFolderSidebar';
 import { NoteAttachmentsPanel } from '@/components/NoteAttachmentsPanel';
 import { ShareToAlbumDialog } from '@/components/ShareToAlbumDialog';
 import { OCRScanner } from '@/components/OCRScanner';
+import { NotePrintDialog } from '@/components/NotePrintDialog';
 import { NoteToolbar, MarkdownRenderer, NoteSecureModal, NoteVersionsModal } from '@/components/notes';
 import {
   DropdownMenu,
@@ -98,6 +100,7 @@ export default function Notes() {
   const [showVersions, setShowVersions] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; note: Note | null }>({ isOpen: false, note: null });
   const [shareToAlbum, setShareToAlbum] = useState<{ isOpen: boolean; note: Note | null }>({ isOpen: false, note: null });
+  const [showPrintDialog, setShowPrintDialog] = useState(false);
   const [autoSaveTimeout, setAutoSaveTimeout] = useState<NodeJS.Timeout | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
