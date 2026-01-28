@@ -18,10 +18,20 @@ import {
   Tag,
   Folder,
   Share2,
-  Pencil
+  Pencil,
+  MoreVertical,
+  Image as ImageIcon,
+  Film
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MediaItem } from './PhotoGridItem';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface PhotoLightboxProps {
   items: MediaItem[];
@@ -35,6 +45,8 @@ interface PhotoLightboxProps {
   onMoveToAlbum: (item: MediaItem) => void;
   onManageTags: (itemId: string) => void;
   onShare: (item: MediaItem) => void;
+  onEditImage?: (item: MediaItem) => void;
+  onEditVideo?: (item: MediaItem) => void;
   isSlideshow?: boolean;
   onToggleSlideshow?: () => void;
   slideshowInterval?: number;
@@ -53,6 +65,8 @@ export function PhotoLightbox({
   onMoveToAlbum,
   onManageTags,
   onShare,
+  onEditImage,
+  onEditVideo,
   isSlideshow = false,
   onToggleSlideshow,
   slideshowInterval = 3000,
@@ -294,42 +308,67 @@ export function PhotoLightbox({
             </button>
           )}
 
+          {/* Favorite button - always visible */}
           <button
             onClick={() => onToggleFavorite(currentItem)}
             className="w-10 h-10 rounded-full bg-black/30 flex items-center justify-center hover:bg-black/50 transition-colors"
           >
             <Heart className={cn("w-5 h-5", currentItem.is_favorite ? "text-red-500" : "text-white")} fill={currentItem.is_favorite ? "currentColor" : "none"} />
           </button>
-          <button
-            onClick={() => onDownload(currentItem)}
-            className="w-10 h-10 rounded-full bg-black/30 flex items-center justify-center hover:bg-black/50 transition-colors"
-          >
-            <Download className="w-5 h-5 text-white" />
-          </button>
-          <button
-            onClick={() => onManageTags(currentItem.id)}
-            className="w-10 h-10 rounded-full bg-black/30 flex items-center justify-center hover:bg-black/50 transition-colors"
-          >
-            <Tag className="w-5 h-5 text-white" />
-          </button>
-          <button
-            onClick={() => onMoveToAlbum(currentItem)}
-            className="w-10 h-10 rounded-full bg-black/30 flex items-center justify-center hover:bg-black/50 transition-colors"
-          >
-            <Folder className="w-5 h-5 text-white" />
-          </button>
-          <button
-            onClick={() => onShare(currentItem)}
-            className="w-10 h-10 rounded-full bg-black/30 flex items-center justify-center hover:bg-black/50 transition-colors"
-          >
-            <Share2 className="w-5 h-5 text-white" />
-          </button>
-          <button
-            onClick={() => onDelete(currentItem)}
-            className="w-10 h-10 rounded-full bg-black/30 flex items-center justify-center hover:bg-red-500/50 transition-colors"
-          >
-            <Trash2 className="w-5 h-5 text-white" />
-          </button>
+
+          {/* Dropdown Menu with all other actions */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="w-10 h-10 rounded-full bg-black/30 flex items-center justify-center hover:bg-black/50 transition-colors">
+                <MoreVertical className="w-5 h-5 text-white" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48 bg-popover border-border z-[60]">
+              {/* Edit options */}
+              {currentItem.type === 'photo' && onEditImage && (
+                <DropdownMenuItem onClick={() => onEditImage(currentItem)}>
+                  <ImageIcon className="w-4 h-4 mr-2" />
+                  Bild bearbeiten
+                </DropdownMenuItem>
+              )}
+              {currentItem.type === 'video' && onEditVideo && (
+                <DropdownMenuItem onClick={() => onEditVideo(currentItem)}>
+                  <Film className="w-4 h-4 mr-2" />
+                  Video bearbeiten
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem onClick={() => onRename(currentItem)}>
+                <Pencil className="w-4 h-4 mr-2" />
+                Umbenennen
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => onDownload(currentItem)}>
+                <Download className="w-4 h-4 mr-2" />
+                Herunterladen
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onManageTags(currentItem.id)}>
+                <Tag className="w-4 h-4 mr-2" />
+                Tags verwalten
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => onMoveToAlbum(currentItem)}>
+                <Folder className="w-4 h-4 mr-2" />
+                Zu Album hinzufügen
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onShare(currentItem)}>
+                <Share2 className="w-4 h-4 mr-2" />
+                Teilen
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem 
+                onClick={() => onDelete(currentItem)}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Löschen
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
