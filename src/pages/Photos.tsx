@@ -203,8 +203,14 @@ export default function Photos() {
   const [albumDeleteConfirm, setAlbumDeleteConfirm] = useState<{ isOpen: boolean; album: Album | null }>({ isOpen: false, album: null });
   const [renameDialog, setRenameDialog] = useState<{ isOpen: boolean; item: MediaItem | null }>({ isOpen: false, item: null });
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const [videoVolume, setVideoVolume] = useState(1);
+  const [isMuted, setIsMuted] = useState(() => {
+    const saved = localStorage.getItem('photos-video-muted');
+    return saved ? JSON.parse(saved) : false;
+  });
+  const [videoVolume, setVideoVolume] = useState(() => {
+    const saved = localStorage.getItem('photos-video-volume');
+    return saved ? parseFloat(saved) : 1;
+  });
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const [showBulkTagManager, setShowBulkTagManager] = useState(false);
@@ -350,6 +356,15 @@ export default function Photos() {
       supabase.removeChannel(channel);
     };
   }, [userId, fetchData]);
+
+  // Save volume settings to localStorage
+  useEffect(() => {
+    localStorage.setItem('photos-video-volume', videoVolume.toString());
+  }, [videoVolume]);
+
+  useEffect(() => {
+    localStorage.setItem('photos-video-muted', JSON.stringify(isMuted));
+  }, [isMuted]);
 
   useEffect(() => {
     if (location.state?.action === 'upload-photo') {
