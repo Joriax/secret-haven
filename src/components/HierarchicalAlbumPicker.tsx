@@ -295,7 +295,7 @@ export const HierarchicalAlbumPicker = memo(
         </div>
 
         {/* Album List */}
-        <ScrollArea className="max-h-[50vh]">
+        <ScrollArea className="h-[50vh] max-h-[400px]">
           <div className="p-2 space-y-1">
             {/* No Album Option */}
             {showNoAlbumOption && (
