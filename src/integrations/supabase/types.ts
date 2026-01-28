@@ -233,6 +233,44 @@ export type Database = {
           },
         ]
       }
+      file_versions: {
+        Row: {
+          created_at: string
+          file_id: string | null
+          filename: string
+          id: string
+          size: number
+          user_id: string
+          version_number: number
+        }
+        Insert: {
+          created_at?: string
+          file_id?: string | null
+          filename: string
+          id?: string
+          size: number
+          user_id: string
+          version_number: number
+        }
+        Update: {
+          created_at?: string
+          file_id?: string | null
+          filename?: string
+          id?: string
+          size?: number
+          user_id?: string
+          version_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "file_versions_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       files: {
         Row: {
           album_id: string | null
@@ -450,6 +488,57 @@ export type Database = {
           },
         ]
       }
+      note_comments: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          is_resolved: boolean
+          note_id: string | null
+          parent_id: string | null
+          resolved_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          is_resolved?: boolean
+          note_id?: string | null
+          parent_id?: string | null
+          resolved_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          is_resolved?: boolean
+          note_id?: string | null
+          parent_id?: string | null
+          resolved_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "note_comments_note_id_fkey"
+            columns: ["note_id"]
+            isOneToOne: false
+            referencedRelation: "notes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "note_comments_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "note_comments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       note_folders: {
         Row: {
           color: string | null
@@ -484,6 +573,56 @@ export type Database = {
             columns: ["parent_id"]
             isOneToOne: false
             referencedRelation: "note_folders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      note_reminders: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          id: string
+          is_completed: boolean
+          is_recurring: boolean
+          note_id: string | null
+          recurrence_type: string | null
+          remind_at: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          is_completed?: boolean
+          is_recurring?: boolean
+          note_id?: string | null
+          recurrence_type?: string | null
+          remind_at: string
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          is_completed?: boolean
+          is_recurring?: boolean
+          note_id?: string | null
+          recurrence_type?: string | null
+          remind_at?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "note_reminders_note_id_fkey"
+            columns: ["note_id"]
+            isOneToOne: false
+            referencedRelation: "notes"
             referencedColumns: ["id"]
           },
         ]
@@ -629,6 +768,42 @@ export type Database = {
           },
         ]
       }
+      notifications: {
+        Row: {
+          action_url: string | null
+          created_at: string
+          id: string
+          is_read: boolean
+          message: string | null
+          metadata: Json | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          action_url?: string | null
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message?: string | null
+          metadata?: Json | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          action_url?: string | null
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message?: string | null
+          metadata?: Json | null
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       photos: {
         Row: {
           album_id: string | null
@@ -765,6 +940,45 @@ export type Database = {
           region?: string | null
           user_agent?: string | null
           user_id?: string
+        }
+        Relationships: []
+      }
+      self_destructing_notes: {
+        Row: {
+          content: string | null
+          created_at: string
+          destruct_at: string
+          encrypted_content: string | null
+          id: string
+          is_encrypted: boolean
+          max_views: number | null
+          title: string
+          user_id: string
+          view_count: number
+        }
+        Insert: {
+          content?: string | null
+          created_at?: string
+          destruct_at: string
+          encrypted_content?: string | null
+          id?: string
+          is_encrypted?: boolean
+          max_views?: number | null
+          title?: string
+          user_id: string
+          view_count?: number
+        }
+        Update: {
+          content?: string | null
+          created_at?: string
+          destruct_at?: string
+          encrypted_content?: string | null
+          id?: string
+          is_encrypted?: boolean
+          max_views?: number | null
+          title?: string
+          user_id?: string
+          view_count?: number
         }
         Relationships: []
       }
@@ -1105,6 +1319,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_preferences: {
+        Row: {
+          created_at: string
+          custom_css: string | null
+          dashboard_layout: Json | null
+          density: string | null
+          font_family: string | null
+          font_size: string | null
+          haptics_enabled: boolean | null
+          icon_pack: string | null
+          id: string
+          screenshot_protection: boolean | null
+          sync_settings: Json | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          custom_css?: string | null
+          dashboard_layout?: Json | null
+          density?: string | null
+          font_family?: string | null
+          font_size?: string | null
+          haptics_enabled?: boolean | null
+          icon_pack?: string | null
+          id?: string
+          screenshot_protection?: boolean | null
+          sync_settings?: Json | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          custom_css?: string | null
+          dashboard_layout?: Json | null
+          density?: string | null
+          font_family?: string | null
+          font_size?: string | null
+          haptics_enabled?: boolean | null
+          icon_pack?: string | null
+          id?: string
+          screenshot_protection?: boolean | null
+          sync_settings?: Json | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       user_roles: {
         Row: {
