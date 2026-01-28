@@ -162,41 +162,8 @@ export function BackupManager() {
     fetchBackupData();
   }, [fetchBackupData]);
 
-  // Auto-backup check
-  useEffect(() => {
-    const checkAutoBackup = async () => {
-      if (!userId || !backupSettings.auto_backup_enabled || isExporting) return;
-      
-      const lastBackup = backupSettings.last_auto_backup 
-        ? new Date(backupSettings.last_auto_backup) 
-        : null;
-      const now = new Date();
-      
-      let shouldBackup = false;
-      
-      if (!lastBackup) {
-        shouldBackup = true;
-      } else {
-        const diffMs = now.getTime() - lastBackup.getTime();
-        const diffDays = diffMs / (1000 * 60 * 60 * 24);
-        
-        switch (backupSettings.backup_frequency) {
-          case 'daily': shouldBackup = diffDays >= 1; break;
-          case 'weekly': shouldBackup = diffDays >= 7; break;
-          case 'monthly': shouldBackup = diffDays >= 30; break;
-        }
-      }
-      
-      if (shouldBackup) {
-        console.log('Auto-backup triggered');
-        await handleExport(true);
-      }
-    };
-    
-    checkAutoBackup();
-    const interval = setInterval(checkAutoBackup, 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [userId, backupSettings.auto_backup_enabled, backupSettings.backup_frequency, backupSettings.last_auto_backup, isExporting]);
+  // Auto-backup is now only triggered manually via the button, not automatically on page load
+  // Users must explicitly click "Backup erstellen" to start an export
 
   // Update backup settings
   const updateBackupSettings = async (updates: Partial<BackupSettings>) => {
