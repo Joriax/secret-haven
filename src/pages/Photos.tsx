@@ -203,7 +203,7 @@ export default function Photos() {
   const [albumDeleteConfirm, setAlbumDeleteConfirm] = useState<{ isOpen: boolean; album: Album | null }>({ isOpen: false, album: null });
   const [renameDialog, setRenameDialog] = useState<{ isOpen: boolean; item: MediaItem | null }>({ isOpen: false, item: null });
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
-  const [isMuted, setIsMuted] = useState(true);
+  const [isMuted, setIsMuted] = useState(false);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const [showBulkTagManager, setShowBulkTagManager] = useState(false);
@@ -2253,7 +2253,7 @@ export default function Photos() {
               </div>
               
               <div className="flex items-center gap-1 flex-wrap justify-end">
-                {/* Zoom controls - only for photos */}
+                {/* Zoom controls - only for photos (desktop only) */}
                 {currentLightboxItem.type === 'photo' && (
                   <>
                     <button
@@ -2294,6 +2294,7 @@ export default function Photos() {
                   </>
                 )}
                 
+                {/* Favorite Button - always visible */}
                 <button
                   onClick={() => toggleFavorite(currentLightboxItem)}
                   className="p-2 hover:bg-white/10 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
@@ -2303,50 +2304,64 @@ export default function Photos() {
                     currentLightboxItem.is_favorite ? "text-red-500 fill-red-500" : "text-white"
                   )} />
                 </button>
-                <button
-                  onClick={() => downloadMedia(currentLightboxItem)}
-                  className="p-2 hover:bg-white/10 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-                >
-                  <Download className="w-5 h-5 text-white" />
-                </button>
                 
-                {/* QR Code Button */}
-                {currentLightboxItem.url && (
-                  <QRCodeGenerator
-                    url={currentLightboxItem.url}
-                    title={`QR für ${currentLightboxItem.filename.replace(/^\d+-/, '')}`}
-                    trigger={
-                      <button className="p-2 hover:bg-white/10 rounded-full transition-colors hidden sm:flex min-h-[44px] min-w-[44px] items-center justify-center">
-                        <QrCode className="w-5 h-5 text-white" />
-                      </button>
-                    }
-                  />
-                )}
-                
-                {/* Temporary Share Link */}
-                <TemporaryShareLink
-                  itemId={currentLightboxItem.id}
-                  itemType="photo"
-                  itemName={currentLightboxItem.filename.replace(/^\d+-/, '')}
-                  trigger={
-                    <button className="p-2 hover:bg-white/10 rounded-full transition-colors hidden sm:flex min-h-[44px] min-w-[44px] items-center justify-center">
-                      <Clock className="w-5 h-5 text-white" />
-                    </button>
-                  }
-                />
-                
-                <button
-                  onClick={() => setRenameDialog({ isOpen: true, item: currentLightboxItem })}
-                  className="p-2 hover:bg-white/10 rounded-full transition-colors hidden sm:flex min-h-[44px] min-w-[44px] items-center justify-center"
-                >
-                  <Pencil className="w-5 h-5 text-white" />
-                </button>
+                {/* Delete Button - always visible */}
                 <button
                   onClick={() => setDeleteConfirm({ isOpen: true, item: currentLightboxItem })}
                   className="p-2 hover:bg-red-500/20 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center flex-shrink-0"
                 >
                   <Trash2 className="w-5 h-5 text-red-400" />
                 </button>
+                
+                {/* More Actions Dropdown */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="p-2 hover:bg-white/10 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center">
+                      <MoreVertical className="w-5 h-5 text-white" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56 z-[60] bg-popover">
+                    <DropdownMenuItem onClick={() => downloadMedia(currentLightboxItem)}>
+                      <Download className="w-4 h-4 mr-2" />
+                      Herunterladen
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setRenameDialog({ isOpen: true, item: currentLightboxItem })}>
+                      <Pencil className="w-4 h-4 mr-2" />
+                      Umbenennen
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setSinglePhotoAlbumPicker(currentLightboxItem)}>
+                      <Folder className="w-4 h-4 mr-2" />
+                      Zu Album hinzufügen
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setShowTagSelector(currentLightboxItem.id)}>
+                      <Tag className="w-4 h-4 mr-2" />
+                      Tags verwalten
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => setShareItem(currentLightboxItem)}>
+                      <Clock className="w-4 h-4 mr-2" />
+                      Temporär teilen
+                    </DropdownMenuItem>
+                    {currentLightboxItem.url && (
+                      <DropdownMenuItem asChild>
+                        <QRCodeGenerator
+                          url={currentLightboxItem.url}
+                          title={`QR für ${currentLightboxItem.filename.replace(/^\d+-/, '')}`}
+                          trigger={
+                            <button className="w-full flex items-center px-2 py-1.5 text-sm cursor-pointer">
+                              <QrCode className="w-4 h-4 mr-2" />
+                              QR-Code anzeigen
+                            </button>
+                          }
+                        />
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem onClick={() => setShareToAlbum({ isOpen: true, photo: currentLightboxItem })}>
+                      <Share2 className="w-4 h-4 mr-2" />
+                      Zu geteiltem Album
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
 
@@ -2828,6 +2843,20 @@ export default function Photos() {
         itemType="photo"
         contentType="photos"
       />
+
+      {/* Temporary Share Dialog */}
+      {shareItem && (
+        <TemporaryShareLink
+          itemId={shareItem.id}
+          itemType="photo"
+          itemName={shareItem.filename.replace(/^\d+-/, '')}
+          trigger={<span />}
+          defaultOpen={true}
+          onOpenChange={(open) => {
+            if (!open) setShareItem(null);
+          }}
+        />
+      )}
     </div>
   );
 }

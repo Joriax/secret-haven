@@ -36,6 +36,8 @@ interface TemporaryShareLinkProps {
   itemType: 'photo' | 'file' | 'album' | 'note' | 'link';
   itemName: string;
   trigger?: React.ReactNode;
+  defaultOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 const EXPIRY_OPTIONS = [
@@ -51,9 +53,11 @@ export const TemporaryShareLink: React.FC<TemporaryShareLinkProps> = ({
   itemId,
   itemType,
   itemName,
-  trigger
+  trigger,
+  defaultOpen = false,
+  onOpenChange
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(defaultOpen);
   const [shareLink, setShareLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   
@@ -115,7 +119,7 @@ export const TemporaryShareLink: React.FC<TemporaryShareLinkProps> = ({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => { setIsOpen(open); if (!open) handleReset(); }}>
+    <Dialog open={isOpen} onOpenChange={(open) => { setIsOpen(open); onOpenChange?.(open); if (!open) handleReset(); }}>
       <DialogTrigger asChild>
         {trigger || (
           <Button variant="outline" size="sm" className="gap-2">
