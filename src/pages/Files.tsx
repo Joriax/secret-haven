@@ -1096,11 +1096,11 @@ export default function Files() {
         )}
       </AnimatePresence>
 
-      {/* Album Picker for bulk move */}
+      {/* Album Picker for bulk move - Hierarchical */}
       <AnimatePresence>
-        {/* Album Picker for bulk move - Hierarchical */}
         {showAlbumPicker && (
           <HierarchicalAlbumPicker
+            key="bulk-album-picker"
             albums={albums}
             selectedAlbumId={null}
             onSelect={(albumId) => {
@@ -1110,10 +1110,13 @@ export default function Files() {
             title={`${selectedItems.size} Dateien zu Album hinzufügen`}
           />
         )}
+      </AnimatePresence>
 
-        {/* Album Picker for single file - Hierarchical */}
+      {/* Album Picker for single file - Hierarchical */}
+      <AnimatePresence>
         {singleFileAlbumPicker && (
           <HierarchicalAlbumPicker
+            key="single-file-album-picker"
             albums={albums}
             selectedAlbumId={singleFileAlbumPicker.album_id}
             onSelect={(albumId) => {

@@ -2752,6 +2752,7 @@ export default function Photos() {
       <AnimatePresence>
         {showAlbumPicker && (
           <HierarchicalAlbumPicker
+            key="bulk-album-picker"
             albums={albums}
             selectedAlbumId={null}
             onSelect={(albumId) => {
@@ -2761,10 +2762,13 @@ export default function Photos() {
             title={`${selectedItems.size} Elemente zu Album hinzufügen`}
           />
         )}
+      </AnimatePresence>
 
-        {/* Single Photo Album Picker - Hierarchical */}
+      {/* Single Photo Album Picker - Hierarchical */}
+      <AnimatePresence>
         {singlePhotoAlbumPicker && (
           <HierarchicalAlbumPicker
+            key="single-photo-album-picker"
             albums={albums}
             selectedAlbumId={singlePhotoAlbumPicker.album_id}
             onSelect={(albumId) => {
