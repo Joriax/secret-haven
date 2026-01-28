@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
 import { 
@@ -20,6 +20,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useViewHistory } from '@/hooks/useViewHistory';
 import { useDashboardWidgets, DashboardWidget } from '@/hooks/useDashboardWidgets';
+import { useDashboardStats } from '@/hooks/useDashboardStats';
 import { cn, formatFileSize } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CreateNewDialog } from '@/components/CreateNewDialog';
@@ -27,32 +28,6 @@ import { Button } from '@/components/ui/button';
 import { DraggableWidget } from '@/components/dashboard/DraggableWidget';
 import { WidgetCustomizer } from '@/components/dashboard/WidgetCustomizer';
 import { QuickCaptureWidget } from '@/components/dashboard/QuickCaptureWidget';
-
-interface Stats {
-  notes: number;
-  photos: number;
-  files: number;
-  favorites: number;
-  secureNotes: number;
-  secretTexts: number;
-  totalFilesSize: number;
-  totalPhotosSize: number;
-  totalAttachmentsSize: number;
-  totalStorageSize: number;
-  trashedFilesSize: number;
-  trashedPhotosSize: number;
-  trashedItems: number;
-  tiktokVideos: number;
-  links: number;
-}
-
-interface RecentItem {
-  id: string;
-  type: 'note' | 'photo' | 'file' | 'secret_text';
-  title: string;
-  date: string;
-  isFavorite?: boolean;
-}
 
 interface ViewedItem {
   id: string;
@@ -75,21 +50,15 @@ const item = {
 };
 
 export default function Dashboard() {
-  const [stats, setStats] = useState<Stats>({ 
-    notes: 0, photos: 0, files: 0, favorites: 0,
-    secureNotes: 0, secretTexts: 0,
-    totalFilesSize: 0, totalPhotosSize: 0, totalAttachmentsSize: 0, totalStorageSize: 0,
-    trashedFilesSize: 0, trashedPhotosSize: 0,
-    trashedItems: 0, tiktokVideos: 0, links: 0
-  });
-  const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
   const [viewedItems, setViewedItems] = useState<ViewedItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const { userId, isDecoyMode, supabaseClient: supabase } = useAuth();
   const { history } = useViewHistory();
   const navigate = useNavigate();
+  
+  // Use optimized stats hook
+  const { stats, recentItems, isLoading } = useDashboardStats();
   
   const {
     widgets,
@@ -165,198 +134,9 @@ export default function Dashboard() {
     fetchViewedItemDetails();
   }, [fetchViewedItemDetails]);
 
-  const fetchDashboardData = useCallback(async () => {
-    if (!userId) return;
+  // Stats and realtime handled by useDashboardStats hook
 
-    try {
-      if (isDecoyMode) {
-        setStats({ 
-          notes: 0, photos: 0, files: 0, favorites: 0,
-          secureNotes: 0, secretTexts: 0,
-          totalFilesSize: 0, totalPhotosSize: 0, totalAttachmentsSize: 0, totalStorageSize: 0,
-          trashedFilesSize: 0, trashedPhotosSize: 0,
-          trashedItems: 0, tiktokVideos: 0, links: 0
-        });
-        setRecentItems([]);
-        setIsLoading(false);
-        return;
-      }
-
-      const [
-        notesRes, 
-        photosRes, 
-        filesRes, 
-        favNotesRes,
-        favPhotosRes,
-        favFilesRes,
-        secureNotesRes,
-        secretTextsRes,
-        trashedNotesRes,
-        trashedPhotosRes,
-        trashedFilesRes,
-        tiktokRes,
-        trashedTiktokRes,
-        linksRes,
-        recentNotesRes, 
-        recentPhotosRes, 
-        recentFilesRes,
-      ] = await Promise.all([
-        supabase.from('notes').select('id', { count: 'exact', head: true }).eq('user_id', userId).is('deleted_at', null),
-        supabase.from('photos').select('id', { count: 'exact', head: true }).eq('user_id', userId).is('deleted_at', null),
-        supabase.from('files').select('id', { count: 'exact', head: true }).eq('user_id', userId).is('deleted_at', null),
-        supabase.from('notes').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('is_favorite', true).is('deleted_at', null),
-        supabase.from('photos').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('is_favorite', true).is('deleted_at', null),
-        supabase.from('files').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('is_favorite', true).is('deleted_at', null),
-        supabase.from('notes').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('is_secure', true).is('deleted_at', null),
-        supabase.from('secret_texts').select('id', { count: 'exact', head: true }).eq('user_id', userId),
-        supabase.from('notes').select('id', { count: 'exact', head: true }).eq('user_id', userId).not('deleted_at', 'is', null),
-        supabase.from('photos').select('id', { count: 'exact', head: true }).eq('user_id', userId).not('deleted_at', 'is', null),
-        supabase.from('files').select('id', { count: 'exact', head: true }).eq('user_id', userId).not('deleted_at', 'is', null),
-        supabase.from('tiktok_videos').select('id', { count: 'exact', head: true }).eq('user_id', userId).is('deleted_at', null),
-        supabase.from('tiktok_videos').select('id', { count: 'exact', head: true }).eq('user_id', userId).not('deleted_at', 'is', null),
-        supabase.from('links').select('id', { count: 'exact', head: true }).eq('user_id', userId).is('deleted_at', null),
-        supabase.from('notes').select('id, title, updated_at, is_favorite').eq('user_id', userId).is('deleted_at', null).order('updated_at', { ascending: false }).limit(5),
-        supabase.from('photos').select('id, filename, uploaded_at, is_favorite').eq('user_id', userId).is('deleted_at', null).order('uploaded_at', { ascending: false }).limit(5),
-        supabase.from('files').select('id, filename, uploaded_at, is_favorite').eq('user_id', userId).is('deleted_at', null).order('uploaded_at', { ascending: false }).limit(5),
-      ]);
-
-      const totalFavorites = (favNotesRes.count || 0) + (favPhotosRes.count || 0) + (favFilesRes.count || 0);
-      const totalTrashed = (trashedNotesRes.count || 0) + (trashedPhotosRes.count || 0) + (trashedFilesRes.count || 0) + (trashedTiktokRes.count || 0);
-
-      const sumBucketSize = async (bucketId: 'photos' | 'files' | 'note-attachments') => {
-        try {
-          let total = 0;
-          const limit = 1000;
-
-          for (let offset = 0; ; offset += limit) {
-            const { data, error } = await supabase.storage
-              .from(bucketId)
-              .list(userId, { limit, offset });
-
-            if (error) throw error;
-
-            const items = data || [];
-            total += items.reduce((acc, f: any) => {
-              const raw = f?.metadata?.size;
-              const size = typeof raw === 'number' ? raw : (Number.parseInt(String(raw ?? 0), 10) || 0);
-              return acc + size;
-            }, 0);
-
-            if (items.length < limit) break;
-          }
-
-          return total;
-        } catch (e) {
-          console.error(`Error calculating ${bucketId} size:`, e);
-          return 0;
-        }
-      };
-
-      const [trashedPhotosData, trashedFilesData] = await Promise.all([
-        supabase.from('photos').select('filename').eq('user_id', userId).not('deleted_at', 'is', null),
-        supabase.from('files').select('filename, size').eq('user_id', userId).not('deleted_at', 'is', null),
-      ]);
-
-      const trashedFilesSize = (trashedFilesData.data || []).reduce((acc, f) => acc + (f.size || 0), 0);
-
-      const trashedPhotoFilenames = new Set((trashedPhotosData.data || []).map(p => p.filename));
-      let trashedPhotosSize = 0;
-      
-      try {
-        const { data: allPhotos } = await supabase.storage.from('photos').list(userId, { limit: 1000 });
-        trashedPhotosSize = (allPhotos || [])
-          .filter((f: any) => trashedPhotoFilenames.has(f.name))
-          .reduce((acc, f: any) => {
-            const raw = f?.metadata?.size;
-            return acc + (typeof raw === 'number' ? raw : (Number.parseInt(String(raw ?? 0), 10) || 0));
-          }, 0);
-      } catch (e) {
-        console.error('Error calculating trashed photos size:', e);
-      }
-
-      const [storagePhotosSize, storageFilesSize, storageAttachmentsSize] = await Promise.all([
-        sumBucketSize('photos'),
-        sumBucketSize('files'),
-        sumBucketSize('note-attachments'),
-      ]);
-
-      const storageTotalSize = storagePhotosSize + storageFilesSize + storageAttachmentsSize;
-
-      setStats({
-        notes: notesRes.count || 0,
-        photos: photosRes.count || 0,
-        files: filesRes.count || 0,
-        favorites: totalFavorites,
-        secureNotes: secureNotesRes.count || 0,
-        secretTexts: secretTextsRes.count || 0,
-        totalFilesSize: storageFilesSize,
-        totalPhotosSize: storagePhotosSize,
-        totalAttachmentsSize: storageAttachmentsSize,
-        totalStorageSize: storageTotalSize,
-        trashedFilesSize,
-        trashedPhotosSize,
-        trashedItems: totalTrashed,
-        tiktokVideos: tiktokRes.count || 0,
-        links: linksRes.count || 0,
-      });
-
-
-      const allRecent: RecentItem[] = [
-        ...(recentNotesRes.data || []).map(n => ({
-          id: n.id,
-          type: 'note' as const,
-          title: n.title || 'Unbenannt',
-          date: n.updated_at || new Date().toISOString(),
-          isFavorite: n.is_favorite,
-        })),
-        ...(recentPhotosRes.data || []).map(p => ({
-          id: p.id,
-          type: 'photo' as const,
-          title: p.filename?.replace(/^\d+-/, '') || 'Foto',
-          date: p.uploaded_at || new Date().toISOString(),
-          isFavorite: p.is_favorite,
-        })),
-        ...(recentFilesRes.data || []).map(f => ({
-          id: f.id,
-          type: 'file' as const,
-          title: f.filename?.replace(/^\d+-/, '') || 'Datei',
-          date: f.uploaded_at || new Date().toISOString(),
-          isFavorite: f.is_favorite,
-        })),
-      ];
-
-      allRecent.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      setRecentItems(allRecent.slice(0, 5));
-    } catch (error) {
-      console.error('Error fetching stats:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [userId, isDecoyMode]);
-
-  useEffect(() => {
-    fetchDashboardData();
-  }, [fetchDashboardData]);
-
-  useEffect(() => {
-    if (!userId) return;
-
-    const channel = supabase
-      .channel('dashboard-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, fetchDashboardData)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'photos' }, fetchDashboardData)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'files' }, fetchDashboardData)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'secret_texts' }, fetchDashboardData)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tiktok_videos' }, fetchDashboardData)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'links' }, fetchDashboardData)
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [userId, fetchDashboardData]);
-
-  const getIconForType = (type: string) => {
+  const getIconForType = useCallback((type: string) => {
     switch (type) {
       case 'note': return FileText;
       case 'photo': return Image;
@@ -364,9 +144,9 @@ export default function Dashboard() {
       case 'secret_text': return Lock;
       default: return FileText;
     }
-  };
+  }, []);
 
-  const getPathForType = (type: string) => {
+  const getPathForType = useCallback((type: string) => {
     switch (type) {
       case 'note': return '/notes';
       case 'photo': return '/photos';
@@ -374,7 +154,7 @@ export default function Dashboard() {
       case 'secret_text': return '/secret-texts';
       default: return '/notes';
     }
-  };
+  }, []);
 
   const formatDate = (dateString: string) => {
     if (!dateString) return '';
