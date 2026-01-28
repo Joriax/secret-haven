@@ -4,6 +4,7 @@ import { Sidebar } from './Sidebar';
 import { GlobalSearch } from '../GlobalSearch';
 import { PullToRefreshIndicator } from '../PullToRefreshIndicator';
 import { VoiceCommandButton } from '../VoiceCommandButton';
+import { OfflineStatusBanner } from '../OfflineStatusBanner';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -50,7 +51,8 @@ export const MainLayout: React.FC = () => {
 
   return (
     <div className="min-h-screen flex w-full bg-background">
-      {/* Skip link for keyboard navigation */}
+      {/* Offline Status Banner */}
+      <OfflineStatusBanner />
       <a 
         href="#main-content" 
         className="skip-link"
