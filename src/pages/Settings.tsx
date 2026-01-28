@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Fingerprint, ArrowLeft } from 'lucide-react';
+import { Fingerprint, ArrowLeft, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PageHeader } from '@/components/PageHeader';
 import { 
@@ -33,6 +33,7 @@ import { Slider } from '@/components/ui/slider';
 import { ThemeCustomizer } from '@/components/ThemeCustomizer';
 import { BackupManager } from '@/components/BackupManager';
 import { ImportBackup } from '@/components/ImportBackup';
+import { DeleteAccountDialog } from '@/components/DeleteAccountDialog';
 
 const PIN_LENGTH = 6;
 
@@ -52,6 +53,7 @@ export default function Settings() {
   const [showRecoveryKey, setShowRecoveryKey] = useState(false);
   const [showBackup, setShowBackup] = useState(false);
   const [showAutoLock, setShowAutoLock] = useState(false);
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false);
   const [currentPin, setCurrentPin] = useState('');
   const [newPin, setNewPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
@@ -734,6 +736,29 @@ export default function Settings() {
       {/* Backup Manager */}
       <BackupManager />
 
+      {/* Danger Zone */}
+      <div className="glass-card p-6 border-destructive/30">
+        <div className="flex items-center gap-3 mb-6">
+          <Trash2 className="w-5 h-5 text-destructive" />
+          <h2 className="text-lg font-semibold text-destructive">Gefahrenzone</h2>
+        </div>
+
+        <button
+          onClick={() => setShowDeleteAccount(true)}
+          className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-destructive/10 transition-colors group border border-destructive/20"
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 rounded-lg bg-destructive/20 flex items-center justify-center">
+              <Trash2 className="w-5 h-5 text-destructive" />
+            </div>
+            <div className="text-left">
+              <h3 className="font-medium text-destructive">Konto löschen</h3>
+              <p className="text-sm text-muted-foreground">Alle Daten unwiderruflich entfernen</p>
+            </div>
+          </div>
+        </button>
+      </div>
+
       {/* Logout */}
       <div className="glass-card p-6">
         <button
@@ -760,6 +785,12 @@ export default function Settings() {
           <p>Private Vault - Dein sicherer Tresor</p>
         </div>
       </div>
+
+      {/* Delete Account Dialog */}
+      <DeleteAccountDialog 
+        open={showDeleteAccount} 
+        onOpenChange={setShowDeleteAccount} 
+      />
     </motion.div>
   );
 }

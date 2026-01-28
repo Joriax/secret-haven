@@ -1525,6 +1525,180 @@ serve(async (req) => {
       );
     }
 
+    // ========== DELETE ACCOUNT (with complete data erasure) ==========
+    else if (action === 'delete-account') {
+      if (!authenticatedUser) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Nicht autorisiert' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+        );
+      }
+
+      // Verify PIN for extra security
+      if (!pin || pin.length !== 6) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'PIN muss 6 Ziffern haben' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
+      }
+
+      // Get user and verify PIN
+      const { data: user, error: userError } = await supabase
+        .from('vault_users')
+        .select('id, pin_hash')
+        .eq('id', authenticatedUser.userId)
+        .single();
+
+      if (userError || !user) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Benutzer nicht gefunden' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
+        );
+      }
+
+      const isPinValid = await verifyPin(pin, user.pin_hash);
+      if (!isPinValid) {
+        await logSecurityEvent(supabase, authenticatedUser.userId, 'delete_account_failed', { reason: 'invalid_pin' }, req);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Falscher PIN' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+        );
+      }
+
+      const userId = authenticatedUser.userId;
+      console.log(`Starting complete account deletion for user: ${userId}`);
+
+      try {
+        // Log the deletion attempt before deleting logs
+        await logSecurityEvent(supabase, userId, 'account_deletion_started', {}, req);
+
+        // 1. Delete storage files (photos bucket)
+        const { data: photos } = await supabase
+          .from('photos')
+          .select('filename, thumbnail_filename')
+          .eq('user_id', userId);
+
+        if (photos && photos.length > 0) {
+          const photoFilenames = photos.flatMap(p => 
+            [p.filename, p.thumbnail_filename].filter(Boolean) as string[]
+          ).map(f => `${userId}/${f}`);
+          
+          if (photoFilenames.length > 0) {
+            await supabase.storage.from('photos').remove(photoFilenames);
+          }
+        }
+
+        // 2. Delete storage files (files bucket)
+        const { data: files } = await supabase
+          .from('files')
+          .select('filename')
+          .eq('user_id', userId);
+
+        if (files && files.length > 0) {
+          const fileFilenames = files.map(f => `${userId}/${f.filename}`);
+          await supabase.storage.from('files').remove(fileFilenames);
+        }
+
+        // 3. Delete note attachments from storage
+        const { data: attachments } = await supabase
+          .from('note_attachments')
+          .select('filename')
+          .eq('user_id', userId);
+
+        if (attachments && attachments.length > 0) {
+          const attachmentFilenames = attachments.map(a => `${userId}/${a.filename}`);
+          await supabase.storage.from('note-attachments').remove(attachmentFilenames);
+        }
+
+        // 4. Delete backups from storage
+        const { data: backups } = await supabase
+          .from('backup_versions')
+          .select('storage_path')
+          .eq('user_id', userId);
+
+        if (backups && backups.length > 0) {
+          const backupPaths = backups.map(b => b.storage_path);
+          await supabase.storage.from('backups').remove(backupPaths);
+        }
+
+        // 5. Delete all database records in correct order (respecting foreign keys)
+        
+        // Delete note versions first (references notes)
+        await supabase.from('note_versions').delete().eq('user_id', userId);
+        
+        // Delete note attachments (references notes)
+        await supabase.from('note_attachments').delete().eq('user_id', userId);
+        
+        // Delete shared album items (references shared_albums)
+        const { data: sharedAlbums } = await supabase
+          .from('shared_albums')
+          .select('id')
+          .eq('owner_id', userId);
+        
+        if (sharedAlbums && sharedAlbums.length > 0) {
+          const sharedAlbumIds = sharedAlbums.map(a => a.id);
+          await supabase.from('shared_album_items').delete().in('shared_album_id', sharedAlbumIds);
+          await supabase.from('shared_album_access').delete().in('shared_album_id', sharedAlbumIds);
+        }
+        
+        // Delete main content tables
+        await supabase.from('notes').delete().eq('user_id', userId);
+        await supabase.from('photos').delete().eq('user_id', userId);
+        await supabase.from('files').delete().eq('user_id', userId);
+        await supabase.from('links').delete().eq('user_id', userId);
+        await supabase.from('tiktok_videos').delete().eq('user_id', userId);
+        await supabase.from('secret_texts').delete().eq('user_id', userId);
+        
+        // Delete folder/album structures
+        await supabase.from('note_folders').delete().eq('user_id', userId);
+        await supabase.from('albums').delete().eq('user_id', userId);
+        await supabase.from('file_albums').delete().eq('user_id', userId);
+        await supabase.from('link_folders').delete().eq('user_id', userId);
+        await supabase.from('tiktok_folders').delete().eq('user_id', userId);
+        await supabase.from('shared_albums').delete().eq('owner_id', userId);
+        
+        // Delete metadata tables
+        await supabase.from('tags').delete().eq('user_id', userId);
+        await supabase.from('view_history').delete().eq('user_id', userId);
+        await supabase.from('temp_shares').delete().eq('user_id', userId);
+        await supabase.from('backup_versions').delete().eq('user_id', userId);
+        await supabase.from('backup_settings').delete().eq('user_id', userId);
+        await supabase.from('break_entries').delete().eq('user_id', userId);
+        await supabase.from('break_settings').delete().eq('user_id', userId);
+        
+        // Delete security/session data
+        await supabase.from('security_logs').delete().eq('user_id', userId);
+        await supabase.from('session_history').delete().eq('user_id', userId);
+        await supabase.from('vault_sessions').delete().eq('user_id', userId);
+        await supabase.from('user_roles').delete().eq('user_id', userId);
+        
+        // 6. Finally delete the user account itself
+        const { error: deleteUserError } = await supabase
+          .from('vault_users')
+          .delete()
+          .eq('id', userId);
+
+        if (deleteUserError) {
+          console.error('Error deleting user account:', deleteUserError);
+          throw deleteUserError;
+        }
+
+        console.log(`Successfully deleted all data for user: ${userId}`);
+
+        return new Response(
+          JSON.stringify({ success: true, message: 'Konto und alle Daten wurden vollständig gelöscht' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+
+      } catch (deleteError) {
+        console.error('Error during account deletion:', deleteError);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Fehler beim Löschen des Kontos' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        );
+      }
+    }
+
     return new Response(
       JSON.stringify({ success: false, error: 'Ungültige Aktion' }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
