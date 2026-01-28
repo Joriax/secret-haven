@@ -1,325 +1,586 @@
 
-# Implementation Plan: Erweiterte Funktionen
+# MEGA-UMFASSENDE FEATURE-ANALYSE & IMPLEMENTIERUNGSPLAN
+## PhantomLock Private Vault - Erweiterte Roadmap
 
-## Übersicht
-
-Dieser Plan implementiert 8 neue Hauptfunktionen für den Private Vault, die die Benutzererfahrung und Sicherheit erheblich verbessern werden.
-
----
-
-## 1. Offline-Mode (Erweitert)
-
-### Aktueller Stand
-- IndexedDB (Dexie.js) ist bereits in `src/lib/db.ts` konfiguriert
-- PWA mit Service Worker bereits eingerichtet (`vite-plugin-pwa`)
-- Sync-Queue-Struktur existiert bereits
-
-### Implementierung
-
-**Neue Komponenten:**
-- `src/components/OfflineIndicator.tsx` - Zeigt Offline-Status in der UI an
-- `src/hooks/useOfflineSync.ts` - Verwaltet automatische Synchronisation
-
-**Änderungen:**
-- Erweiterung von `src/lib/db.ts` um vollständige Datenspeicherung für alle Entitäten (Links, TikToks, Tags, Folders)
-- Service Worker-Konfiguration in `vite.config.ts` für API-Caching erweitern
-- `SyncStatusIndicator.tsx` erweitern für bessere Synchronisations-Anzeige
-
-**Funktionsweise:**
-- Bei Offline-Status werden Änderungen in IndexedDB gespeichert
-- Automatische Synchronisation bei Wiederherstellung der Verbindung
-- Konfliktlösung: Server-Zeitstempel hat Vorrang
-- Visueller Indikator in der Sidebar/Header
+Mache alle unten stehenden features aber mache nix was mit E-Mail senden oder sonst was zu tun hat und nix wofür man AI braucht. Alles soll für sich selber klappen.
 
 ---
 
-## 2. E2E-Verschlüsselung (Erweitert)
+## TEIL I: MOBILE & UX OPTIMIERUNGEN
 
-### Aktueller Stand
-- AES-256-GCM Verschlüsselung in `src/lib/encryption.ts` bereits vorhanden
-- Secure Notes und Secret Texts nutzen bereits clientseitige Verschlüsselung
+### 1. Gesten-Steuerung (Swipe Actions)
+**Status:** Nicht vorhanden
+**Implementierung:**
+- `src/hooks/useSwipeGestures.ts` - Universeller Swipe-Handler
+- Pull-to-Refresh für alle Listen
 
-### Implementierung
+**Integration in:**
+- Notes.tsx, Photos.tsx, Files.tsx
+- NoteListItem, PhotoGridItem, FileListItem
 
-**Neue Hooks:**
-- `src/hooks/useE2EEncryption.ts` - Verwaltet Master-Key und Verschlüsselung
+### 2. Haptic Feedback
+**Status:** Nicht vorhanden
+**Implementierung:**
+- `src/hooks/useHaptics.ts` - Navigator.vibrate() Wrapper
+- Bei wichtigen Aktionen (Löschen, Favorit, Lock)
+- Konfigurierbar in Settings
 
-**Änderungen:**
-- `src/pages/Settings.tsx` - Neuer Bereich "Erweiterte Verschlüsselung"
-- Optionale Verschlüsselung für alle Datentypen (Fotos-Metadaten, Datei-Namen, etc.)
-
-**Optionen:**
-- Master-Passwort separat vom Login-PIN
-- Automatische Verschlüsselung neuer Inhalte
-- Batch-Verschlüsselung bestehender Daten
-
----
-
-## 3. Mehrere Themes
-
-### Aktueller Stand
-- 8 Farbschemas in `src/hooks/useThemeCustomizer.ts`
-- Nur Primary/Accent-Farben werden geändert
-
-### Implementierung
-
-**Neue Dateien:**
-- `src/lib/themes.ts` - Theme-Definitionen mit vollständigen Farbpaletten
-
-**Erweiterte Theme-Optionen:**
-```typescript
-interface FullTheme {
-  id: string;
-  name: string;
-  mode: 'dark' | 'light';
-  colors: {
-    background: string;
-    foreground: string;
-    card: string;
-    primary: string;
-    accent: string;
-    muted: string;
-    border: string;
-  };
-}
-```
-
-**Neue Themes:**
-- Light Mode Varianten (Hell-Lila, Hell-Blau, etc.)
-- AMOLED Black (tiefes Schwarz für OLED-Displays)
-- High Contrast (Barrierefreiheit)
-- Sepia (Augenfreundlich)
-
-**UI-Änderungen:**
-- Erweiterung von `ThemeCustomizer.tsx` mit Vorschau-Karten
-- System-Theme-Erkennung (prefers-color-scheme)
-- Zeitgesteuerte Theme-Wechsel (z.B. Nachtmodus ab 22:00)
+Wenn man auf dem Handy den Panic button drückt, soll sich die ganze app mit dem tab schließen.
 
 ---
 
-## 4. Kalender-Ansicht
+## TEIL II: NOTIZEN-ERWEITERUNGEN
 
-### Aktueller Stand
-- Calendar-Komponente existiert in `src/components/ui/calendar.tsx`
-- Break-Tracker hat bereits eine Kalender-Ansicht
+### 6. WYSIWYG-Editor
+**Status:** Nur Markdown-Textarea
+**Implementierung:**
+- Integration von TipTap oder Plate.js
+- `src/components/notes/RichTextEditor.tsx`
+- Toggle zwischen Markdown/Rich-Text
+- Inline-Bilder per Drag & Drop
 
-### Implementierung
+### 7. Notiz-Verlinkung (Wiki-Links)
+**Status:** Nicht vorhanden
+**Implementierung:**
+- Parser für [[Notiz-Name]] Syntax
+- Backlinks-Anzeige pro Notiz
+- Auto-Complete bei [[ Eingabe
+- `src/hooks/useNoteLinks.ts`
 
-**Neue Seite:**
-- `src/pages/CalendarView.tsx` - Vollständige Kalender-Übersicht
+### 8. Graph-Ansicht
+**Status:** Nicht vorhanden
+**Implementierung:**
+- `src/pages/NoteGraph.tsx`
+- D3.js oder react-force-graph
+- Knoten = Notizen, Kanten = Links
+- Click-to-Navigate
+- Zoom/Pan-Steuerung
 
-**Features:**
-- Monats-, Wochen- und Tagesansicht
-- Anzeige aller Inhalte nach Erstellungs-/Änderungsdatum:
-  - Notizen (blaue Punkte)
-  - Fotos/Videos (rosa Punkte)
-  - Dateien (grüne Punkte)
-  - Links (orange Punkte)
-- Klick auf Tag öffnet gefilterte Liste
-- Filterung nach Inhaltstyp
-- Heatmap für Aktivität
+### 9. Notiz-Reminder
+**Status:** Nicht vorhanden (nur Break-Tracker hat Reminders)
+**Implementierung:**
+- DB: `note_reminders` Tabelle
+- `src/hooks/useNoteReminders.ts`
+- UI: DateTimePicker in Note-Toolbar
+- Push-Notification bei Fälligkeit
+- Wiederkehrende Reminders (täglich, wöchentlich)
 
-**Navigation:**
-- Neuer Sidebar-Eintrag "Kalender"
-- Route `/calendar`
+### 10. Verschachtelte Checklisten
+**Status:** Nur einfache Markdown-Checkboxen
+**Implementierung:**
+- Parser für eingerückte Checkboxen
+- Drag & Drop Reordering
+- Progress-Bar für Checklist-Completion
+- Collapse/Expand für Sub-Items
 
----
+### 11. Notiz-Versionierung UI
+**Status:** Vorhanden, aber basic
+**Erweiterung:**
+- Diff-Ansicht (Side-by-Side oder Unified)
+- Syntax-Highlighting für Änderungen
+- Restore einzelner Abschnitte
+- Version-Kommentare
 
-## 5. Volltextsuche (Erweitert)
 
-### Aktueller Stand
-- `useGlobalSearch.ts` durchsucht Titel, Inhalt und Dateinamen
-- Keine Indizierung, direkte SQL-Abfragen
+## TEIL III: FOTOS & MEDIEN
 
-### Implementierung
+### 14. Bildbearbeitung
+**Status:** Nicht vorhanden
+**Implementierung:**
+- `src/components/photos/ImageEditor.tsx`
+- Cropping (Aspect Ratios: 1:1, 4:3, 16:9, Frei)
+- Rotation (90°, 180°, 270°, Frei)
+- Filter (10+ Presets)
+- Helligkeit/Kontrast/Sättigung
+- Speichern als Kopie oder Original überschreiben
 
-**Verbesserungen:**
-- Lokaler Suchindex in IndexedDB für schnellere Suche
-- Fuzzy-Suche mit Typo-Toleranz
-- Suchergebnisse mit Kontext-Hervorhebung
-- Suchhistorie mit gespeicherten Suchen
+### 15. Video-Bearbeitung
+**Status:** Nicht vorhanden
+**Implementierung:**
+- `src/components/photos/VideoEditor.tsx`
+- Trimming (Start/End setzen)
+- Thumbnail-Zeitpunkt wählen
+- Video-zu-GIF Konvertierung
+- Komprimierung vor Upload
 
-**Neue Features:**
-- OCR-Text von Bildern durchsuchbar machen (bereits OCRScanner vorhanden)
-- Tag-basierte Suche mit AND/OR Operatoren
-- Datum-Filter in Suche integrieren
-- Erweiterte Suchsyntax:
-  - `tag:wichtig` - Suche in Tags
-  - `type:note` - Filterung nach Typ
-  - `"exakter text"` - Phrasensuche
+### 16. Gesichtserkennung & Personen-Alben
+**Status:** Nicht vorhanden
+**Implementierung:**
+- face-api.js oder TensorFlow.js
+- Automatische Gesichts-Erkennung
+- Personen-Clustering
+- Personen-Alben erstellen
+- Manuelles Tagging für Korrekturen
 
-**UI-Änderungen:**
-- Erweiterung von `GlobalSearch.tsx` mit erweiterten Filtern
-- Such-Vorschläge basierend auf vorherigen Suchen
-- Tastaturnavigation verbessern
+### 17. Memories / Rückblicke
+**Status:** Nicht vorhanden
+**Implementierung:**
+- `src/pages/Memories.tsx`
+- "Dieser Tag vor X Jahren"
+- Wöchentliche/Monatliche Highlights
+- Auto-generierte Slideshows
+- Teilen-Funktion
 
----
+### 19. Collage-Ersteller
+**Status:** Nicht vorhanden
+**Implementierung:**
+- `src/components/photos/CollageCreator.tsx`
+- Vorlagen (2x2, 3x3, Freestyle)
+- Drag & Drop Fotos
+- Rahmen & Hintergrund
+- Als neues Foto speichern
 
-## 6. Markdown-Templates
-
-### Aktueller Stand
-- Markdown-Rendering existiert bereits in `MarkdownRenderer.tsx`
-- Keine Template-Funktion
-
-### Implementierung
-
-**Neue Komponenten:**
-- `src/components/notes/MarkdownTemplates.tsx` - Template-Auswahl-Dialog
-- `src/hooks/useNoteTemplates.ts` - Template-Verwaltung
-
-**Vordefinierte Templates:**
-```typescript
-const DEFAULT_TEMPLATES = [
-  { id: 'meeting', name: 'Meeting-Notiz', icon: 'Users' },
-  { id: 'todo', name: 'To-Do Liste', icon: 'CheckSquare' },
-  { id: 'journal', name: 'Tagebuch', icon: 'BookOpen' },
-  { id: 'project', name: 'Projekt-Plan', icon: 'Layers' },
-  { id: 'recipe', name: 'Rezept', icon: 'ChefHat' },
-  { id: 'workout', name: 'Workout-Log', icon: 'Dumbbell' },
-];
-```
-
-**Features:**
-- Eigene Templates erstellen und speichern
-- Template beim Erstellen einer neuen Notiz auswählen
-- Variables (z.B. `{{date}}`, `{{time}}`) automatisch ausfüllen
-- Favoriten-Templates für schnellen Zugriff
-
-**Datenbank:**
-- Neue Tabelle `note_templates` für benutzerdefinierte Templates
-
----
-
-## 7. Widgets (Erweitert)
-
-### Aktueller Stand
-- Dashboard-Widgets existieren in `useDashboardWidgets.ts`
-- Widgets: quick-stats, recent-activity, quick-capture, quick-actions, storage, recently-viewed
-
-### Implementierung
-
-**Neue Widget-Typen:**
-```typescript
-type WidgetType = 
-  | 'calendar-mini'      // Mini-Kalender mit heutigem Datum
-  | 'weather'            // Wetter (optional, benötigt API)
-  | 'pinned-notes'       // Angepinnte Notizen
-  | 'random-photo'       // Zufälliges Foto aus Sammlung
-  | 'storage-pie'        // Speicheraufteilung als Kreisdiagramm
-  | 'streak-counter'     // Break-Tracker Streak
-  | 'quick-note'         // Schnelle Notiz-Eingabe
-  | 'tag-cloud'          // Mini-Tag-Cloud
-```
-
-**Neue Dateien:**
-- `src/components/dashboard/MiniCalendarWidget.tsx`
-- `src/components/dashboard/PinnedNotesWidget.tsx`
-- `src/components/dashboard/RandomPhotoWidget.tsx`
-- `src/components/dashboard/StoragePieWidget.tsx`
-- `src/components/dashboard/QuickNoteWidget.tsx`
-- `src/components/dashboard/TagCloudWidget.tsx`
-
-**UI-Verbesserungen:**
-- Widget-Größenanpassung (small, medium, large)
-- Drag & Drop Neuordnung (bereits vorhanden)
-- Widget-Konfiguration pro Widget-Typ
+### 20. Foto-Timeline mit Scroll-Bar
+**Status:** Nicht vorhanden
+**Implementierung:**
+- Virtuelle Liste mit Monats-Gruppierung
+- Mini-Kalender als Scroll-Indicator
+- Jump-to-Date Funktion
+- Sticky Month-Headers
 
 ---
 
-## 8. Voice Notes
+## TEIL IV: DATEIVERWALTUNG
 
-### Aktueller Stand
-- Keine Audio-Aufnahme-Funktion vorhanden
-- Audio-Dateien werden als normale Dateien behandelt
+### 21. PDF-Annotations
+**Status:** PDF-Vorschau vorhanden, keine Annotations
+**Implementierung:**
+- react-pdf mit Annotation Layer
+- Highlighting
+- Kommentare
+- Zeichnen/Freihand
+- Speichern der Annotations
 
-### Implementierung
+### 22. Office-Dokument Light-Editing
+**Status:** Nur Vorschau
+**Implementierung:**
+- Basic Text-Änderungen für Word
+- Zellen-Änderungen für Excel
+- Speichern als neue Version
 
-**Neue Dateien:**
-- `src/components/VoiceRecorder.tsx` - Aufnahme-UI mit Wellenform
-- `src/hooks/useVoiceRecording.ts` - MediaRecorder API Wrapper
+### 23. Archiv-Support
+**Status:** Nicht vorhanden
+**Implementierung:**
+- ZIP/RAR Inhalt anzeigen
+- Einzelne Dateien extrahieren
+- Neues Archiv erstellen
+- fflate.js (bereits installiert!)
 
-**Features:**
-- Audio-Aufnahme direkt in der App
-- Visuelle Wellenform während Aufnahme
-- Automatische Transkription (optional, mit Web Speech API)
-- Voice Notes als eigener Bereich oder als Notiz-Anhang
+### 24. Datei-Versionen
+**Status:** Nicht vorhanden (nur für Notizen)
+**Implementierung:**
+- `file_versions` Tabelle
+- Automatische Versionierung bei Überschreiben
+- Version-Restore
+- Version-Vergleich (Größe, Datum)
 
-**Integration:**
-- Button in Notes-Toolbar
-- Eigener "Voice Notes" Bereich in Sidebar
-- Speicherung in Supabase Storage (bucket: `voice-notes`)
-
-**Datenbank-Änderungen:**
-- Neue Tabelle `voice_notes`:
-  - `id`, `user_id`, `title`, `filename`, `duration`, `transcript`
-  - `created_at`, `updated_at`, `deleted_at`, `is_favorite`
-
----
-
-## Technische Details
-
-### Datenbank-Migrationen benötigt:
-
-1. **note_templates Tabelle:**
-```sql
-CREATE TABLE note_templates (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL,
-  name TEXT NOT NULL,
-  content TEXT NOT NULL,
-  icon TEXT DEFAULT 'FileText',
-  is_system BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
-);
-```
-
-2. **voice_notes Tabelle:**
-```sql
-CREATE TABLE voice_notes (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL,
-  title TEXT DEFAULT '',
-  filename TEXT NOT NULL,
-  duration INTEGER NOT NULL,
-  transcript TEXT,
-  is_favorite BOOLEAN DEFAULT FALSE,
-  folder_id UUID,
-  tags UUID[] DEFAULT '{}',
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now(),
-  deleted_at TIMESTAMPTZ
-);
-```
-
-3. **Storage Bucket:**
-```sql
-INSERT INTO storage.buckets (id, name, public) 
-VALUES ('voice-notes', 'voice-notes', false);
-```
-
-### Reihenfolge der Implementierung:
-
-1. **Mehrere Themes** (Schnellste Umsetzung, direkte Benutzerfreundlichkeit)
-2. **Markdown-Templates** (Erweiterung bestehender Notizen-Funktion)
-3. **Widgets** (Erweiterung des bestehenden Dashboard-Systems)
-4. **Volltextsuche** (Verbesserung bestehender Suche)
-5. **Kalender-Ansicht** (Neue Seite, unabhängig)
-6. **Voice Notes** (Neue Funktion, benötigt Datenbank-Änderungen)
-7. **E2E-Verschlüsselung** (Komplexe Erweiterung bestehender Verschlüsselung)
-8. **Offline-Mode** (Komplexeste Änderung, benötigt umfangreiche Tests)
+### 25. Datei-Komprimierung
+**Status:** Nicht vorhanden
+**Implementierung:**
+- Bilder: JPEG-Qualität reduzieren
+- Videos: FFmpeg via WASM
+- Dokumente: PDF-Komprimierung
+- Batch-Komprimierung
 
 ---
 
-## Zusammenfassung
+## TEIL V: SICHERHEIT & PRIVACY
 
-| Feature | Neue Dateien | DB-Änderungen | Komplexität |
-|---------|-------------|---------------|-------------|
-| Offline-Mode | 2 | Nein | Hoch |
-| E2E-Verschlüsselung | 1 | Nein | Mittel |
-| Mehrere Themes | 1 | Nein | Niedrig |
-| Kalender-Ansicht | 1 | Nein | Mittel |
-| Volltextsuche | 0 | Nein | Mittel |
-| Markdown-Templates | 2 | Ja | Mittel |
-| Widgets | 6 | Nein | Niedrig |
-| Voice Notes | 2 | Ja | Hoch |
+### 27. Hardware-Key Support (WebAuthn Erweiterung)
+**Status:** Biometric vorhanden, aber kein Roaming Authenticator
+**Implementierung:**
+- Erweiterung von `useBiometric.ts`
+- YubiKey / Titan Key Support
+- Mehrere Keys registrieren
+- Key-Management UI
+
+### 28. Passkey Support
+**Status:** Teilweise (WebAuthn)
+**Implementierung:**
+- Discoverable Credentials
+- Passwortloser Login komplett
+- Cross-Device Passkeys
+- Sync mit Apple/Google Keychain
+
+### 29. Selbstzerstörende Notizen
+**Status:** Nicht vorhanden
+**Implementierung:**
+- Timer-Option beim Erstellen
+- Countdown-Anzeige
+- Automatische Löschung
+- "Burn after reading" für Shares
+
+### 30. Screenshot-Schutz
+**Status:** Nicht vorhanden
+**Implementierung:**
+- CSS: `-webkit-user-select: none`
+- Overlay bei Screenshot-Versuch
+- Warnung bei Screen Recording
+- Optional aktivierbar
+
+### 31. Secure Delete (Überschreiben)
+**Status:** Nur Soft-Delete
+**Implementierung:**
+- Mehrfaches Überschreiben im Storage
+- Bestätigung mit PIN
+- Unwiderruflich-Warnung
+- Audit-Log Eintrag
+
+### 32. Fake-Vault mit Decoy-Inhalten
+**Status:** Decoy-PIN vorhanden, aber leerer Vault
+**Erweiterung:**
+- Vordefinierte Fake-Daten einfügen
+- Eigene Decoy-Daten erstellen
+- Separate Decoy-Alben
+- Realistisch aussehende Inhalte
+
+### 33. Privacy Report
+**Status:** Security Logs vorhanden
+**Erweiterung:**
+- `src/pages/PrivacyReport.tsx`
+- Zusammenfassung der Zugriffe
+- Verdächtige Aktivitäten
+- Export als PDF
+- Wöchentlicher E-Mail-Report (optional)
+
+### 34. Session-Management
+**Status:** Basic (session_history)
+**Erweiterung:**
+- Alle aktiven Sessions anzeigen
+- Remote Logout einzelner Sessions
+- Gerätename erkennen
+- Letzte Aktivität pro Session
+
+
+---
+
+## TEIL VI: ANALYTICS & INSIGHTS
+
+### 36. Erweiterte Statistiken
+**Status:** Basic in Dashboard
+**Erweiterung:**
+- `src/pages/DetailedStats.tsx`
+- Schreib-Aktivität pro Tag/Woche/Monat
+- Wort-Zählung Trends
+- Meist-editierte Notizen
+- Tag-Nutzung über Zeit
+
+### 37. Jahres-Heatmap (wie GitHub)
+**Status:** Nur in Break-Tracker
+**Implementierung:**
+- Auf Dashboard/Stats anwenden
+- Aktivität = Anzahl Edits/Uploads
+- Hover für Details
+- Jahres-Auswahl
+
+### 38. Content-Insights
+**Status:** Nicht vorhanden
+**Implementierung:**
+- Verwaiste Dateien finden
+- Lange nicht angesehene Items
+- Duplikate nach Inhalt (nicht Hash)
+- Leere Ordner/Alben
+- Empfohlene Aktionen
+
+### 39. Speicher-Vorhersage
+**Status:** Speicheranalyse vorhanden
+**Erweiterung:**
+- Prognose basierend auf Trends
+- "In X Monaten voll"
+- Tipps zum Sparen
+- Größte Dateien hervorheben
+
+---
+
+## TEIL VII: BENACHRICHTIGUNGEN & REMINDERS
+
+### 40. Reminder-System (Zentral)
+**Status:** Nur Break-Tracker
+**Implementierung:**
+- `src/hooks/useReminders.ts`
+- Reminder für: Notizen, Dateien, Fotos
+- Push-Notifications
+- In-App Notification Center
+- Snooze-Funktion
+
+
+### 42. Notification Center
+**Status:** Nur Toasts
+**Implementierung:**
+- `src/components/NotificationCenter.tsx`
+- Persistente Benachrichtigungen
+- Kategorien (System, Reminders, Security)
+- Mark as Read
+- Badge-Counter in Sidebar
+
+---
+
+## TEIL VIII: PERSONALISIERUNG
+
+### 44. Icon-Packs
+**Status:** Nur Lucide-Icons
+**Implementierung:**
+- Alternative Icon-Sets
+- Custom Icon-Upload für Ordner
+- Emoji als Icons
+- Icon-Farben wählen
+
+### 45. Font-Auswahl
+**Status:** Feste System-Fonts
+**Implementierung:**
+- Google Fonts Integration
+- Serif/Sans-Serif Toggle
+- Monospace für Code
+- Font-Size Slider
+
+### 46. Dichte-Einstellungen
+**Status:** Festes Layout
+**Implementierung:**
+- Kompakt (kleine Abstände)
+- Normal (aktuell)
+- Komfortabel (große Abstände)
+- Pro Bereich wählbar
+
+### 47. Custom CSS
+**Status:** Nicht vorhanden
+**Implementierung:**
+- Settings-Bereich für Power-User
+- Code-Editor mit Syntax-Highlighting
+- Reset-Button
+- Import/Export
+
+### 48. Dashboard Layout-Presets
+**Status:** Widget-Customizer vorhanden
+**Erweiterung:**
+- Speicherbare Presets
+- Preset-Sharing (Export/Import)
+- "Minimal", "Productivity", "Media Focus"
+
+---
+
+## TEIL IX: SYNC & BACKUP
+
+### 49. Konflikt-Auflösung UI
+**Status:** Server-wins Strategie
+**Erweiterung:**
+- UI für manuelle Konfliktlösung
+- Side-by-Side Vergleich
+- "Beides behalten" Option
+- Konflikt-Historie
+
+### 50. Selektiver Sync
+**Status:** Alles oder Nichts
+**Implementierung:**
+- Ordner-basierte Sync-Auswahl
+- "Nur Favoriten offline"
+- Speicherplatz-Anzeige
+- Priority-Download
+
+### 51. Scheduled Backups
+**Status:** Manuell
+**Erweiterung:**
+- Cron-basierte Auto-Backups
+- Tägliche/Wöchentliche Optionen
+- Aufbewahrungsdauer
+- Backup-Rotation
+
+### 52. External Backup (S3/FTP)
+**Status:** Nur lokal
+**Implementierung:**
+- AWS S3 Konfiguration
+- SFTP/FTP Support
+- Verschlüsselt auf externem Storage
+- Restore von externem Backup
+
+### 53. Inkrementelle Backups
+**Status:** Nur Vollbackups
+**Implementierung:**
+- Delta-Berechnung
+- Schnellere Backups
+- Weniger Speicherverbrauch
+- Merge zu Vollbackup
+
+---
+
+## TEIL X: SHARING & COLLABORATION
+
+
+### 55. Kommentare in Notizen
+**Status:** Nicht vorhanden
+**Implementierung:**
+- Inline-Kommentare
+- Thread-basierte Diskussionen
+- @Mentions
+- Resolve/Unresolve
+
+### 56. Familien/Team-Vault
+**Status:** Nur Einzel-User
+**Implementierung:**
+- `workspaces` Tabelle
+- Mitglieder einladen
+- Rollen (Owner, Editor, Viewer)
+- Shared Ordner/Alben
+
+### 57. Aktivitäts-Feed
+**Status:** Activity Timeline vorhanden
+**Erweiterung:**
+- Für geteilte Alben
+- "X hat Foto hinzugefügt"
+- "Y hat kommentiert"
+- Real-Time Updates
+
+### 58. Einbettbare Widgets
+**Status:** Nicht vorhanden
+**Implementierung:**
+- iFrame-Code generieren
+- Foto-Galerie einbetten
+- Notiz als Read-Only
+- Styling-Optionen
+
+---
+
+## TEIL XI: INTEGRATIONEN
+
+### 59. Apple Shortcuts Support
+**Status:** Nicht vorhanden
+**Implementierung:**
+- URL-Schema registrieren
+- phantomvault://new-note
+- Shortcut-Actions dokumentieren
+- iOS App Clip
+
+### 60. Import aus anderen Apps
+**Status:** Nur Backup-Import
+**Erweiterung:**
+- Evernote ENEX Parser
+- Notion HTML Export
+- Apple Notes IMAP
+- Google Keep JSON
+- OneNote Export
+
+### 61. Export-Optionen
+**Status:** Backup-Export vorhanden
+**Erweiterung:**
+- Markdown-Export (Ordner-Struktur)
+- PDF-Export (einzelne Notizen)
+- Word/DOCX Export
+- HTML-Export
+
+
+### 63. API & Webhooks
+**Status:** Nicht vorhanden
+**Implementierung:**
+- REST API mit API-Keys
+- Dokumentation
+- Rate-Limiting
+- Webhook-Callbacks
+
+### 64. CLI Tool
+**Status:** Nicht vorhanden
+**Implementierung:**
+- npm-Paket
+- `phantomvault note create "Titel"`
+- Pipe-Support
+- Config-File
+
+---
+
+## TEIL XII: PERFORMANCE
+
+### 65. Lazy Loading Optimierung
+**Status:** Teilweise vorhanden
+**Erweiterung:**
+- Intersection Observer für alle Listen
+- Placeholder während Laden
+- Progressive Image Loading
+- Skeleton-Screens überall
+
+### 66. Image-Optimierung
+**Status:** Keine automatische Optimierung
+**Implementierung:**
+- WebP-Konvertierung beim Upload
+- Mehrere Auflösungen generieren
+- Lazy-Load Thumbnails
+- AVIF für moderne Browser
+
+### 67. Service Worker Erweiterung
+**Status:** Basic PWA
+**Erweiterung:**
+- Offline-First für kritische Seiten
+- Background Sync
+- Periodic Background Sync
+- Push-Notifications
+
+### 68. Database-Indexierung
+**Status:** Basic Indexes
+**Erweiterung:**
+- Full-Text-Search Index
+- GIN Index für Tags
+- Materialized Views für Stats
+- Query-Optimierung
+
+---
+
+
+## TEIL XIV: ADMIN & MAINTENANCE
+
+### 73. Admin-Dashboard Erweiterung
+**Status:** Basic Admin-Seite
+**Erweiterung:**
+- System-Health Monitoring
+- User-Aktivität Übersicht
+- Speicher-Allokation
+- Audit-Log Viewer
+- User-Management erweitern
+
+### 74. Database Maintenance
+**Status:** Nicht vorhanden
+**Implementierung:**
+- Orphaned Files finden
+- Datenbank-Vakuum
+- Index-Rebuild
+- Alte Versionen prunen
+
+### 75. Import/Export Jobs
+**Status:** Synchron
+**Erweiterung:**
+- Background-Jobs für große Imports
+- Progress-Tracking
+- Retry bei Fehler
+
+---
+
+## TEIL XV: ZUKUNFTS-FEATURES
+
+### 77. Content Recommendations
+**Status:** Nicht vorhanden
+**Implementierung:**
+- "Du hast das lange nicht angesehen"
+- Ähnliche Notizen vorschlagen
+- Related Content
+- "Vergessene Favoriten"
+
+### 78. Handschrift-Erkennung
+**Status:** OCR vorhanden
+**Erweiterung:**
+- Handschrift in digitalem Ink-Format
+- Apple Pencil Support
+- Handschrift-zu-Text
+- Durchsuchbar machen
+
+### 79. Sprachbefehle
+**Status:** Voice Notes vorhanden
+**Erweiterung:**
+- "Hey Vault, neue Notiz"
+- Voice-Navigation
+- Diktat-Modus
+- Multi-Language
+
+### 80. AR-Funktionen
+**Status:** Nicht vorhanden
+**Implementierung:**
+- QR-Code Scanner für physische Dokumente
+- AR-Tags auf realen Objekten
+- Räumliche Notizen (Location-based)
+
+
