@@ -29,21 +29,13 @@ import {
 import { toast } from 'sonner';
 import { QuickQRCode } from './QRCodeGenerator';
 import { cn } from '@/lib/utils';
+import { useTempShares } from '@/hooks/useTempShares';
 
 interface TemporaryShareLinkProps {
   itemId: string;
   itemType: 'photo' | 'file' | 'album' | 'note' | 'link';
   itemName: string;
-  onCreateLink?: (config: ShareLinkConfig) => Promise<string>;
   trigger?: React.ReactNode;
-}
-
-interface ShareLinkConfig {
-  itemId: string;
-  itemType: string;
-  expiresInHours: number;
-  maxClicks: number | null;
-  password: string | null;
 }
 
 const EXPIRY_OPTIONS = [
@@ -59,11 +51,9 @@ export const TemporaryShareLink: React.FC<TemporaryShareLinkProps> = ({
   itemId,
   itemType,
   itemName,
-  onCreateLink,
   trigger
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [isCreating, setIsCreating] = useState(false);
   const [shareLink, setShareLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   
@@ -76,34 +66,20 @@ export const TemporaryShareLink: React.FC<TemporaryShareLinkProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [showQR, setShowQR] = useState(false);
 
-  const handleCreateLink = async () => {
-    setIsCreating(true);
-    
-    try {
-      const config: ShareLinkConfig = {
-        itemId,
-        itemType,
-        expiresInHours: expiryHours,
-        maxClicks: limitClicks ? maxClicks : null,
-        password: usePassword ? password : null,
-      };
+  const { createShareLink, isCreating } = useTempShares();
 
-      if (onCreateLink) {
-        const link = await onCreateLink(config);
-        setShareLink(link);
-      } else {
-        // Generate a demo link
-        const token = Math.random().toString(36).substring(2, 15);
-        const baseUrl = window.location.origin;
-        setShareLink(`${baseUrl}/shared/${token}`);
-      }
-      
+  const handleCreateLink = async () => {
+    const link = await createShareLink({
+      itemId,
+      itemType,
+      expiresInHours: expiryHours,
+      maxClicks: limitClicks ? maxClicks : null,
+      password: usePassword ? password : null,
+    });
+
+    if (link) {
+      setShareLink(link);
       toast.success('Temporärer Link erstellt');
-    } catch (error) {
-      console.error('Error creating share link:', error);
-      toast.error('Fehler beim Erstellen des Links');
-    } finally {
-      setIsCreating(false);
     }
   };
 
