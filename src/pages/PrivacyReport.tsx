@@ -15,7 +15,9 @@ import {
   Unlock,
   Download,
   RefreshCw,
-  Calendar
+  Calendar,
+  FileText,
+  Printer
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { PageHeader } from '@/components/PageHeader';
@@ -23,6 +25,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { format, subDays, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
 import { de } from 'date-fns/locale';
+import { downloadPDF, generatePrivacyReportPDF } from '@/lib/pdfExport';
+import { toast } from 'sonner';
 
 interface SecurityLog {
   id: string;
@@ -160,7 +164,7 @@ export default function PrivacyReport() {
     return labels[eventType] || eventType;
   };
 
-  const exportReport = () => {
+  const exportJSON = () => {
     const report = {
       generated_at: new Date().toISOString(),
       time_range: timeRange,
@@ -184,6 +188,19 @@ export default function PrivacyReport() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    toast.success('JSON-Bericht exportiert');
+  };
+
+  const exportPDF = () => {
+    const recentEvents = logs.slice(0, 20).map(l => ({
+      type: getEventLabel(l.event_type),
+      date: format(new Date(l.created_at), 'dd.MM.yyyy HH:mm', { locale: de }),
+      location: [l.city, l.country].filter(Boolean).join(', ')
+    }));
+
+    const pdfDoc = generatePrivacyReportPDF(stats, securityScore, recentEvents);
+    downloadPDF(pdfDoc, `datenschutz-bericht-${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+    toast.success('PDF-Bericht wird generiert...');
   };
 
   return (
@@ -207,11 +224,19 @@ export default function PrivacyReport() {
               <RefreshCw className={cn("w-5 h-5", isLoading && "animate-spin")} />
             </button>
             <button
-              onClick={exportReport}
+              onClick={exportPDF}
               className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-colors"
+              title="Als PDF exportieren"
+            >
+              <Printer className="w-4 h-4" />
+              PDF
+            </button>
+            <button
+              onClick={exportJSON}
+              className="flex items-center gap-2 px-3 py-2 bg-muted text-foreground rounded-xl hover:bg-muted/80 transition-colors"
+              title="Als JSON exportieren"
             >
               <Download className="w-4 h-4" />
-              Exportieren
             </button>
           </div>
         }
