@@ -52,6 +52,7 @@ const SelfDestructingNotes = lazy(() => import("./pages/SelfDestructingNotes"));
 const SessionManagement = lazy(() => import("./pages/SessionManagement"));
 const PrivacyReport = lazy(() => import("./pages/PrivacyReport"));
 const Memories = lazy(() => import("./pages/Memories"));
+const ContentInsights = lazy(() => import("./pages/ContentInsights"));
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -199,6 +200,11 @@ const App = () => (
                       <Route path="/memories" element={
                         <ErrorBoundary>
                           <Memories />
+                        </ErrorBoundary>
+                      } />
+                      <Route path="/content-insights" element={
+                        <ErrorBoundary>
+                          <ContentInsights />
                         </ErrorBoundary>
                       } />
                       <Route path="/self-destructing-notes" element={
