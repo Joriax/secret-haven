@@ -1,20 +1,28 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useLocation } from "react-router-dom";
 
 /**
  * Resets global UI side-effects on route changes.
  *
- * Fixes cases where overlays (Dialog/Sheet/Drawer) or scroll-lock styles
+ * Fixes cases where overlays (Dialog/Sheet/Drawer/Framer Motion) or scroll-lock styles
  * can survive unmounts and keep the UI blurred/dimmed.
  */
 export function RouteUIReset() {
   const location = useLocation();
+  const isFirstRender = useRef(true);
 
   useEffect(() => {
-    const resetScrollLocks = () => {
+    // Skip first render to avoid cleaning up on initial mount
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+
+    const cleanup = () => {
       const body = document.body;
       const html = document.documentElement;
 
+      // Reset body scroll locks
       body.style.removeProperty("overflow");
       body.style.removeProperty("padding-right");
       body.style.removeProperty("pointer-events");
@@ -28,63 +36,66 @@ export function RouteUIReset() {
       body.removeAttribute("data-vaul-drawer-open");
 
       html.style.removeProperty("overflow");
-    };
 
-    const resetRootInlineEffects = () => {
-      const root = document.getElementById("root") as HTMLElement | null;
-      if (!root) return;
-      root.style.removeProperty("filter");
-      root.style.removeProperty("backdrop-filter");
-      root.style.removeProperty("transform");
-      root.style.removeProperty("will-change");
-    };
+      // Reset any inline filters on root
+      const root = document.getElementById("root");
+      if (root) {
+        root.style.removeProperty("filter");
+        root.style.removeProperty("backdrop-filter");
+        root.style.removeProperty("transform");
+        root.style.removeProperty("will-change");
+      }
 
-    const closeOverlaysViaEscape = () => {
-      // Many overlays listen on window for Escape.
+      // Remove ALL elements with backdrop-blur that are fixed/absolute overlays
+      // This catches Framer Motion animated overlays that don't unmount properly
+      const overlays = document.querySelectorAll<HTMLElement>(
+        '[class*="backdrop-blur"], [class*="bg-background/80"], [style*="backdrop-filter"]'
+      );
+      
+      overlays.forEach((el) => {
+        const style = window.getComputedStyle(el);
+        const position = style.position;
+        
+        // Only remove fixed/absolute positioned overlays (not inline blurred elements)
+        if (position === "fixed" || position === "absolute") {
+          const rect = el.getBoundingClientRect();
+          const isLargeOverlay = rect.width > window.innerWidth * 0.5 && rect.height > window.innerHeight * 0.5;
+          
+          // Remove large overlays (likely modal backdrops)
+          if (isLargeOverlay) {
+            el.remove();
+          }
+        }
+      });
+
+      // Also target Framer Motion's presence elements that might be stuck
+      const motionElements = document.querySelectorAll<HTMLElement>(
+        '[data-framer-portal-id], [class*="framer"]'
+      );
+      motionElements.forEach((el) => {
+        const style = window.getComputedStyle(el);
+        if (style.position === "fixed" && style.backdropFilter !== "none") {
+          el.remove();
+        }
+      });
+
+      // Dispatch Escape to close any remaining open overlays
       window.dispatchEvent(
         new KeyboardEvent("keydown", {
           key: "Escape",
           bubbles: true,
           cancelable: true,
-        }),
+        })
       );
     };
 
-    const removeStaleFullscreenBlurOverlays = () => {
-      // Target only FULLSCREEN fixed nodes with backdrop-filter (blur), to avoid touching
-      // small fixed UI like PWA prompts/toasts.
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
+    // Run cleanup immediately
+    cleanup();
+    
+    // Run again after a short delay to catch async-mounted overlays
+    const timeoutId = setTimeout(cleanup, 100);
 
-      const candidates = Array.from(document.querySelectorAll<HTMLElement>("body *"));
-      for (const el of candidates) {
-        const style = window.getComputedStyle(el);
-        if (style.position !== "fixed") continue;
-
-        const rect = el.getBoundingClientRect();
-        const isFullscreen = rect.width >= vw - 2 && rect.height >= vh - 2;
-        if (!isFullscreen) continue;
-
-        const hasBackdropBlur = style.backdropFilter && style.backdropFilter !== "none";
-        if (!hasBackdropBlur) continue;
-
-        const z = Number.parseInt(style.zIndex || "0", 10);
-        if (Number.isFinite(z) && z < 30) continue;
-
-        // Remove only elements that are very likely overlays.
-        // If React still owns this node, it will be re-rendered correctly.
-        el.remove();
-      }
-    };
-
-    try {
-      closeOverlaysViaEscape();
-      resetScrollLocks();
-      resetRootInlineEffects();
-      removeStaleFullscreenBlurOverlays();
-    } catch {
-      // Never block navigation due to cleanup.
-    }
+    return () => clearTimeout(timeoutId);
   }, [location.key]);
 
   return null;

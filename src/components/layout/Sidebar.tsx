@@ -127,18 +127,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onSearchOpen
 
   return (
     <>
-      {/* Mobile overlay */}
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40 lg:hidden"
-            onClick={onToggle}
-          />
+      {/* Mobile overlay - using CSS transitions instead of Framer Motion to prevent unmount issues */}
+      <div
+        className={cn(
+          "fixed inset-0 bg-background/80 backdrop-blur-sm z-40 lg:hidden transition-opacity duration-300",
+          isOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
         )}
-      </AnimatePresence>
+        onClick={onToggle}
+        aria-hidden={!isOpen}
+      />
 
       {/* Mobile menu button - only on mobile */}
       <button
