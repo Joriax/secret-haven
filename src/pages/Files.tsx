@@ -58,6 +58,7 @@ import { MultiSelectBar } from '@/components/MultiSelect';
 import { TagManager } from '@/components/TagManager';
 import { SharedAlbumButton } from '@/components/SharedAlbumButton';
 import { QRCodeGenerator } from '@/components/QRCodeGenerator';
+import { HierarchicalAlbumPicker } from '@/components/HierarchicalAlbumPicker';
 import { TemporaryShareLink } from '@/components/TemporaryShareLink';
 import { useDuplicatePrevention } from '@/hooks/useDuplicatePrevention';
 import {
@@ -1097,108 +1098,31 @@ export default function Files() {
 
       {/* Album Picker for bulk move */}
       <AnimatePresence>
+        {/* Album Picker for bulk move - Hierarchical */}
         {showAlbumPicker && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-            onClick={() => setShowAlbumPicker(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-card border border-border rounded-2xl p-6 w-full max-w-sm max-h-[60vh] overflow-y-auto"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h3 className="text-lg font-semibold text-foreground mb-4">Album auswählen</h3>
-              <div className="space-y-2">
-                <button
-                  onClick={() => handleBulkMoveToAlbum(null)}
-                  className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-muted transition-colors"
-                >
-                  <Folder className="w-5 h-5 text-muted-foreground" />
-                  <span className="text-foreground">Kein Album</span>
-                </button>
-                {albums.map((album) => (
-                  <button
-                    key={album.id}
-                    onClick={() => handleBulkMoveToAlbum(album.id)}
-                    className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-muted transition-colors"
-                  >
-                    <div 
-                      className="w-8 h-8 rounded-lg flex items-center justify-center"
-                      style={{ backgroundColor: `${album.color}20` }}
-                    >
-                      <Folder className="w-4 h-4" style={{ color: album.color }} />
-                    </div>
-                    <span className="text-foreground">{album.name}</span>
-                  </button>
-                ))}
-              </div>
-            </motion.div>
-          </motion.div>
+          <HierarchicalAlbumPicker
+            albums={albums}
+            selectedAlbumId={null}
+            onSelect={(albumId) => {
+              handleBulkMoveToAlbum(albumId);
+            }}
+            onClose={() => setShowAlbumPicker(false)}
+            title={`${selectedItems.size} Dateien zu Album hinzufügen`}
+          />
         )}
 
-        {/* Album Picker for single file */}
+        {/* Album Picker for single file - Hierarchical */}
         {singleFileAlbumPicker && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-            onClick={() => setSingleFileAlbumPicker(null)}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-card border border-border rounded-2xl p-6 w-full max-w-sm max-h-[60vh] overflow-y-auto"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h3 className="text-lg font-semibold text-foreground mb-2">In Album verschieben</h3>
-              <p className="text-sm text-muted-foreground mb-4 truncate">
-                {singleFileAlbumPicker.filename.replace(/^\d+-/, '')}
-              </p>
-              <div className="space-y-2">
-                <button
-                  onClick={() => handleSingleFileMoveToAlbum(singleFileAlbumPicker, null)}
-                  className={cn(
-                    "w-full flex items-center gap-3 p-3 rounded-xl hover:bg-muted transition-colors",
-                    !singleFileAlbumPicker.album_id && "bg-muted"
-                  )}
-                >
-                  <Folder className="w-5 h-5 text-muted-foreground" />
-                  <span className="text-foreground">Kein Album</span>
-                  {!singleFileAlbumPicker.album_id && (
-                    <span className="ml-auto text-xs text-primary">Aktuell</span>
-                  )}
-                </button>
-                {albums.map((album) => (
-                  <button
-                    key={album.id}
-                    onClick={() => handleSingleFileMoveToAlbum(singleFileAlbumPicker, album.id)}
-                    className={cn(
-                      "w-full flex items-center gap-3 p-3 rounded-xl hover:bg-muted transition-colors",
-                      singleFileAlbumPicker.album_id === album.id && "bg-muted"
-                    )}
-                  >
-                    <div 
-                      className="w-8 h-8 rounded-lg flex items-center justify-center"
-                      style={{ backgroundColor: `${album.color}20` }}
-                    >
-                      <Folder className="w-4 h-4" style={{ color: album.color }} />
-                    </div>
-                    <span className="text-foreground">{album.name}</span>
-                    {singleFileAlbumPicker.album_id === album.id && (
-                      <span className="ml-auto text-xs text-primary">Aktuell</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </motion.div>
-          </motion.div>
+          <HierarchicalAlbumPicker
+            albums={albums}
+            selectedAlbumId={singleFileAlbumPicker.album_id}
+            onSelect={(albumId) => {
+              handleSingleFileMoveToAlbum(singleFileAlbumPicker, albumId);
+            }}
+            onClose={() => setSingleFileAlbumPicker(null)}
+            title="In Album verschieben"
+            itemName={singleFileAlbumPicker.filename.replace(/^\d+-/, '')}
+          />
         )}
       </AnimatePresence>
 

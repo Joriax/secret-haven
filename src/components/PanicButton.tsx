@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, X, LogOut, Trash2, EyeOff, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
 interface PanicButtonProps {
@@ -17,6 +17,10 @@ export const PanicButton: React.FC<PanicButtonProps> = ({ enabled = true }) => {
   const [showConfirm, setShowConfirm] = useState(false);
   const { logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Hide on login page
+  const isLoginPage = location.pathname === '/login' || location.pathname === '/';
 
   const HOLD_DURATION = 1500; // 1.5 seconds
 
@@ -95,7 +99,7 @@ export const PanicButton: React.FC<PanicButtonProps> = ({ enabled = true }) => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  if (!enabled) return null;
+  if (!enabled || isLoginPage) return null;
 
   return (
     <>

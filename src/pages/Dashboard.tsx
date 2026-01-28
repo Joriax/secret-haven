@@ -631,6 +631,9 @@ export default function Dashboard() {
             </div>
           );
 
+        case 'quick-capture':
+          return <QuickCaptureWidget />;
+
         default:
           return null;
       }
@@ -722,8 +725,6 @@ export default function Dashboard() {
 
         {/* Side Panel */}
         <div className="space-y-4">
-          {/* Quick Capture Widget */}
-          <QuickCaptureWidget />
           {sideWidgets.map((widget, idx) => renderWidget(widget, fullWidthWidgets.length + mainWidgets.length + idx))}
         </div>
       </div>
