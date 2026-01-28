@@ -3,6 +3,7 @@ import { Outlet, Navigate, useLocation } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { GlobalSearch } from '../GlobalSearch';
 import { PullToRefreshIndicator } from '../PullToRefreshIndicator';
+import { VoiceCommandButton } from '../VoiceCommandButton';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -99,6 +100,9 @@ export const MainLayout: React.FC = () => {
       </main>
 
       <GlobalSearch isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
+      
+      {/* Voice Command Button */}
+      <VoiceCommandButton />
     </div>
   );
 };
