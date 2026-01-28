@@ -66,9 +66,13 @@ const analyticsNavItems = [
   { icon: Calendar, label: 'Kalender', path: '/calendar' },
 ];
 
+import { Flame, FileSearch, Eye as EyeIcon } from 'lucide-react';
+
 const securityNavItems = [
   { icon: Lock, label: 'Geheimer Safe', path: '/secret-texts' },
+  { icon: Flame, label: 'Burn Notes', path: '/self-destructing-notes' },
   { icon: Shield, label: 'Sicherheit', path: '/security-logs' },
+  { icon: EyeIcon, label: 'Privacy Report', path: '/privacy-report' },
   { icon: Trash2, label: 'Papierkorb', path: '/trash' },
 ];
 
