@@ -48,6 +48,7 @@ const UsageStats = lazy(() => import("./pages/UsageStats"));
 const TagCloud = lazy(() => import("./pages/TagCloud"));
 const CalendarView = lazy(() => import("./pages/CalendarView"));
 const NoteGraph = lazy(() => import("./pages/NoteGraph"));
+const Memories = lazy(() => import("./pages/Memories"));
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -190,6 +191,11 @@ const App = () => (
                       <Route path="/note-graph" element={
                         <ErrorBoundary>
                           <NoteGraph />
+                        </ErrorBoundary>
+                      } />
+                      <Route path="/memories" element={
+                        <ErrorBoundary>
+                          <Memories />
                         </ErrorBoundary>
                       } />
                       <Route path="/settings" element={
