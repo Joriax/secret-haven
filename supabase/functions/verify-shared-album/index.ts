@@ -298,10 +298,10 @@ serve(async (req) => {
             .eq('id', item.photo_id)
             .single();
           if (photo) {
-            // Generate signed URL
+            // Generate signed URL - shorter TTL (10 min) for public shared content
             const { data: urlData } = await supabase.storage
               .from('photos')
-              .createSignedUrl(`${album.owner_id}/${photo.filename}`, 3600);
+              .createSignedUrl(`${album.owner_id}/${photo.filename}`, 600);
             enrichedItems.push({
               id: item.id,
               type: 'photo',
@@ -330,9 +330,10 @@ serve(async (req) => {
             .eq('id', item.file_id)
             .single();
           if (file) {
+            // Shorter TTL (10 min) for public shared content
             const { data: urlData } = await supabase.storage
               .from('files')
-              .createSignedUrl(`${album.owner_id}/${file.filename}`, 3600);
+              .createSignedUrl(`${album.owner_id}/${file.filename}`, 600);
             enrichedItems.push({
               id: item.id,
               type: 'file',
