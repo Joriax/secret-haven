@@ -219,7 +219,7 @@ function createZipArchive(
 }
 
 /**
- * Save backup to cloud storage
+ * Save backup to cloud storage with timeout
  */
 async function saveToCloud(
   supabase: SupabaseClient,
@@ -231,48 +231,65 @@ async function saveToCloud(
 ): Promise<boolean> {
   const storagePath = `${userId}/${filename}`;
   
-  const { error: uploadError } = await supabase.storage
-    .from('backups')
-    .upload(storagePath, blob, { upsert: true });
-  
-  if (uploadError) {
-    console.error('Cloud upload error:', uploadError);
+  try {
+    // Add timeout for upload (60 seconds max)
+    const uploadPromise = supabase.storage
+      .from('backups')
+      .upload(storagePath, blob, { upsert: true });
+    
+    const timeoutPromise = new Promise<{ error: Error }>((_, reject) => 
+      setTimeout(() => reject(new Error('Upload timeout')), 60000)
+    );
+    
+    const result = await Promise.race([uploadPromise, timeoutPromise]) as any;
+    
+    if (result.error) {
+      console.error('Cloud upload error:', result.error);
+      return false;
+    }
+
+    const itemCounts = {
+      notes: manifest.data.notes.length,
+      photos: manifest.data.photos.length,
+      files: manifest.data.files.length,
+      links: manifest.data.links.length,
+      tiktoks: manifest.data.tiktok_videos.length,
+      secrets: manifest.data.secret_texts.length,
+      tags: manifest.data.tags.length,
+      albums: manifest.data.albums.length + manifest.data.file_albums.length,
+      folders: manifest.data.note_folders.length + manifest.data.link_folders.length + manifest.data.tiktok_folders.length,
+    };
+
+    const { error: insertError } = await supabase.from('backup_versions').insert({
+      user_id: userId,
+      filename,
+      storage_path: storagePath,
+      size_bytes: blob.size,
+      item_counts: itemCounts,
+      includes_media: manifest.metadata.includes_media,
+      is_auto_backup: isAutoBackup,
+    });
+
+    if (insertError) {
+      console.error('Error saving backup version:', insertError);
+      // Don't fail completely - file was uploaded
+    }
+
+    if (isAutoBackup) {
+      await supabase
+        .from('backup_settings')
+        .upsert({
+          user_id: userId,
+          last_auto_backup: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id' });
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Cloud save error:', error);
     return false;
   }
-
-  const itemCounts = {
-    notes: manifest.data.notes.length,
-    photos: manifest.data.photos.length,
-    files: manifest.data.files.length,
-    links: manifest.data.links.length,
-    tiktoks: manifest.data.tiktok_videos.length,
-    secrets: manifest.data.secret_texts.length,
-    tags: manifest.data.tags.length,
-    albums: manifest.data.albums.length + manifest.data.file_albums.length,
-    folders: manifest.data.note_folders.length + manifest.data.link_folders.length + manifest.data.tiktok_folders.length,
-  };
-
-  await supabase.from('backup_versions').insert({
-    user_id: userId,
-    filename,
-    storage_path: storagePath,
-    size_bytes: blob.size,
-    item_counts: itemCounts,
-    includes_media: manifest.metadata.includes_media,
-    is_auto_backup: isAutoBackup,
-  });
-
-  if (isAutoBackup) {
-    await supabase
-      .from('backup_settings')
-      .upsert({
-        user_id: userId,
-        last_auto_backup: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'user_id' });
-  }
-
-  return true;
 }
 
 /**
@@ -341,7 +358,10 @@ export async function exportPhantomVault(
     // 8. Save to cloud if requested
     if (options.saveToCloud) {
       onProgress({ phase: 'packaging', percent: 96, message: 'Speichere in Cloud...' });
-      await saveToCloud(supabase, userId, filename, finalBlob, manifest, options.isAutoBackup || false);
+      const cloudSaved = await saveToCloud(supabase, userId, filename, finalBlob, manifest, options.isAutoBackup || false);
+      if (!cloudSaved) {
+        console.warn('Cloud save failed, continuing with download');
+      }
     }
 
     // 9. Trigger download for manual backups
