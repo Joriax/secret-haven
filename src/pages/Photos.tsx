@@ -204,6 +204,7 @@ export default function Photos() {
   const [renameDialog, setRenameDialog] = useState<{ isOpen: boolean; item: MediaItem | null }>({ isOpen: false, item: null });
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [videoVolume, setVideoVolume] = useState(1);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const [showBulkTagManager, setShowBulkTagManager] = useState(false);
@@ -2277,6 +2278,46 @@ export default function Photos() {
               </div>
               
               <div className="flex items-center gap-1 flex-wrap justify-end">
+                {/* Volume control for videos (desktop only) */}
+                {currentLightboxItem.type === 'video' && (
+                  <div className="hidden sm:flex items-center gap-2 mr-2">
+                    <button
+                      onClick={() => {
+                        const newMuted = !isMuted;
+                        setIsMuted(newMuted);
+                        if (videoRef.current) {
+                          videoRef.current.muted = newMuted;
+                        }
+                      }}
+                      className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                      title={isMuted ? "Ton an" : "Ton aus"}
+                    >
+                      {isMuted || videoVolume === 0 ? (
+                        <VolumeX className="w-5 h-5 text-white" />
+                      ) : (
+                        <Volume2 className="w-5 h-5 text-white" />
+                      )}
+                    </button>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={isMuted ? 0 : videoVolume}
+                      onChange={(e) => {
+                        const newVolume = parseFloat(e.target.value);
+                        setVideoVolume(newVolume);
+                        setIsMuted(newVolume === 0);
+                        if (videoRef.current) {
+                          videoRef.current.volume = newVolume;
+                          videoRef.current.muted = newVolume === 0;
+                        }
+                      }}
+                      className="w-20 h-1 bg-white/30 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-pointer"
+                      title="Lautstärke"
+                    />
+                  </div>
+                )}
                 {/* Zoom controls - only for photos (desktop only) */}
                 {currentLightboxItem.type === 'photo' && (
                   <>
@@ -2433,10 +2474,16 @@ export default function Photos() {
                         controlsList="nodownload"
                         autoPlay
                         playsInline
-                        muted={isSlideshow ? false : isMuted}
+                        muted={isMuted}
                         onClick={(e) => e.stopPropagation()}
                         onPlay={() => setIsVideoPlaying(true)}
                         onPause={() => setIsVideoPlaying(false)}
+                        onLoadedMetadata={() => {
+                          if (videoRef.current) {
+                            videoRef.current.volume = videoVolume;
+                            videoRef.current.muted = isMuted;
+                          }
+                        }}
                         onEnded={() => {
                           setIsVideoPlaying(false);
                           // In slideshow mode, move to next when video ends
