@@ -421,10 +421,11 @@ export default function ContentInsights() {
                         animate={{ opacity: 1, x: 0 }}
                         className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer group"
                         onClick={() => {
-                          if (insight.type === 'note') navigate('/notes');
-                          else if (insight.type === 'photo') navigate('/photos');
-                          else if (insight.type === 'file') navigate('/files');
-                          else if (insight.type === 'link') navigate('/links');
+                          // Navigate directly to the specific item
+                          if (insight.type === 'note') navigate('/notes', { state: { openNote: insight.id } });
+                          else if (insight.type === 'photo') navigate('/photos', { state: { openPhotoId: insight.id } });
+                          else if (insight.type === 'file') navigate('/files', { state: { openFileId: insight.id } });
+                          else if (insight.type === 'link') navigate('/links', { state: { openLinkId: insight.id } });
                         }}
                       >
                         <div className={cn(

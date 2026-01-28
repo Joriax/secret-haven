@@ -50,6 +50,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTags } from '@/hooks/useTags';
 import { useViewHistory } from '@/hooks/useViewHistory';
 import { useFileAlbums, FileAlbum } from '@/hooks/useFileAlbums';
+import { useFiles as useFilesHook, FileItem } from '@/hooks/useFiles';
 import { cn, formatFileSize } from '@/lib/utils';
 import { useLocation } from 'react-router-dom';
 import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
@@ -72,18 +73,6 @@ import { toast } from 'sonner';
 import { DocumentPreview, isOfficeDocument, isOfficeDocumentByExtension, isTextFile } from '@/components/DocumentPreview';
 import { MAX_FILE_SIZE_BYTES } from '@/config';
 
-interface FileItem {
-  id: string;
-  filename: string;
-  mime_type: string;
-  size: number;
-  uploaded_at: string;
-  is_favorite?: boolean;
-  tags?: string[];
-  url?: string;
-  album_id?: string | null;
-}
-
 type ViewMode = 'grid' | 'list';
 type FilterMode = 'all' | 'images' | 'videos' | 'documents' | 'audio';
 type SortMode = 'date-desc' | 'date-asc' | 'name-asc' | 'name-desc' | 'size-desc' | 'size-asc' | 'favorites';
@@ -97,11 +86,21 @@ const getFileIcon = (mimeType: string) => {
 };
 
 export default function Files() {
-  const [files, setFiles] = useState<FileItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // Use optimized files hook with caching and background URL fetching
+  const {
+    files,
+    setFiles,
+    isLoading,
+    isUploading,
+    uploadProgress,
+    uploadFiles: uploadFilesFromHook,
+    deleteFile: deleteFileFromHook,
+    toggleFavorite: toggleFavoriteFromHook,
+    updateFileTags: updateFileTagsFromHook,
+    moveToAlbum: moveToAlbumFromHook,
+    getSignedUrl,
+  } = useFilesHook();
   const [searchQuery, setSearchQuery] = useState('');
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; file: FileItem | null; isMulti?: boolean }>({ isOpen: false, file: null });
   const [renameDialog, setRenameDialog] = useState<{ isOpen: boolean; file: FileItem | null }>({ isOpen: false, file: null });
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
@@ -154,79 +153,26 @@ export default function Files() {
     getBreadcrumb 
   } = useFileAlbums();
 
-  const fetchFiles = useCallback(async () => {
-    if (!userId) return;
-
-    if (isDecoyMode) {
-      setFiles([]);
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from('files')
-        .select('*')
-        .eq('user_id', userId)
-        .is('deleted_at', null)
-        .order('uploaded_at', { ascending: false });
-
-      if (error) throw error;
-
-      // Get signed URLs for previewable files (images, videos, PDFs, Office docs, text files)
-      const filesWithUrls = await Promise.all(
-        (data || []).map(async (file) => {
-          const isPreviewable = file.mime_type.startsWith('image/') || 
-                                file.mime_type.startsWith('video/') || 
-                                file.mime_type === 'application/pdf' ||
-                                isOfficeDocument(file.mime_type) ||
-                                isOfficeDocumentByExtension(file.filename) ||
-                                isTextFile(file.mime_type, file.filename);
-          if (isPreviewable) {
-            const { data: urlData } = await supabase.storage
-              .from('files')
-              .createSignedUrl(`${userId}/${file.filename}`, 3600);
-            return { ...file, url: urlData?.signedUrl };
-          }
-          return file;
-        })
-      );
-
-      setFiles(filesWithUrls);
-    } catch (error) {
-      console.error('Error fetching files:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [userId, isDecoyMode]);
-
+  // Load duplicate prevention hashes on mount
   useEffect(() => {
-    fetchFiles();
     loadExistingHashes();
-  }, [fetchFiles, loadExistingHashes]);
+  }, [loadExistingHashes]);
 
-  // Real-time updates for files and albums
+  // Real-time updates for albums only (files are managed by hook)
   useEffect(() => {
     if (!userId) return;
-
-    const filesChannel = supabase
-      .channel('files-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'files' }, fetchFiles)
-      .subscribe();
 
     const albumsChannel = supabase
       .channel('file-albums-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'file_albums' }, () => {
-        // Refetch albums when they change
         fetchAlbums();
       })
       .subscribe();
 
     return () => {
-      supabase.removeChannel(filesChannel);
       supabase.removeChannel(albumsChannel);
     };
-  }, [userId, fetchFiles, fetchAlbums]);
+  }, [userId, fetchAlbums, supabase]);
 
   useEffect(() => {
     if (location.state?.action === 'upload-file') {
@@ -234,79 +180,9 @@ export default function Files() {
     }
   }, [location.state]);
 
+  // Use the optimized upload from hook
   const handleUpload = async (fileList: FileList | null) => {
-    if (!fileList || !userId) return;
-
-    const filesToUpload = Array.from(fileList).filter(f => f.size <= MAX_FILE_SIZE_BYTES);
-    if (filesToUpload.length === 0) {
-      toast.error('Dateien sind zu groß (max. 50MB)');
-      return;
-    }
-
-    setIsUploading(true);
-    setUploadProgress(0);
-
-    try {
-      for (let i = 0; i < filesToUpload.length; i++) {
-        const file = filesToUpload[i];
-        
-        // Check for duplicates
-        const duplicateCheck = await checkForDuplicate(file);
-        if (duplicateCheck.isDuplicate && duplicateCheck.existingItem) {
-          showDuplicateWarning(
-            file, 
-            duplicateCheck.existingItem.filename,
-            () => {}, // User can still proceed manually
-            () => {}
-          );
-          // Continue anyway - just show warning
-        }
-        
-        const filename = `${Date.now()}-${file.name}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from('files')
-          .upload(`${userId}/${filename}`, file);
-
-        if (uploadError) throw uploadError;
-        
-        // Register upload for future duplicate detection
-        registerUpload(filename, '', 'file');
-
-        const { data, error: dbError } = await supabase
-          .from('files')
-          .insert({
-            user_id: userId,
-            filename,
-            mime_type: file.type || 'application/octet-stream',
-            size: file.size,
-            tags: [],
-          })
-          .select()
-          .single();
-
-        if (dbError) throw dbError;
-
-        // Get URL for the new file if previewable
-        let url: string | undefined;
-        if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
-          const { data: urlData } = await supabase.storage
-            .from('files')
-            .createSignedUrl(`${userId}/${filename}`, 3600);
-          url = urlData?.signedUrl;
-        }
-
-        setFiles(prev => [{ ...data, url }, ...prev]);
-        setUploadProgress(((i + 1) / filesToUpload.length) * 100);
-      }
-      toast.success(`${filesToUpload.length} ${filesToUpload.length === 1 ? 'Datei' : 'Dateien'} hochgeladen`);
-    } catch (error) {
-      console.error('Error uploading files:', error);
-      toast.error('Fehler beim Hochladen');
-    } finally {
-      setIsUploading(false);
-      setUploadProgress(0);
-    }
+    await uploadFilesFromHook(fileList, selectedAlbum?.id || null);
   };
 
   const downloadFile = async (file: FileItem) => {
