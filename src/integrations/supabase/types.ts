@@ -488,6 +488,42 @@ export type Database = {
           },
         ]
       }
+      note_templates: {
+        Row: {
+          content: string
+          created_at: string | null
+          icon: string | null
+          id: string
+          is_favorite: boolean | null
+          is_system: boolean | null
+          name: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string | null
+          icon?: string | null
+          id?: string
+          is_favorite?: boolean | null
+          is_system?: boolean | null
+          name: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string | null
+          icon?: string | null
+          id?: string
+          is_favorite?: boolean | null
+          is_system?: boolean | null
+          name?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       note_versions: {
         Row: {
           content: string | null
@@ -1201,6 +1237,59 @@ export type Database = {
           viewed_at?: string | null
         }
         Relationships: []
+      }
+      voice_notes: {
+        Row: {
+          created_at: string | null
+          deleted_at: string | null
+          duration: number
+          filename: string
+          folder_id: string | null
+          id: string
+          is_favorite: boolean | null
+          tags: string[] | null
+          title: string | null
+          transcript: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          deleted_at?: string | null
+          duration: number
+          filename: string
+          folder_id?: string | null
+          id?: string
+          is_favorite?: boolean | null
+          tags?: string[] | null
+          title?: string | null
+          transcript?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          deleted_at?: string | null
+          duration?: number
+          filename?: string
+          folder_id?: string | null
+          id?: string
+          is_favorite?: boolean | null
+          tags?: string[] | null
+          title?: string | null
+          transcript?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voice_notes_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "note_folders"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

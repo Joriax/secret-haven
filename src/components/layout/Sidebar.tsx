@@ -55,12 +55,13 @@ const secondaryNavItems = [
   { icon: HardDrive, label: 'Speicheranalyse', path: '/storage-analysis' },
 ];
 
-import { Activity, BarChart3, Cloud } from 'lucide-react';
+import { Activity, BarChart3, Cloud, Calendar } from 'lucide-react';
 
 const analyticsNavItems = [
   { icon: Activity, label: 'Aktivität', path: '/activity' },
   { icon: BarChart3, label: 'Statistiken', path: '/usage-stats' },
   { icon: Cloud, label: 'Tag-Cloud', path: '/tag-cloud' },
+  { icon: Calendar, label: 'Kalender', path: '/calendar' },
 ];
 
 const securityNavItems = [
