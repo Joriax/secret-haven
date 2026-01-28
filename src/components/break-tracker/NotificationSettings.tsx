@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Bell, BellOff, Clock, AlertCircle, CheckCircle } from 'lucide-react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { Bell, BellOff, Clock, AlertCircle, CheckCircle, Smartphone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -29,8 +29,14 @@ export const NotificationSettings: React.FC<NotificationSettingsProps> = ({
 }) => {
   const [open, setOpen] = useState(false);
   const [reminderTime, setReminderTime] = useState(settings?.reminder_time || '12:00');
-  const { isSupported, permission, requestPermission, scheduleBreakReminder } = usePushNotifications();
-  const [scheduledReminder, setScheduledReminder] = useState<NodeJS.Timeout | null>(null);
+  const { 
+    isSupported, 
+    permission, 
+    requestPermission, 
+    scheduleBreakReminder,
+    swRegistration 
+  } = usePushNotifications();
+  const scheduledRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (settings?.reminder_time) {
@@ -38,21 +44,19 @@ export const NotificationSettings: React.FC<NotificationSettingsProps> = ({
     }
   }, [settings?.reminder_time]);
 
+  // Schedule reminder when settings change
   useEffect(() => {
-    // Schedule reminder when settings change and notifications are enabled
     if (settings?.reminder_enabled && permission === 'granted' && settings?.reminder_time) {
-      if (scheduledReminder) {
-        clearTimeout(scheduledReminder);
+      if (scheduledRef.current) {
+        clearTimeout(scheduledRef.current);
       }
       const timeoutId = scheduleBreakReminder(settings.reminder_time);
-      if (timeoutId) {
-        setScheduledReminder(timeoutId);
-      }
+      scheduledRef.current = timeoutId;
     }
 
     return () => {
-      if (scheduledReminder) {
-        clearTimeout(scheduledReminder);
+      if (scheduledRef.current) {
+        clearTimeout(scheduledRef.current);
       }
     };
   }, [settings?.reminder_enabled, settings?.reminder_time, permission, scheduleBreakReminder]);

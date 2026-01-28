@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useHaptics } from './useHaptics';
@@ -43,9 +43,10 @@ export function useVoiceCommands(options: UseVoiceCommandsOptions = {}): UseVoic
   const recognitionRef = useRef<any>(null);
   const navigate = useNavigate();
   const { vibrateSuccess, vibrateWarning } = useHaptics();
+  const initRef = useRef(false);
 
-  // Define available commands
-  const commands: VoiceCommand[] = [
+  // Memoized commands to prevent recreation
+  const commands: VoiceCommand[] = useMemo(() => [
     {
       phrases: ['neue notiz', 'notiz erstellen', 'erstelle notiz', 'new note'],
       action: () => navigate('/notes', { state: { createNew: true } }),
@@ -79,7 +80,6 @@ export function useVoiceCommands(options: UseVoiceCommandsOptions = {}): UseVoic
     {
       phrases: ['suche', 'suchen', 'finde', 'search'],
       action: () => {
-        // Trigger global search
         const event = new CustomEvent('openGlobalSearch');
         window.dispatchEvent(event);
       },
@@ -125,108 +125,106 @@ export function useVoiceCommands(options: UseVoiceCommandsOptions = {}): UseVoic
       action: () => navigate('/usage-stats'),
       description: 'Nutzungsstatistiken',
     },
-  ];
+  ], [navigate]);
 
-  // Initialize speech recognition
+  // Initialize speech recognition once
   useEffect(() => {
+    if (initRef.current) return;
+    initRef.current = true;
+
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     
     if (SpeechRecognition) {
       setIsSupported(true);
-      
-      const recognition = new SpeechRecognition();
-      recognition.continuous = continuous;
-      recognition.interimResults = true;
-      recognition.lang = language;
-      recognition.maxAlternatives = 3;
-      
-      recognition.onstart = () => {
-        setIsListening(true);
-        vibrateSuccess();
-      };
-      
-      recognition.onend = () => {
-        setIsListening(false);
-        if (continuous && enabled) {
-          // Restart if continuous mode
-          try {
-            recognition.start();
-          } catch (e) {
-            // Already started
-          }
-        }
-      };
-      
-      recognition.onerror = (event: any) => {
-        console.error('Speech recognition error:', event.error);
-        setIsListening(false);
-        
-        if (event.error === 'not-allowed') {
-          toast.error('Mikrofon-Zugriff verweigert');
-        } else if (event.error !== 'aborted') {
-          vibrateWarning();
-        }
-      };
-      
-      recognition.onresult = (event: any) => {
-        const results = event.results;
-        const lastResult = results[results.length - 1];
-        
-        if (lastResult.isFinal) {
-          const transcript = lastResult[0].transcript.toLowerCase().trim();
-          setTranscript(transcript);
-          onResult?.(transcript);
-          
-          // Check for command matches
-          let commandFound = false;
-          for (const command of commands) {
-            for (const phrase of command.phrases) {
-              if (transcript.includes(phrase.toLowerCase())) {
-                command.action();
-                onCommand?.(phrase);
-                vibrateSuccess();
-                toast.success(`Befehl: ${command.description}`);
-                commandFound = true;
-                break;
-              }
-            }
-            if (commandFound) break;
-          }
-          
-          if (!commandFound && transcript.length > 3) {
-            toast.info(`"${transcript}" - Befehl nicht erkannt`);
-          }
-        } else {
-          // Interim result
-          setTranscript(lastResult[0].transcript);
-        }
-      };
-      
-      recognitionRef.current = recognition;
     } else {
       setIsSupported(false);
     }
+  }, []);
+
+  // Create recognition instance when needed
+  const createRecognition = useCallback(() => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return null;
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = continuous;
+    recognition.interimResults = true;
+    recognition.lang = language;
+    recognition.maxAlternatives = 3;
     
-    return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.abort();
+    recognition.onstart = () => {
+      setIsListening(true);
+      vibrateSuccess();
+    };
+    
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+    
+    recognition.onerror = (event: any) => {
+      console.error('Speech recognition error:', event.error);
+      setIsListening(false);
+      
+      if (event.error === 'not-allowed') {
+        toast.error('Mikrofon-Zugriff verweigert');
+      } else if (event.error !== 'aborted') {
+        vibrateWarning();
       }
     };
-  }, [language, continuous, enabled, vibrateSuccess, vibrateWarning, onResult, onCommand]);
+    
+    recognition.onresult = (event: any) => {
+      const results = event.results;
+      const lastResult = results[results.length - 1];
+      
+      if (lastResult.isFinal) {
+        const finalTranscript = lastResult[0].transcript.toLowerCase().trim();
+        setTranscript(finalTranscript);
+        onResult?.(finalTranscript);
+        
+        // Check for command matches
+        let commandFound = false;
+        for (const command of commands) {
+          for (const phrase of command.phrases) {
+            if (finalTranscript.includes(phrase.toLowerCase())) {
+              command.action();
+              onCommand?.(phrase);
+              vibrateSuccess();
+              toast.success(`Befehl: ${command.description}`);
+              commandFound = true;
+              break;
+            }
+          }
+          if (commandFound) break;
+        }
+        
+        if (!commandFound && finalTranscript.length > 3) {
+          toast.info(`"${finalTranscript}" - Befehl nicht erkannt`);
+        }
+      } else {
+        setTranscript(lastResult[0].transcript);
+      }
+    };
+    
+    return recognition;
+  }, [language, continuous, vibrateSuccess, vibrateWarning, onResult, onCommand, commands]);
 
   const startListening = useCallback(() => {
-    if (!recognitionRef.current || !enabled) return;
+    if (!isSupported || !enabled) return;
+    
+    // Create new recognition for each session
+    const recognition = createRecognition();
+    if (!recognition) return;
+    
+    recognitionRef.current = recognition;
     
     try {
-      recognitionRef.current.start();
+      recognition.start();
     } catch (e: any) {
-      if (e.message.includes('already started')) {
-        // Already listening
-      } else {
+      if (!e.message?.includes('already started')) {
         console.error('Failed to start speech recognition:', e);
       }
     }
-  }, [enabled]);
+  }, [isSupported, enabled, createRecognition]);
 
   const stopListening = useCallback(() => {
     if (!recognitionRef.current) return;
@@ -238,6 +236,7 @@ export function useVoiceCommands(options: UseVoiceCommandsOptions = {}): UseVoic
     }
     
     setIsListening(false);
+    recognitionRef.current = null;
   }, []);
 
   const toggleListening = useCallback(() => {
@@ -247,6 +246,16 @@ export function useVoiceCommands(options: UseVoiceCommandsOptions = {}): UseVoic
       startListening();
     }
   }, [isListening, startListening, stopListening]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.abort();
+        recognitionRef.current = null;
+      }
+    };
+  }, []);
 
   return {
     isSupported,
