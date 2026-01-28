@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Fingerprint, ArrowLeft, Trash2, Code, Palette, Shield as ShieldIcon, Monitor } from 'lucide-react';
+import { Fingerprint, ArrowLeft, Trash2, Code, Palette, Shield as ShieldIcon, Monitor, FolderX } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PageHeader } from '@/components/PageHeader';
 import { 
@@ -40,6 +40,7 @@ import { DeleteAccountDialog } from '@/components/DeleteAccountDialog';
 import { CustomCSSEditor } from '@/components/CustomCSSEditor';
 import { IconPackSelector } from '@/components/IconPackSelector';
 import { DecoyVaultManager } from '@/components/DecoyVaultManager';
+import { HiddenAlbumsManager } from '@/components/HiddenAlbumsManager';
 
 const PIN_LENGTH = 6;
 
@@ -61,6 +62,7 @@ export default function Settings() {
   const [showAutoLock, setShowAutoLock] = useState(false);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
   const [showImportManager, setShowImportManager] = useState(false);
+  const [showHiddenAlbums, setShowHiddenAlbums] = useState(false);
   const [currentPin, setCurrentPin] = useState('');
   const [newPin, setNewPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
@@ -793,6 +795,41 @@ export default function Settings() {
 
       {/* Scheduled Backups */}
       <ScheduledBackups />
+
+      {/* Hidden Albums Section */}
+      <div className="glass-card p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <FolderX className="w-5 h-5 text-amber-500" />
+            <h2 className="text-lg font-semibold text-foreground">Ausgeblendete Alben</h2>
+          </div>
+          <button
+            onClick={() => setShowHiddenAlbums(!showHiddenAlbums)}
+            className="text-sm text-primary hover:underline"
+          >
+            {showHiddenAlbums ? 'Schließen' : 'Verwalten'}
+          </button>
+        </div>
+        
+        <p className="text-sm text-muted-foreground mb-4">
+          Blende Alben aus, um sie vollständig zu verstecken – inklusive aller Unteralben und Inhalte.
+        </p>
+        
+        <AnimatePresence>
+          {showHiddenAlbums && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden"
+            >
+              <HiddenAlbumsManager />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
 
       {/* Import Section */}
       <div className="glass-card p-6">

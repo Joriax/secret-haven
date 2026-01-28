@@ -47,6 +47,7 @@ import {
   Link2,
   Zap,
   Sparkles,
+  EyeOff,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTags } from '@/hooks/useTags';
@@ -80,6 +81,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useSmartAlbums, SmartAlbumItem } from '@/hooks/useSmartAlbums';
 import { SmartAlbumCard, SmartAlbumList } from '@/components/SmartAlbumCard';
+import { useHiddenAlbums } from '@/hooks/useHiddenAlbums';
 
 // Video file extensions and MIME types
 const VIDEO_EXTENSIONS = /\.(mp4|mov|webm|avi|mkv|m4v|3gp|ogv|wmv|flv)$/i;
@@ -255,6 +257,7 @@ export default function Photos() {
   const { checkForDuplicate, showDuplicateWarning, registerUpload, loadExistingHashes } = useDuplicatePrevention();
   const [shareItem, setShareItem] = useState<MediaItem | null>(null);
   const [selectedSmartAlbum, setSelectedSmartAlbum] = useState<string | null>(null);
+  const { allHiddenAlbumIds, isContentHidden, setHidden } = useHiddenAlbums();
 
   const fetchData = useCallback(async () => {
     if (!userId) return;
@@ -999,9 +1002,19 @@ export default function Photos() {
     }
   };
 
+  // Filter out hidden albums from display
+  const visibleAlbums = useMemo(() => {
+    return albums.filter(a => !allHiddenAlbumIds.has(a.id));
+  }, [albums, allHiddenAlbumIds]);
+
+  // Filter out media from hidden albums
+  const visibleMedia = useMemo(() => {
+    return media.filter(m => !m.album_id || !allHiddenAlbumIds.has(m.album_id));
+  }, [media, allHiddenAlbumIds]);
+
   // Filter and sort media based on view mode, tags, search, and sort
   const filteredMedia = useMemo(() => {
-    let result = media;
+    let result = visibleMedia;
     
     if (selectedAlbum) {
       result = result.filter(m => m.album_id === selectedAlbum.id);
@@ -1046,16 +1059,16 @@ export default function Photos() {
     });
     
     return result;
-  }, [media, selectedAlbum, viewMode, selectedTagFilter, searchQuery, sortMode]);
+  }, [visibleMedia, selectedAlbum, viewMode, selectedTagFilter, searchQuery, sortMode]);
 
-  // Get child albums for current view
+  // Get child albums for current view (only visible ones)
   const currentChildAlbums = useMemo(() => {
-    return getChildAlbums(albums, selectedAlbum?.id || null);
-  }, [albums, selectedAlbum]);
+    return getChildAlbums(visibleAlbums, selectedAlbum?.id || null);
+  }, [visibleAlbums, selectedAlbum]);
 
-  // Smart Albums - convert media to SmartAlbumItem format
+  // Smart Albums - convert media to SmartAlbumItem format (using visible media only)
   const smartAlbumItems: SmartAlbumItem[] = useMemo(() => {
-    return media.map(m => ({
+    return visibleMedia.map(m => ({
       id: m.id,
       filename: m.filename,
       name: m.caption || m.filename,
@@ -1067,7 +1080,7 @@ export default function Photos() {
       type: m.type,
       mime_type: m.mime_type,
     }));
-  }, [media, validTagIds]);
+  }, [visibleMedia, validTagIds]);
 
   const { smartAlbums, getItemsForSmartAlbum } = useSmartAlbums(smartAlbumItems);
 
@@ -1507,7 +1520,7 @@ export default function Photos() {
                   {currentChildAlbums.length > 0 && ` • ${currentChildAlbums.length} Unteralben`}
                 </>
               ) : (
-                <>{media.filter(m => m.type === 'photo').length} Fotos • {media.filter(m => m.type === 'video').length} Videos • {albums.length} Alben</>
+                <>{visibleMedia.filter(m => m.type === 'photo').length} Fotos • {visibleMedia.filter(m => m.type === 'video').length} Videos • {visibleAlbums.length} Alben</>
               )}
             </p>
           </div>
@@ -1838,6 +1851,10 @@ export default function Photos() {
                               Anpinnen
                             </>
                           )}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setHidden(album.id, true); }}>
+                          <EyeOff className="w-4 h-4 mr-2" />
+                          Ausblenden
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem 
