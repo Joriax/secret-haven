@@ -7,8 +7,14 @@
  * - media/files/[filename]: document files
  */
 
-export const PHANTOMVAULT_VERSION = '1.0';
+export const PHANTOMVAULT_VERSION = '1.1';
 export const PHANTOMVAULT_EXTENSION = '.phantomvault';
+
+// Performance tuning constants
+export const MEDIA_DOWNLOAD_BATCH_SIZE = 8; // Parallel downloads
+export const MEDIA_UPLOAD_BATCH_SIZE = 5; // Parallel uploads
+export const DB_INSERT_BATCH_SIZE = 50; // Bulk database inserts
+export const COMPRESSION_LEVEL = 6; // Balance speed/size (1-9)
 
 export interface ManifestMetadata {
   version: string;
@@ -63,6 +69,7 @@ export interface ExportProgress {
   message: string;
   current?: number;
   total?: number;
+  bytesProcessed?: number;
 }
 
 export interface ImportProgress {
@@ -107,3 +114,27 @@ export type IdMappings = {
   photos: Record<string, string>;
   files: Record<string, string>;
 };
+
+/**
+ * Utility to batch items for parallel processing
+ */
+export function batchItems<T>(items: T[], batchSize: number): T[][] {
+  const batches: T[][] = [];
+  for (let i = 0; i < items.length; i += batchSize) {
+    batches.push(items.slice(i, i + batchSize));
+  }
+  return batches;
+}
+
+/**
+ * Delay execution for performance throttling
+ */
+export function yieldToMain(): Promise<void> {
+  return new Promise(resolve => {
+    if ('requestIdleCallback' in window) {
+      requestIdleCallback(() => resolve(), { timeout: 50 });
+    } else {
+      setTimeout(resolve, 0);
+    }
+  });
+}
