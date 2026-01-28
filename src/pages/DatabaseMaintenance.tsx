@@ -73,6 +73,27 @@ export default function DatabaseMaintenance() {
       icon: <AlertTriangle className="w-5 h-5" />,
       status: 'idle',
     },
+    {
+      id: 'old-versions',
+      name: 'Alte Versionen bereinigen',
+      description: 'Löscht Versionen älter als die letzten 10 pro Notiz',
+      icon: <Trash2 className="w-5 h-5" />,
+      status: 'idle',
+    },
+    {
+      id: 'expired-shares',
+      name: 'Abgelaufene Shares',
+      description: 'Löscht abgelaufene temporäre Links',
+      icon: <History className="w-5 h-5" />,
+      status: 'idle',
+    },
+    {
+      id: 'old-security-logs',
+      name: 'Alte Sicherheitslogs',
+      description: 'Löscht Logs älter als 90 Tage',
+      icon: <Database className="w-5 h-5" />,
+      status: 'idle',
+    },
   ]);
   const [isRunning, setIsRunning] = useState(false);
   const [overallProgress, setOverallProgress] = useState(0);
@@ -229,6 +250,89 @@ export default function DatabaseMaintenance() {
           message = found > 0
             ? `${found} kaputte Referenzen gefunden und ${fixed} repariert.`
             : 'Keine kaputten Referenzen gefunden.';
+          break;
+        }
+
+        case 'old-versions': {
+          // Clean up old note versions, keep only last 10 per note
+          const { data: notes } = await supabase
+            .from('notes')
+            .select('id');
+          
+          let totalDeleted = 0;
+          
+          for (const note of notes || []) {
+            const { data: versions } = await supabase
+              .from('note_versions')
+              .select('id, version_number')
+              .eq('note_id', note.id)
+              .order('version_number', { ascending: false });
+            
+            if (versions && versions.length > 10) {
+              const toDelete = versions.slice(10).map(v => v.id);
+              const { error } = await supabase
+                .from('note_versions')
+                .delete()
+                .in('id', toDelete);
+              
+              if (!error) {
+                totalDeleted += toDelete.length;
+              }
+            }
+          }
+          
+          found = totalDeleted;
+          fixed = totalDeleted;
+          message = totalDeleted > 0
+            ? `${totalDeleted} alte Versionen bereinigt.`
+            : 'Keine alten Versionen zum Bereinigen.';
+          break;
+        }
+
+        case 'expired-shares': {
+          // Delete expired temp shares
+          const now = new Date().toISOString();
+          
+          const { data: expired } = await supabase
+            .from('temp_shares')
+            .select('id')
+            .lt('expires_at', now);
+          
+          found = expired?.length || 0;
+          
+          if (found > 0) {
+            const { error } = await supabase
+              .from('temp_shares')
+              .delete()
+              .lt('expires_at', now);
+            
+            if (!error) {
+              fixed = found;
+            }
+          }
+          
+          message = found > 0
+            ? `${found} abgelaufene Links gelöscht.`
+            : 'Keine abgelaufenen Links gefunden.';
+          break;
+        }
+
+        case 'old-security-logs': {
+          // Delete security logs older than 90 days
+          const cutoffDate = new Date();
+          cutoffDate.setDate(cutoffDate.getDate() - 90);
+          
+          const { data: oldLogs } = await supabase
+            .from('security_logs')
+            .select('id')
+            .lt('created_at', cutoffDate.toISOString());
+          
+          found = oldLogs?.length || 0;
+          
+          // Note: We can't delete security_logs due to RLS, but we can show the count
+          message = found > 0
+            ? `${found} alte Logs gefunden (manuelles Löschen erforderlich).`
+            : 'Keine alten Logs zum Bereinigen.';
           break;
         }
       }

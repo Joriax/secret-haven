@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { 
   BarChart3, 
@@ -14,14 +14,16 @@ import {
   Activity,
   Loader2,
   RefreshCw,
-  PieChart
+  PieChart,
+  HardDrive,
+  TrendingDown
 } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
-import { format, subDays, eachDayOfInterval, startOfDay } from 'date-fns';
+import { format, subDays, eachDayOfInterval, startOfDay, addMonths, differenceInMonths } from 'date-fns';
 import { de } from 'date-fns/locale';
 import {
   ChartContainer,
@@ -29,7 +31,9 @@ import {
   ChartTooltipContent,
   ChartConfig,
 } from '@/components/ui/chart';
-import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, PieChart as RechartsPie, Pie, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, PieChart as RechartsPie, Pie, Cell, LineChart, Line } from 'recharts';
+import { ActivityHeatmap } from '@/components/ActivityHeatmap';
+import { useStorageAnalysis, formatBytes } from '@/hooks/useStorageAnalysis';
 
 interface UsageStat {
   feature: string;
@@ -65,10 +69,12 @@ const PIE_COLORS = [
 export default function UsageStats() {
   const [stats, setStats] = useState<UsageStat[]>([]);
   const [dailyActivity, setDailyActivity] = useState<DailyActivity[]>([]);
+  const [heatmapData, setHeatmapData] = useState<{ date: string; count: number }[]>([]);
   const [totalItems, setTotalItems] = useState(0);
   const [loginCount, setLoginCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const { userId, supabaseClient: supabase } = useAuth();
+  const { data: storageData, analyze: analyzeStorage, isLoading: storageLoading } = useStorageAnalysis();
 
   const fetchStats = useCallback(async () => {
     if (!userId) return;
@@ -121,6 +127,26 @@ export default function UsageStats() {
       const logs = logsRes.data || [];
       const views = viewsRes.data || [];
 
+      // Create heatmap data for the whole year
+      const heatmap: { date: string; count: number }[] = [];
+      const allDates = new Map<string, number>();
+      
+      logs.forEach(l => {
+        const dateStr = format(new Date(l.created_at), 'yyyy-MM-dd');
+        allDates.set(dateStr, (allDates.get(dateStr) || 0) + 1);
+      });
+      
+      views.forEach(v => {
+        const dateStr = format(new Date(v.viewed_at), 'yyyy-MM-dd');
+        allDates.set(dateStr, (allDates.get(dateStr) || 0) + 1);
+      });
+      
+      allDates.forEach((count, date) => {
+        heatmap.push({ date, count });
+      });
+      
+      setHeatmapData(heatmap);
+
       const dailyData = last30Days.map(date => {
         const dayStart = startOfDay(date);
         const dayEnd = new Date(dayStart);
@@ -152,7 +178,39 @@ export default function UsageStats() {
 
   useEffect(() => {
     fetchStats();
-  }, [fetchStats]);
+    analyzeStorage();
+  }, [fetchStats, analyzeStorage]);
+
+  // Storage prediction
+  const storagePrediction = useMemo(() => {
+    if (!storageData || storageData.byMonth.length < 2) return null;
+    
+    const months = storageData.byMonth;
+    if (months.length < 2) return null;
+    
+    // Calculate average monthly growth
+    let totalGrowth = 0;
+    for (let i = 1; i < months.length; i++) {
+      totalGrowth += months[i].totalSize;
+    }
+    const avgMonthlyGrowth = totalGrowth / months.length;
+    
+    // Estimate when storage might become concerning (assuming 1GB soft limit)
+    const softLimit = 1024 * 1024 * 1024; // 1GB
+    const currentUsage = storageData.totalSize;
+    const remainingSpace = softLimit - currentUsage;
+    
+    if (avgMonthlyGrowth <= 0) return { months: null, usage: currentUsage, limit: softLimit };
+    
+    const monthsUntilFull = Math.floor(remainingSpace / avgMonthlyGrowth);
+    
+    return {
+      months: monthsUntilFull > 0 ? monthsUntilFull : 0,
+      usage: currentUsage,
+      limit: softLimit,
+      avgGrowth: avgMonthlyGrowth
+    };
+  }, [storageData]);
 
   const maxFeature = Math.max(...stats.map(s => s.count), 1);
   const pieData = stats.filter(s => s.count > 0).map(s => ({ name: s.feature, value: s.count, fill: s.fill }));
@@ -309,6 +367,62 @@ export default function UsageStats() {
               </div>
             </div>
           </div>
+
+          {/* GitHub-style Heatmap */}
+          <ActivityHeatmap 
+            data={heatmapData}
+            title="Aktivitäts-Heatmap"
+            activeText="Aktionen"
+            emptyText="Keine Aktivität"
+          />
+
+          {/* Storage Prediction */}
+          {storagePrediction && (
+            <div className="glass-card p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <HardDrive className="w-5 h-5 text-primary" />
+                <h2 className="text-lg font-semibold text-foreground">Speicher-Vorhersage</h2>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Aktueller Verbrauch</span>
+                  <span className="font-medium">{formatBytes(storagePrediction.usage)}</span>
+                </div>
+                
+                <Progress 
+                  value={(storagePrediction.usage / storagePrediction.limit) * 100} 
+                  className="h-3"
+                />
+                
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>0 MB</span>
+                  <span>{formatBytes(storagePrediction.limit)}</span>
+                </div>
+
+                {storagePrediction.avgGrowth && storagePrediction.avgGrowth > 0 && (
+                  <div className="mt-4 p-4 rounded-lg bg-muted/30">
+                    <div className="flex items-center gap-2 mb-2">
+                      {storagePrediction.months && storagePrediction.months > 12 ? (
+                        <TrendingDown className="w-4 h-4 text-green-500" />
+                      ) : (
+                        <TrendingUp className="w-4 h-4 text-yellow-500" />
+                      )}
+                      <span className="font-medium text-sm">Prognose</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Bei durchschnittlich {formatBytes(storagePrediction.avgGrowth)} pro Monat 
+                      {storagePrediction.months !== null && storagePrediction.months > 0 ? (
+                        <> erreichst du das Limit in ca. <strong>{storagePrediction.months} Monaten</strong>.</>
+                      ) : (
+                        <> ist dein Speicher sehr sparsam genutzt.</>
+                      )}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Activity Chart */}
           <div className="glass-card p-6">
