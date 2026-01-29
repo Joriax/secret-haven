@@ -2613,7 +2613,7 @@ export default function Photos() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
             onClick={() => setShowNewAlbumModal(false)}
           >
             <motion.div
@@ -2725,7 +2725,7 @@ export default function Photos() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
             onClick={() => setShowEditAlbumModal(false)}
           >
             <motion.div
@@ -2911,7 +2911,7 @@ export default function Photos() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
             onClick={() => setShowBulkTagManager(false)}
           >
             <motion.div
