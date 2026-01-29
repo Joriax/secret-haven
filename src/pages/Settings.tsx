@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Fingerprint, ArrowLeft, Trash2, Code, Palette, Shield as ShieldIcon, Monitor, FolderX } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { PageHeader } from '@/components/PageHeader';
 import { 
   Settings as SettingsIcon, 
@@ -41,6 +40,7 @@ import { CustomCSSEditor } from '@/components/CustomCSSEditor';
 import { IconPackSelector } from '@/components/IconPackSelector';
 import { DecoyVaultManager } from '@/components/DecoyVaultManager';
 import { HiddenAlbumsManager } from '@/components/HiddenAlbumsManager';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 const PIN_LENGTH = 6;
 
@@ -53,6 +53,18 @@ const AUTO_LOCK_OPTIONS = [
   { value: 30, label: '30 Minuten' },
   { value: 60, label: '1 Stunde' },
 ];
+
+const sectionFallback = (title: string) => (
+  <div className="p-4 rounded-xl bg-muted/30 border border-border">
+    <div className="flex items-center gap-2">
+      <AlertCircle className="w-4 h-4 text-destructive" />
+      <p className="text-sm text-foreground font-medium">{title} konnte nicht geladen werden</p>
+    </div>
+    <p className="text-sm text-muted-foreground mt-2">
+      Bitte Seite neu laden oder später erneut versuchen.
+    </p>
+  </div>
+);
 
 export default function Settings() {
   const [showPinChange, setShowPinChange] = useState(false);
@@ -387,11 +399,7 @@ export default function Settings() {
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="space-y-6 max-w-2xl mx-auto"
-    >
+    <div className="space-y-6 max-w-2xl mx-auto animate-in fade-in duration-200">
       {/* Header */}
       <PageHeader
         title="Einstellungen"
@@ -431,12 +439,7 @@ export default function Settings() {
 
           {/* Auto-Lock Timer */}
           {autoLockEnabled && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              className="p-4 rounded-xl bg-muted/30 space-y-4"
-            >
+            <div className="p-4 rounded-xl bg-muted/30 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground text-sm">Sperren nach:</span>
                 <span className="text-cyan-500 font-medium">
@@ -463,7 +466,7 @@ export default function Settings() {
                 <span>30 Min</span>
                 <span>60 Min</span>
               </div>
-            </motion.div>
+            </div>
           )}
         </div>
       </div>
@@ -751,29 +754,41 @@ export default function Settings() {
 
       {/* Theme Customizer */}
       <div className="glass-card p-6">
-        <FullThemeCustomizer />
+        <ErrorBoundary fallback={sectionFallback('Theme-Einstellungen')}>
+          <FullThemeCustomizer />
+        </ErrorBoundary>
       </div>
 
       {/* Icon Pack Selector */}
       <div className="glass-card p-6">
-        <IconPackSelector />
+        <ErrorBoundary fallback={sectionFallback('Icon-Pakete')}>
+          <IconPackSelector />
+        </ErrorBoundary>
       </div>
 
       {/* Custom CSS Editor */}
       <div className="glass-card p-6">
-        <CustomCSSEditor />
+        <ErrorBoundary fallback={sectionFallback('Custom CSS')}>
+          <CustomCSSEditor />
+        </ErrorBoundary>
       </div>
 
       {/* Decoy Vault Manager */}
       <div className="glass-card p-6">
-        <DecoyVaultManager />
+        <ErrorBoundary fallback={sectionFallback('Tarn-Vault')}>
+          <DecoyVaultManager />
+        </ErrorBoundary>
       </div>
 
       {/* Backup Manager */}
-      <BackupManager />
+      <ErrorBoundary fallback={sectionFallback('Backups')}>
+        <BackupManager />
+      </ErrorBoundary>
 
       {/* Scheduled Backups */}
-      <ScheduledBackups />
+      <ErrorBoundary fallback={sectionFallback('Geplante Backups')}>
+        <ScheduledBackups />
+      </ErrorBoundary>
 
       {/* Hidden Albums Section */}
       <div className="glass-card p-6">
@@ -796,7 +811,9 @@ export default function Settings() {
         
         {showHiddenAlbums && (
           <div className="animate-in fade-in slide-in-from-top-2 duration-200">
-            <HiddenAlbumsManager />
+            <ErrorBoundary fallback={sectionFallback('Ausgeblendete Alben')}>
+              <HiddenAlbumsManager />
+            </ErrorBoundary>
           </div>
         )}
       </div>
@@ -826,11 +843,13 @@ export default function Settings() {
       </div>
 
       {/* Import Manager Dialog */}
-      <ImportManager 
-        open={showImportManager}
-        onClose={() => setShowImportManager(false)}
-        onImport={handleImport}
-      />
+      <ErrorBoundary fallback={null}>
+        <ImportManager 
+          open={showImportManager}
+          onClose={() => setShowImportManager(false)}
+          onImport={handleImport}
+        />
+      </ErrorBoundary>
 
       {/* Danger Zone */}
       <div className="glass-card p-6 border-destructive/30">
@@ -883,10 +902,12 @@ export default function Settings() {
       </div>
 
       {/* Delete Account Dialog */}
-      <DeleteAccountDialog 
-        open={showDeleteAccount} 
-        onOpenChange={setShowDeleteAccount} 
-      />
-    </motion.div>
+      <ErrorBoundary fallback={null}>
+        <DeleteAccountDialog 
+          open={showDeleteAccount} 
+          onOpenChange={setShowDeleteAccount} 
+        />
+      </ErrorBoundary>
+    </div>
   );
 }
