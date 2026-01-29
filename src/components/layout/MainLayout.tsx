@@ -31,20 +31,17 @@ export const MainLayout: React.FC = () => {
     setSidebarOpen(false);
     setSearchOpen(false);
     
-    // Force cleanup of any stale blur/overlay artifacts
+     // Force cleanup of any stale scroll-lock artifacts
     const cleanup = () => {
       document.body.style.removeProperty('overflow');
       document.body.style.removeProperty('pointer-events');
       document.body.classList.remove('overflow-hidden');
       document.body.removeAttribute('data-scroll-locked');
-      
-      // Remove any orphaned backdrop elements
-      document.querySelectorAll('.backdrop-blur-sm').forEach(el => {
-        const style = window.getComputedStyle(el);
-        if (style.position === 'fixed' && !el.closest('[data-sidebar]')) {
-          el.remove();
-        }
-      });
+
+       // IMPORTANT: Do not remove DOM nodes here.
+       // Manually removing portal/backdrop nodes can race with React unmount and cause
+       // "NotFoundError: The object can not be found here".
+       // If a backdrop is stuck, RouteUIReset will neutralize it non-destructively.
     };
     
     cleanup();
