@@ -55,7 +55,12 @@ export const useAutoLock = () => {
 
     timeoutRef.current = setTimeout(() => {
       if (userId) {
-        logEvent('auto_lock', { reason: 'inactivity', timeout_minutes: timeout / 60000 });
+        // Only log if we have a valid user and supabase client
+        try {
+          logEvent('auto_lock', { reason: 'inactivity', timeout_minutes: timeout / 60000 });
+        } catch (e) {
+          console.error('Failed to log auto_lock event:', e);
+        }
       }
       logout();
     }, timeout);
@@ -90,7 +95,11 @@ export const useAutoLock = () => {
         
         if (isEnabled() && elapsed > timeout) {
           if (userId) {
-            logEvent('auto_lock', { reason: 'visibility_timeout', elapsed_ms: elapsed });
+            try {
+              logEvent('auto_lock', { reason: 'visibility_timeout', elapsed_ms: elapsed });
+            } catch (e) {
+              console.error('Failed to log visibility timeout:', e);
+            }
           }
           logout();
         } else {

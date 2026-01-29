@@ -73,13 +73,29 @@ export default function Settings() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [backupPassword, setBackupPassword] = useState('');
   const [isBiometricRegistering, setIsBiometricRegistering] = useState(false);
-  const { userId, sessionToken, logout } = useAuth();
+  const { userId, sessionToken, logout, isAuthLoading } = useAuth();
   const navigate = useNavigate();
   const { getTimeoutDuration, setTimeoutDuration, isEnabled, setEnabled } = useAutoLock();
   const { isAvailable: biometricAvailable, isEnabled: biometricEnabled, register: registerBiometric, disable: disableBiometric } = useBiometric();
   
   const [autoLockEnabled, setAutoLockEnabled] = useState(true);
   const [autoLockMinutes, setAutoLockMinutes] = useState(5);
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!isAuthLoading && !userId) {
+      navigate('/login', { replace: true });
+    }
+  }, [isAuthLoading, userId, navigate]);
+
+  // Show loading while auth is loading or redirecting
+  if (isAuthLoading || !userId) {
+    return (
+      <div className="min-h-[400px] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   // Handle import
   const handleImport = async (items: any[]) => {
