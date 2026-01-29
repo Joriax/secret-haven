@@ -41,7 +41,10 @@ export const useSecurityLogs = () => {
   }, [settings]);
 
   const fetchLogs = useCallback(async (limit?: number) => {
-    if (!userId || !sessionToken) return;
+    if (!userId || !sessionToken || !supabase) {
+      setLoading(false);
+      return;
+    }
     
     setLoading(true);
     try {
@@ -71,7 +74,7 @@ export const useSecurityLogs = () => {
   }, [fetchLogs]);
 
   const logEvent = async (eventType: string, details: Record<string, any> = {}) => {
-    if (!userId) return;
+    if (!userId || !supabase) return;
 
     try {
       await supabase.from('security_logs').insert({
@@ -86,7 +89,7 @@ export const useSecurityLogs = () => {
   };
 
   const deleteLogs = async (options: { logIds?: string[]; deleteAll?: boolean; olderThan?: string }) => {
-    if (!userId || !sessionToken) return false;
+    if (!userId || !sessionToken || !supabase) return false;
 
     try {
       const { data, error } = await supabase.functions.invoke('verify-pin', {
