@@ -471,38 +471,47 @@ export default function Settings() {
         </div>
       </div>
 
-      {/* Biometric Authentication Section */}
-      {biometricAvailable && (
-        <div className="glass-card p-6">
-          <div className="flex items-center gap-3 mb-6">
-            <Fingerprint className="w-5 h-5 text-green-500" />
-            <h2 className="text-lg font-semibold text-foreground">Biometrie</h2>
-          </div>
-
-          <div className="flex items-center justify-between p-4 rounded-xl bg-muted/30">
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
-                <Fingerprint className="w-5 h-5 text-green-500" />
-              </div>
-              <div>
-                <h3 className="font-medium text-foreground">Touch/Face ID</h3>
-                <p className="text-sm text-muted-foreground">Biometrische Authentifizierung für schnellen Zugang</p>
-              </div>
-            </div>
-            <Switch
-              checked={biometricEnabled}
-              onCheckedChange={handleBiometricToggle}
-              disabled={isBiometricRegistering}
-            />
-          </div>
-          
-          {biometricEnabled && (
-            <p className="text-green-500/70 text-xs mt-3 px-4">
-              ✓ Biometrie aktiviert - Du kannst dich jetzt mit Touch/Face ID anmelden
-            </p>
-          )}
+      {/* Biometric Authentication Section - Always show, with availability note */}
+      <div className="glass-card p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <Fingerprint className="w-5 h-5 text-green-500" />
+          <h2 className="text-lg font-semibold text-foreground">Biometrie</h2>
         </div>
-      )}
+
+        <div className="flex items-center justify-between p-4 rounded-xl bg-muted/30">
+          <div className="flex items-center gap-4">
+            <div className={cn(
+              "w-10 h-10 rounded-lg flex items-center justify-center",
+              biometricAvailable ? "bg-green-500/20" : "bg-muted"
+            )}>
+              <Fingerprint className={cn(
+                "w-5 h-5",
+                biometricAvailable ? "text-green-500" : "text-muted-foreground"
+              )} />
+            </div>
+            <div>
+              <h3 className="font-medium text-foreground">Touch/Face ID</h3>
+              <p className="text-sm text-muted-foreground">
+                {biometricAvailable 
+                  ? "Biometrische Authentifizierung für schnellen Zugang"
+                  : "Nicht verfügbar auf diesem Gerät/Browser"
+                }
+              </p>
+            </div>
+          </div>
+          <Switch
+            checked={biometricEnabled}
+            onCheckedChange={handleBiometricToggle}
+            disabled={isBiometricRegistering || !biometricAvailable}
+          />
+        </div>
+        
+        {biometricEnabled && (
+          <p className="text-green-500/70 text-xs mt-3 px-4">
+            ✓ Biometrie aktiviert - Du kannst dich jetzt mit Touch/Face ID anmelden
+          </p>
+        )}
+      </div>
 
       {/* Security Section */}
       <div className="glass-card p-6">
