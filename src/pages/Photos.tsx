@@ -1451,8 +1451,24 @@ export default function Photos() {
     // For videos, don't use timer - wait for video to end
     if (currentItem?.type === 'video') {
       setSlideshowVideoPlaying(true);
-      // Auto-play will be handled by the video element
-      return;
+      // Explicitly try to play the video after a short delay to ensure DOM is ready
+      const playTimer = setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.muted = isMuted;
+          videoRef.current.volume = videoVolume;
+          videoRef.current.play().catch((err) => {
+            console.warn('Slideshow video autoplay blocked:', err);
+            // If autoplay is blocked, move to next after a delay
+            setTimeout(() => {
+              if (isSlideshow) {
+                const nextIndex = getNextSlideshowIndex(lightboxIndex);
+                setLightboxIndex(nextIndex);
+              }
+            }, 3000);
+          });
+        }
+      }, 100);
+      return () => clearTimeout(playTimer);
     }
     
     // For photos, use the interval timer
@@ -1467,7 +1483,7 @@ export default function Photos() {
         clearTimeout(slideshowTimerRef.current);
       }
     };
-  }, [isSlideshow, lightboxIndex, slideshowInterval, filteredMedia, getNextSlideshowIndex]);
+  }, [isSlideshow, lightboxIndex, slideshowInterval, filteredMedia, getNextSlideshowIndex, isMuted, videoVolume]);
 
   // Cleanup slideshow and wake lock on unmount
   useEffect(() => {
