@@ -28,39 +28,67 @@ export function usePullToRefresh(config: PullToRefreshConfig): PullToRefreshRetu
 
   const startYRef = useRef(0);
   const currentYRef = useRef(0);
+  const isTrackingRef = useRef(false);
   const isPullingRef = useRef(false);
+  const hasStartedPullRef = useRef(false);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     if (disabled || isRefreshing) return;
+    if (e.touches.length !== 1) return;
     
-    // Only enable pull if at top of scroll
+    // Only enable pull if at top of scroll (window OR scroll container)
     const target = e.currentTarget as HTMLElement;
-    if (target.scrollTop > 0) return;
+    const windowScrollTop =
+      window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+    const containerScrollTop = target.scrollTop || 0;
+    const atTop = windowScrollTop <= 0 && containerScrollTop <= 0;
+    if (!atTop) return;
 
     startYRef.current = e.touches[0].clientY;
-    isPullingRef.current = true;
-    setIsPulling(true);
+    currentYRef.current = startYRef.current;
+
+    // Track gesture, but don't mark as pulling yet.
+    // Marking as pulling on touchstart causes layout/style updates that can cancel clicks on iOS.
+    isTrackingRef.current = true;
+    isPullingRef.current = false;
+    hasStartedPullRef.current = false;
   }, [disabled, isRefreshing]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (!isPullingRef.current || disabled || isRefreshing) return;
+    if (!isTrackingRef.current || disabled || isRefreshing) return;
+    if (e.touches.length !== 1) return;
 
     currentYRef.current = e.touches[0].clientY;
     const diff = currentYRef.current - startYRef.current;
 
-    if (diff > 0) {
+    // Small dead-zone so normal taps don't trigger pull state.
+    const deadZonePx = 6;
+
+    if (diff > deadZonePx) {
+      if (!hasStartedPullRef.current) {
+        hasStartedPullRef.current = true;
+        isPullingRef.current = true;
+        setIsPulling(true);
+      }
       // Apply resistance to pull
       const resistance = 0.5;
       const distance = Math.min(diff * resistance, maxPull);
       setPullDistance(distance);
+    } else if (!hasStartedPullRef.current) {
+      // Keep distance at 0 during the dead-zone to avoid layout updates during taps.
+      if (pullDistance !== 0) setPullDistance(0);
     }
-  }, [disabled, isRefreshing, maxPull]);
+  }, [disabled, isRefreshing, maxPull, pullDistance]);
 
   const handleTouchEnd = useCallback(async () => {
-    if (!isPullingRef.current || disabled) return;
+    if (!isTrackingRef.current || disabled) return;
     
+    isTrackingRef.current = false;
+
+    const didPull = hasStartedPullRef.current;
+    hasStartedPullRef.current = false;
     isPullingRef.current = false;
-    setIsPulling(false);
+    if (didPull) setIsPulling(false);
 
     if (pullDistance >= threshold && !isRefreshing) {
       setIsRefreshing(true);
@@ -80,7 +108,9 @@ export function usePullToRefresh(config: PullToRefreshConfig): PullToRefreshRetu
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      isTrackingRef.current = false;
       isPullingRef.current = false;
+      hasStartedPullRef.current = false;
     };
   }, []);
 
