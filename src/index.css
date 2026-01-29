@@ -78,6 +78,28 @@
     font-family: 'Space Grotesk', sans-serif;
     letter-spacing: -0.02em;
   }
+
+  /* Fix mobile double-tap issue - disable touch delay on interactive elements */
+  button,
+  a,
+  [role="button"],
+  input,
+  select,
+  textarea,
+  label,
+  .cursor-pointer {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Prevent iOS 300ms delay */
+  @supports (-webkit-touch-callout: none) {
+    button,
+    a,
+    [role="button"] {
+      cursor: pointer;
+    }
+  }
 }
 
 @layer components {
