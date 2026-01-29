@@ -43,6 +43,8 @@ export class ErrorBoundary extends Component<Props, State> {
         return this.props.fallback;
       }
 
+      const isDev = import.meta.env.DEV;
+
       return (
         <div className="min-h-[400px] flex items-center justify-center p-6">
           <div className="max-w-md w-full text-center space-y-6">
@@ -59,7 +61,7 @@ export class ErrorBoundary extends Component<Props, State> {
               </p>
             </div>
 
-            {process.env.NODE_ENV === 'development' && this.state.error && (
+            {isDev && this.state.error && (
               <div className="p-4 rounded-lg bg-muted/50 text-left">
                 <p className="text-xs font-mono text-destructive break-all">
                   {this.state.error.message}
