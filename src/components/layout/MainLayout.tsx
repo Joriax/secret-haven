@@ -110,7 +110,9 @@ export const MainLayout: React.FC = () => {
         <div 
           className="p-4 lg:p-6 pt-16 lg:pt-6"
           style={{
-            transform: isPulling || isRefreshing ? `translateY(${pullDistance}px)` : 'none',
+            // IMPORTANT (mobile): Avoid toggling transform on simple taps.
+            // iOS can cancel the first click if layout/styles change between touchstart/touchend.
+            transform: (isRefreshing || pullDistance > 0) ? `translateY(${pullDistance}px)` : 'none',
             transition: isPulling ? 'none' : 'transform 0.3s ease-out',
           }}
         >
