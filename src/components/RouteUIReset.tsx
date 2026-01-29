@@ -46,36 +46,32 @@ export function RouteUIReset() {
         root.style.removeProperty("will-change");
       }
 
-      // Remove ALL elements with backdrop-blur that are fixed/absolute overlays
-      // This catches Framer Motion animated overlays that don't unmount properly
+      // IMPORTANT: Never remove DOM nodes here.
+      // Removing portal/backdrop nodes can race with React unmount and cause:
+      // "NotFoundError: The object can not be found here" (removeChild during commit).
+      // Instead, neutralize potential stuck overlays by disabling their visuals + interactions.
       const overlays = document.querySelectorAll<HTMLElement>(
-        '[class*="backdrop-blur"], [class*="bg-background/80"], [style*="backdrop-filter"]'
+        '[class*="backdrop-blur"], [class*="bg-background/80"], [style*="backdrop-filter"], [data-radix-portal], [data-vaul-overlay]'
       );
-      
+
       overlays.forEach((el) => {
         const style = window.getComputedStyle(el);
         const position = style.position;
-        
-        // Only remove fixed/absolute positioned overlays (not inline blurred elements)
-        if (position === "fixed" || position === "absolute") {
-          const rect = el.getBoundingClientRect();
-          const isLargeOverlay = rect.width > window.innerWidth * 0.5 && rect.height > window.innerHeight * 0.5;
-          
-          // Remove large overlays (likely modal backdrops)
-          if (isLargeOverlay) {
-            el.remove();
-          }
-        }
-      });
+        if (position !== 'fixed' && position !== 'absolute') return;
 
-      // Also target Framer Motion's presence elements that might be stuck
-      const motionElements = document.querySelectorAll<HTMLElement>(
-        '[data-framer-portal-id], [class*="framer"]'
-      );
-      motionElements.forEach((el) => {
-        const style = window.getComputedStyle(el);
-        if (style.position === "fixed" && style.backdropFilter !== "none") {
-          el.remove();
+        const rect = el.getBoundingClientRect();
+        const isLargeOverlay =
+          rect.width > window.innerWidth * 0.5 && rect.height > window.innerHeight * 0.5;
+        if (!isLargeOverlay) return;
+
+        el.style.pointerEvents = 'none';
+        el.style.opacity = '0';
+        el.style.filter = 'none';
+        // backdropFilter is not always writable via style in all browsers; safe-guard.
+        try {
+          (el.style as any).backdropFilter = 'none';
+        } catch {
+          // ignore
         }
       });
 
