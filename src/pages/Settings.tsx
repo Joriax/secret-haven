@@ -523,88 +523,74 @@ export default function Settings() {
                 <p className="text-sm text-muted-foreground">Ändere deinen 6-stelligen Zugangs-PIN</p>
               </div>
             </div>
-            <motion.div animate={{ rotate: showPinChange ? 180 : 0 }} className="text-muted-foreground">▼</motion.div>
+            <span className={cn("text-muted-foreground transition-transform", showPinChange && "rotate-180")}>▼</span>
           </button>
 
-          <AnimatePresence>
-            {showPinChange && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                className="overflow-hidden"
-              >
-              <div className="p-4 space-y-4 bg-muted/30 rounded-xl">
-                  <div>
-                    <label className="block text-sm text-muted-foreground mb-2">Aktueller PIN</label>
-                    <input
-                      type="password"
-                      inputMode="numeric"
-                      maxLength={6}
-                      value={currentPin}
-                      onChange={(e) => setCurrentPin(e.target.value.replace(/\D/g, ''))}
-                      placeholder="••••••"
-                      className="w-full px-4 py-3 rounded-xl vault-input text-foreground placeholder:text-muted-foreground/50 text-center tracking-widest"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-muted-foreground mb-2">Neuer PIN</label>
-                    <input
-                      type="password"
-                      inputMode="numeric"
-                      maxLength={6}
-                      value={newPin}
-                      onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ''))}
-                      placeholder="••••••"
-                      className="w-full px-4 py-3 rounded-xl vault-input text-foreground placeholder:text-muted-foreground/50 text-center tracking-widest"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-muted-foreground mb-2">PIN bestätigen</label>
-                    <input
-                      type="password"
-                      inputMode="numeric"
-                      maxLength={6}
-                      value={confirmPin}
-                      onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ''))}
-                      placeholder="••••••"
-                      className="w-full px-4 py-3 rounded-xl vault-input text-foreground placeholder:text-muted-foreground/50 text-center tracking-widest"
-                    />
-                  </div>
+          {showPinChange && (
+            <div className="p-4 space-y-4 bg-muted/30 rounded-xl animate-in fade-in slide-in-from-top-2 duration-200">
+              <div>
+                <label className="block text-sm text-muted-foreground mb-2">Aktueller PIN</label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={currentPin}
+                  onChange={(e) => setCurrentPin(e.target.value.replace(/\D/g, ''))}
+                  placeholder="••••••"
+                  className="w-full px-4 py-3 rounded-xl vault-input text-foreground placeholder:text-muted-foreground/50 text-center tracking-widest"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-muted-foreground mb-2">Neuer PIN</label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={newPin}
+                  onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ''))}
+                  placeholder="••••••"
+                  className="w-full px-4 py-3 rounded-xl vault-input text-foreground placeholder:text-muted-foreground/50 text-center tracking-widest"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-muted-foreground mb-2">PIN bestätigen</label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={confirmPin}
+                  onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ''))}
+                  placeholder="••••••"
+                  className="w-full px-4 py-3 rounded-xl vault-input text-foreground placeholder:text-muted-foreground/50 text-center tracking-widest"
+                />
+              </div>
 
-                  <AnimatePresence>
-                    {message && (
-                      <motion.div
-                        initial={{ opacity: 0, y: -10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        className={cn(
-                          "flex items-center gap-2 p-3 rounded-lg",
-                          message.type === 'success' ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
-                        )}
-                      >
-                        {message.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
-                        <span className="text-sm">{message.text}</span>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-
-                  <button
-                    onClick={handlePinChange}
-                    disabled={isLoading}
-                    className="w-full py-3 rounded-xl bg-gradient-primary hover:shadow-glow transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {isLoading ? <Loader2 className="w-5 h-5 text-primary-foreground animate-spin" /> : (
-                      <>
-                        <Lock className="w-4 h-4 text-primary-foreground" />
-                        <span className="text-primary-foreground font-medium">PIN ändern</span>
-                      </>
-                    )}
-                  </button>
+              {message && (
+                <div
+                  className={cn(
+                    "flex items-center gap-2 p-3 rounded-lg animate-in fade-in duration-150",
+                    message.type === 'success' ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
+                  )}
+                >
+                  {message.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+                  <span className="text-sm">{message.text}</span>
                 </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+              )}
+
+              <button
+                onClick={handlePinChange}
+                disabled={isLoading}
+                className="w-full py-3 rounded-xl bg-gradient-primary hover:shadow-glow transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isLoading ? <Loader2 className="w-5 h-5 text-primary-foreground animate-spin" /> : (
+                  <>
+                    <Lock className="w-4 h-4 text-primary-foreground" />
+                    <span className="text-primary-foreground font-medium">PIN ändern</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
 
           {/* Decoy PIN */}
           <button
@@ -620,93 +606,79 @@ export default function Settings() {
                 <p className="text-sm text-muted-foreground">Zweiter PIN zeigt leeren/harmlosen Vault</p>
               </div>
             </div>
-            <motion.div animate={{ rotate: showDecoyPin ? 180 : 0 }} className="text-muted-foreground">▼</motion.div>
+            <span className={cn("text-muted-foreground transition-transform", showDecoyPin && "rotate-180")}>▼</span>
           </button>
 
-          <AnimatePresence>
-            {showDecoyPin && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                className="overflow-hidden"
-              >
-                <div className="p-4 space-y-4 bg-muted/30 rounded-xl">
-                  <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
-                    <p className="text-yellow-500 text-sm">
-                      Der Tarn-PIN zeigt einen leeren Vault an, falls du gezwungen wirst, dein Gerät zu entsperren.
-                    </p>
-                  </div>
-                  <div>
-                    <label className="block text-sm text-muted-foreground mb-2">Aktueller Haupt-PIN</label>
-                    <input
-                      type="password"
-                      inputMode="numeric"
-                      maxLength={6}
-                      value={currentPin}
-                      onChange={(e) => setCurrentPin(e.target.value.replace(/\D/g, ''))}
-                      placeholder="••••••"
-                      className="w-full px-4 py-3 rounded-xl vault-input text-foreground placeholder:text-muted-foreground/50 text-center tracking-widest"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-muted-foreground mb-2">Neuer Tarn-PIN</label>
-                    <input
-                      type="password"
-                      inputMode="numeric"
-                      maxLength={6}
-                      value={decoyPin}
-                      onChange={(e) => setDecoyPin(e.target.value.replace(/\D/g, ''))}
-                      placeholder="••••••"
-                      className="w-full px-4 py-3 rounded-xl vault-input text-foreground placeholder:text-muted-foreground/50 text-center tracking-widest"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-muted-foreground mb-2">Tarn-PIN bestätigen</label>
-                    <input
-                      type="password"
-                      inputMode="numeric"
-                      maxLength={6}
-                      value={confirmDecoyPin}
-                      onChange={(e) => setConfirmDecoyPin(e.target.value.replace(/\D/g, ''))}
-                      placeholder="••••••"
-                      className="w-full px-4 py-3 rounded-xl vault-input text-foreground placeholder:text-muted-foreground/50 text-center tracking-widest"
-                    />
-                  </div>
+          {showDecoyPin && (
+            <div className="p-4 space-y-4 bg-muted/30 rounded-xl animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+                <p className="text-yellow-500 text-sm">
+                  Der Tarn-PIN zeigt einen leeren Vault an, falls du gezwungen wirst, dein Gerät zu entsperren.
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm text-muted-foreground mb-2">Aktueller Haupt-PIN</label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={currentPin}
+                  onChange={(e) => setCurrentPin(e.target.value.replace(/\D/g, ''))}
+                  placeholder="••••••"
+                  className="w-full px-4 py-3 rounded-xl vault-input text-foreground placeholder:text-muted-foreground/50 text-center tracking-widest"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-muted-foreground mb-2">Neuer Tarn-PIN</label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={decoyPin}
+                  onChange={(e) => setDecoyPin(e.target.value.replace(/\D/g, ''))}
+                  placeholder="••••••"
+                  className="w-full px-4 py-3 rounded-xl vault-input text-foreground placeholder:text-muted-foreground/50 text-center tracking-widest"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-muted-foreground mb-2">Tarn-PIN bestätigen</label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={confirmDecoyPin}
+                  onChange={(e) => setConfirmDecoyPin(e.target.value.replace(/\D/g, ''))}
+                  placeholder="••••••"
+                  className="w-full px-4 py-3 rounded-xl vault-input text-foreground placeholder:text-muted-foreground/50 text-center tracking-widest"
+                />
+              </div>
 
-                  <AnimatePresence>
-                    {message && (
-                      <motion.div
-                        initial={{ opacity: 0, y: -10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        className={cn(
-                          "flex items-center gap-2 p-3 rounded-lg",
-                          message.type === 'success' ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
-                        )}
-                      >
-                        {message.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
-                        <span className="text-sm">{message.text}</span>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-
-                  <button
-                    onClick={handleSetDecoyPin}
-                    disabled={isLoading}
-                    className="w-full py-3 rounded-xl bg-gradient-to-r from-yellow-600 to-orange-600 hover:shadow-glow transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {isLoading ? <Loader2 className="w-5 h-5 text-primary-foreground animate-spin" /> : (
-                      <>
-                        <EyeOff className="w-4 h-4 text-primary-foreground" />
-                        <span className="text-primary-foreground font-medium">Tarn-PIN aktivieren</span>
-                      </>
-                    )}
-                  </button>
+              {message && (
+                <div
+                  className={cn(
+                    "flex items-center gap-2 p-3 rounded-lg animate-in fade-in duration-150",
+                    message.type === 'success' ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
+                  )}
+                >
+                  {message.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+                  <span className="text-sm">{message.text}</span>
                 </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+              )}
+
+              <button
+                onClick={handleSetDecoyPin}
+                disabled={isLoading}
+                className="w-full py-3 rounded-xl bg-gradient-to-r from-yellow-600 to-orange-600 hover:shadow-glow transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isLoading ? <Loader2 className="w-5 h-5 text-primary-foreground animate-spin" /> : (
+                  <>
+                    <EyeOff className="w-4 h-4 text-primary-foreground" />
+                    <span className="text-primary-foreground font-medium">Tarn-PIN aktivieren</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
 
           {/* Recovery Key */}
           <button
@@ -722,67 +694,58 @@ export default function Settings() {
                 <p className="text-sm text-muted-foreground">Backup-Code für Notfallzugriff</p>
               </div>
             </div>
-            <motion.div animate={{ rotate: showRecoveryKey ? 180 : 0 }} className="text-muted-foreground">▼</motion.div>
+            <span className={cn("text-muted-foreground transition-transform", showRecoveryKey && "rotate-180")}>▼</span>
           </button>
 
-          <AnimatePresence>
-            {showRecoveryKey && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                className="overflow-hidden"
-              >
-                <div className="p-4 space-y-4 bg-muted/30 rounded-xl">
-                  {recoveryKey ? (
-                    <>
-                      <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                        <p className="text-blue-500 text-sm mb-2">Dein Recovery-Schlüssel:</p>
-                        <div className="font-mono text-lg text-foreground bg-background/50 p-3 rounded-lg text-center break-all">
-                          {recoveryKey}
-                        </div>
-                      </div>
-                      <div className="flex gap-3">
-                        <button
-                          onClick={copyRecoveryKey}
-                          className="flex-1 py-3 rounded-xl border border-border hover:bg-muted/30 transition-all flex items-center justify-center gap-2"
-                        >
-                          <Copy className="w-4 h-4 text-foreground" />
-                          <span className="text-foreground">Kopieren</span>
-                        </button>
-                        <button
-                          onClick={generateNewRecoveryKey}
-                          disabled={isLoading}
-                          className="flex-1 py-3 rounded-xl border border-border hover:bg-muted/30 transition-all flex items-center justify-center gap-2"
-                        >
-                          <RefreshCw className={cn("w-4 h-4 text-foreground", isLoading && "animate-spin")} />
-                          <span className="text-foreground">Neu generieren</span>
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-muted-foreground text-sm">
-                        Generiere einen Recovery-Schlüssel, um im Notfall Zugriff zu erhalten.
-                      </p>
-                      <button
-                        onClick={generateNewRecoveryKey}
-                        disabled={isLoading}
-                        className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                      >
-                        {isLoading ? <Loader2 className="w-5 h-5 text-primary-foreground animate-spin" /> : (
-                          <>
-                            <Key className="w-4 h-4 text-primary-foreground" />
-                            <span className="text-primary-foreground font-medium">Recovery-Key generieren</span>
-                          </>
-                        )}
-                      </button>
-                    </>
-                  )}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {showRecoveryKey && (
+            <div className="p-4 space-y-4 bg-muted/30 rounded-xl animate-in fade-in slide-in-from-top-2 duration-200">
+              {recoveryKey ? (
+                <>
+                  <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                    <p className="text-blue-500 text-sm mb-2">Dein Recovery-Schlüssel:</p>
+                    <div className="font-mono text-lg text-foreground bg-background/50 p-3 rounded-lg text-center break-all">
+                      {recoveryKey}
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={copyRecoveryKey}
+                      className="flex-1 py-3 rounded-xl border border-border hover:bg-muted/30 transition-all flex items-center justify-center gap-2"
+                    >
+                      <Copy className="w-4 h-4 text-foreground" />
+                      <span className="text-foreground">Kopieren</span>
+                    </button>
+                    <button
+                      onClick={generateNewRecoveryKey}
+                      disabled={isLoading}
+                      className="flex-1 py-3 rounded-xl border border-border hover:bg-muted/30 transition-all flex items-center justify-center gap-2"
+                    >
+                      <RefreshCw className={cn("w-4 h-4 text-foreground", isLoading && "animate-spin")} />
+                      <span className="text-foreground">Neu generieren</span>
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-muted-foreground text-sm">
+                    Generiere einen Recovery-Schlüssel, um im Notfall Zugriff zu erhalten.
+                  </p>
+                  <button
+                    onClick={generateNewRecoveryKey}
+                    disabled={isLoading}
+                    className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isLoading ? <Loader2 className="w-5 h-5 text-primary-foreground animate-spin" /> : (
+                      <>
+                        <Key className="w-4 h-4 text-primary-foreground" />
+                        <span className="text-primary-foreground font-medium">Recovery-Key generieren</span>
+                      </>
+                    )}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -831,19 +794,11 @@ export default function Settings() {
           Blende Alben aus, um sie vollständig zu verstecken – inklusive aller Unteralben und Inhalte.
         </p>
         
-        <AnimatePresence>
-          {showHiddenAlbums && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="overflow-hidden"
-            >
-              <HiddenAlbumsManager />
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {showHiddenAlbums && (
+          <div className="animate-in fade-in slide-in-from-top-2 duration-200">
+            <HiddenAlbumsManager />
+          </div>
+        )}
       </div>
 
 
