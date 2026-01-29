@@ -79,7 +79,22 @@
     letter-spacing: -0.02em;
   }
 
-  /* Fix mobile double-tap issue - disable touch delay on interactive elements */
+  /* ===============================================
+   * MOBILE TOUCH FIX - prevent double-tap to zoom  
+   * ===============================================
+   * iOS/Chrome on iPhone intercepts taps when they *could* start a zoom.
+   * Setting touch-action: manipulation tells the browser:
+   *   "Only handle pan + pinch-zoom – don't wait 300ms for a second tap."
+   * -webkit-tap-highlight-color removes the grey rectangle flash.
+   */
+  *,
+  *::before,
+  *::after {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Ensure interactive elements get immediate response */
   button,
   a,
   [role="button"],
@@ -87,16 +102,27 @@
   select,
   textarea,
   label,
+  summary,
   .cursor-pointer {
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    user-select: none;
   }
 
-  /* Prevent iOS 300ms delay */
+  /* But allow text selection in editable fields */
+  input,
+  textarea,
+  [contenteditable="true"] {
+    user-select: text;
+  }
+
+  /* Ensure iOS Safari respects click */
   @supports (-webkit-touch-callout: none) {
     button,
     a,
-    [role="button"] {
+    [role="button"],
+    [tabindex]:not([tabindex="-1"]) {
       cursor: pointer;
     }
   }

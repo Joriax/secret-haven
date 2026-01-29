@@ -140,7 +140,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onSearchOpen
       {/* Mobile overlay - only render when open to prevent blur persistence */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40 lg:hidden animate-fade-in"
+          className="fixed inset-0 bg-background/80 z-40 lg:hidden animate-fade-in"
           onClick={onToggle}
           aria-hidden="true"
         />

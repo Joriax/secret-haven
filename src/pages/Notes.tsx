@@ -598,14 +598,14 @@ export default function Notes() {
   }, [pendingSecureAction, lockNote, unlockNote]);
 
   return (
-    <div className="h-[calc(100vh-6rem)] flex flex-col lg:flex-row gap-4">
+    <div className="h-[calc(100vh-6rem)] flex flex-col lg:flex-row gap-2 sm:gap-4">
       {/* Folder Sidebar */}
       {showFolderSidebar && (
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           className={cn(
-            "w-full lg:w-56 glass-card p-4 shrink-0",
+            "w-full lg:w-56 glass-card p-3 sm:p-4 shrink-0",
             selectedNote && "hidden lg:block"
           )}
         >
@@ -627,7 +627,7 @@ export default function Notes() {
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
         className={cn(
-          "w-full lg:w-80 xl:w-96 flex flex-col glass-card",
+          "w-full lg:w-72 xl:w-80 flex flex-col glass-card overflow-hidden",
           selectedNote && "hidden lg:flex"
         )}
       >

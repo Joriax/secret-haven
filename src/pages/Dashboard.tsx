@@ -208,7 +208,7 @@ export default function Dashboard() {
               variants={container}
               initial="hidden"
               animate="show"
-              className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3"
+              className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5"
             >
               {quickStats.map((stat) => (
                 <motion.div key={stat.label} variants={item}>
@@ -453,7 +453,7 @@ export default function Dashboard() {
   const sideWidgets = gridWidgets.filter(w => w.type !== 'recent-activity');
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 pb-8">
+    <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6 lg:space-y-8 pb-8">
       <CreateNewDialog isOpen={createDialogOpen} onClose={() => setCreateDialogOpen(false)} />
       
       {/* Header */}
@@ -497,7 +497,7 @@ export default function Dashboard() {
       {fullWidthWidgets.map((widget, idx) => renderWidget(widget, idx))}
 
       {/* Main Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
         {/* Main column */}
         <div className="lg:col-span-2 space-y-4">
           {mainWidgets.map((widget, idx) => renderWidget(widget, fullWidthWidgets.length + idx))}

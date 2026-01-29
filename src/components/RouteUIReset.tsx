@@ -50,26 +50,31 @@ export function RouteUIReset() {
       // Removing portal/backdrop nodes can race with React unmount and cause:
       // "NotFoundError: The object can not be found here" (removeChild during commit).
       // Instead, neutralize potential stuck overlays by disabling their visuals + interactions.
+      // We now look for a broader set of overlay indicators.
       const overlays = document.querySelectorAll<HTMLElement>(
-        '[class*="backdrop-blur"], [class*="bg-background/80"], [style*="backdrop-filter"], [data-radix-portal], [data-vaul-overlay]'
+        '[class*="backdrop-blur"], [class*="bg-background/80"], [class*="bg-black/"], [style*="backdrop-filter"], [data-radix-portal], [data-vaul-overlay], [role="dialog"]'
       );
 
       overlays.forEach((el) => {
         const style = window.getComputedStyle(el);
         const position = style.position;
+        // Only target fixed/absolute overlays
         if (position !== 'fixed' && position !== 'absolute') return;
 
         const rect = el.getBoundingClientRect();
+        // Large overlays are more likely to be full-screen backdrop/modal wrappers
         const isLargeOverlay =
-          rect.width > window.innerWidth * 0.5 && rect.height > window.innerHeight * 0.5;
+          rect.width > window.innerWidth * 0.4 && rect.height > window.innerHeight * 0.4;
         if (!isLargeOverlay) return;
 
         el.style.pointerEvents = 'none';
         el.style.opacity = '0';
+        el.style.visibility = 'hidden';
         el.style.filter = 'none';
         // backdropFilter is not always writable via style in all browsers; safe-guard.
         try {
           (el.style as any).backdropFilter = 'none';
+          (el.style as any).webkitBackdropFilter = 'none';
         } catch {
           // ignore
         }
