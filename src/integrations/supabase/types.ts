@@ -1560,41 +1560,26 @@ export type Database = {
     Views: {
       vault_users_safe: {
         Row: {
-          admin_notes: string | null
           created_at: string | null
-          decoy_pin_hash: string | null
           id: string | null
           last_login_at: string | null
-          last_login_ip: string | null
           login_count: number | null
-          pin_hash: string | null
-          recovery_key: string | null
           updated_at: string | null
           username: string | null
         }
         Insert: {
-          admin_notes?: never
           created_at?: string | null
-          decoy_pin_hash?: string | null
           id?: string | null
           last_login_at?: string | null
-          last_login_ip?: string | null
           login_count?: number | null
-          pin_hash?: string | null
-          recovery_key?: string | null
           updated_at?: string | null
           username?: string | null
         }
         Update: {
-          admin_notes?: never
           created_at?: string | null
-          decoy_pin_hash?: string | null
           id?: string | null
           last_login_at?: string | null
-          last_login_ip?: string | null
           login_count?: number | null
-          pin_hash?: string | null
-          recovery_key?: string | null
           updated_at?: string | null
           username?: string | null
         }
