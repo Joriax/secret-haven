@@ -73,7 +73,7 @@ export default function UsageStats() {
   const [totalItems, setTotalItems] = useState(0);
   const [loginCount, setLoginCount] = useState(0);
   const [loading, setLoading] = useState(true);
-  const { userId, supabaseClient: supabase } = useAuth();
+  const { userId, sessionToken, supabaseClient: supabase } = useAuth();
   const { data: storageData, analyze: analyzeStorage, isLoading: storageLoading } = useStorageAnalysis();
 
   const fetchStats = useCallback(async () => {
@@ -91,7 +91,12 @@ export default function UsageStats() {
         supabase.from('links').select('id', { count: 'exact', head: true }).eq('user_id', userId).is('deleted_at', null),
         supabase.from('tiktok_videos').select('id', { count: 'exact', head: true }).eq('user_id', userId).is('deleted_at', null),
         supabase.from('secret_texts').select('id', { count: 'exact', head: true }).eq('user_id', userId),
-        supabase.from('security_logs').select('id, event_type, created_at').eq('user_id', userId),
+        // Security logs are fetched via backend function (no direct DB SELECT on sensitive table)
+        sessionToken
+          ? supabase.functions.invoke('verify-pin', {
+              body: { action: 'get-security-logs', sessionToken, limit: 1000, offset: 0 },
+            })
+          : Promise.resolve({ data: { success: true, logs: [] } } as any),
         supabase.from('view_history').select('id, viewed_at').eq('user_id', userId),
       ]);
 
@@ -105,7 +110,8 @@ export default function UsageStats() {
       const total = notesCount + photosCount + filesCount + linksCount + tiktoksCount + secretsCount;
       setTotalItems(total);
 
-      const logins = (logsRes.data || []).filter(l => l.event_type === 'login').length;
+      const logs = (logsRes as any)?.data?.logs || [];
+      const logins = logs.filter((l: any) => l.event_type === 'login').length;
       setLoginCount(logins);
 
       const featureStats: UsageStat[] = [
@@ -124,14 +130,13 @@ export default function UsageStats() {
         end: new Date()
       });
 
-      const logs = logsRes.data || [];
       const views = viewsRes.data || [];
 
       // Create heatmap data for the whole year
       const heatmap: { date: string; count: number }[] = [];
       const allDates = new Map<string, number>();
       
-      logs.forEach(l => {
+      logs.forEach((l: any) => {
         const dateStr = format(new Date(l.created_at), 'yyyy-MM-dd');
         allDates.set(dateStr, (allDates.get(dateStr) || 0) + 1);
       });
@@ -152,7 +157,7 @@ export default function UsageStats() {
         const dayEnd = new Date(dayStart);
         dayEnd.setDate(dayEnd.getDate() + 1);
 
-        const logCount = logs.filter(l => {
+        const logCount = logs.filter((l: any) => {
           const logDate = new Date(l.created_at);
           return logDate >= dayStart && logDate < dayEnd;
         }).length;
@@ -174,7 +179,7 @@ export default function UsageStats() {
     } finally {
       setLoading(false);
     }
-  }, [userId, supabase]);
+  }, [userId, sessionToken, supabase]);
 
   useEffect(() => {
     fetchStats();

@@ -1379,6 +1379,9 @@ export default function Photos() {
 
   // Track if current video is playing in slideshow
   const [slideshowVideoPlaying, setSlideshowVideoPlaying] = useState(false);
+  // iOS (incl. Chrome on iPhone) often blocks autoplay with sound; we may need to force-muted autoplay
+  const [slideshowForcedMute, setSlideshowForcedMute] = useState(false);
+  const [slideshowVideoAutoplayBlocked, setSlideshowVideoAutoplayBlocked] = useState(false);
 
   // Slideshow functions
   const startSlideshow = async (random: boolean = false) => {
@@ -1414,6 +1417,8 @@ export default function Photos() {
     setIsRandomSlideshow(false);
     setShuffledMediaOrder([]);
     setSlideshowVideoPlaying(false);
+    setSlideshowForcedMute(false);
+    setSlideshowVideoAutoplayBlocked(false);
     if (slideshowTimerRef.current) {
       clearTimeout(slideshowTimerRef.current);
       slideshowTimerRef.current = null;
@@ -1451,23 +1456,48 @@ export default function Photos() {
     // For videos, don't use timer - wait for video to end
     if (currentItem?.type === 'video') {
       setSlideshowVideoPlaying(true);
+      setSlideshowForcedMute(false);
+      setSlideshowVideoAutoplayBlocked(false);
+
       // Explicitly try to play the video after a short delay to ensure DOM is ready
       const playTimer = setTimeout(() => {
-        if (videoRef.current) {
-          videoRef.current.muted = isMuted;
-          videoRef.current.volume = videoVolume;
-          videoRef.current.play().catch((err) => {
-            console.warn('Slideshow video autoplay blocked:', err);
-            // If autoplay is blocked, move to next after a delay
-            setTimeout(() => {
-              if (isSlideshow) {
-                const nextIndex = getNextSlideshowIndex(lightboxIndex);
-                setLightboxIndex(nextIndex);
-              }
-            }, 3000);
-          });
-        }
-      }, 100);
+        const attemptPlay = async () => {
+          const video = videoRef.current;
+          if (!video) return;
+
+          // Ensure we start from the beginning for slideshow transitions
+          try {
+            video.currentTime = 0;
+          } catch {
+            // ignore
+          }
+
+          // First try: respect current mute/volume
+          try {
+            video.muted = isMuted;
+            video.volume = videoVolume;
+            await video.play();
+            return;
+          } catch (err) {
+            console.warn('Slideshow video autoplay blocked (initial):', err);
+          }
+
+          // Second try (iOS fallback): force-muted autoplay
+          try {
+            setSlideshowForcedMute(true);
+            video.muted = true;
+            video.volume = 0;
+            await video.play();
+            return;
+          } catch (err) {
+            console.warn('Slideshow video autoplay blocked (muted fallback):', err);
+            setSlideshowVideoAutoplayBlocked(true);
+            setSlideshowVideoPlaying(false);
+          }
+        };
+
+        void attemptPlay();
+      }, 120);
       return () => clearTimeout(playTimer);
     }
     
@@ -2556,14 +2586,18 @@ export default function Photos() {
                         controlsList="nodownload"
                         autoPlay
                         playsInline
-                        muted={isMuted}
+                        muted={isSlideshow ? (isMuted || slideshowForcedMute) : isMuted}
                         onClick={(e) => e.stopPropagation()}
-                        onPlay={() => setIsVideoPlaying(true)}
+                        onPlay={() => {
+                          setIsVideoPlaying(true);
+                          setSlideshowVideoAutoplayBlocked(false);
+                        }}
                         onPause={() => setIsVideoPlaying(false)}
                         onLoadedMetadata={() => {
                           if (videoRef.current) {
-                            videoRef.current.volume = videoVolume;
-                            videoRef.current.muted = isMuted;
+                            const effectiveMuted = isSlideshow ? (isMuted || slideshowForcedMute) : isMuted;
+                            videoRef.current.volume = effectiveMuted ? 0 : videoVolume;
+                            videoRef.current.muted = effectiveMuted;
                           }
                         }}
                         onEnded={() => {
@@ -2583,6 +2617,33 @@ export default function Photos() {
                           <Film className="w-3 h-3" />
                           Video wird abgespielt...
                         </div>
+                      )}
+
+                      {/* If autoplay is blocked entirely, allow user gesture to start (required on some iOS setups) */}
+                      {isSlideshow && slideshowVideoAutoplayBlocked && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const video = videoRef.current;
+                            if (!video) return;
+                            setSlideshowVideoAutoplayBlocked(false);
+                            setSlideshowVideoPlaying(true);
+                            // Try again with force-muted; user gesture should allow playback
+                            video.muted = true;
+                            video.volume = 0;
+                            void video.play().catch(() => {
+                              // If it still fails, keep the overlay visible
+                              setSlideshowVideoAutoplayBlocked(true);
+                              setSlideshowVideoPlaying(false);
+                            });
+                          }}
+                          className="absolute inset-0 flex items-center justify-center"
+                        >
+                          <span className="px-4 py-2 rounded-full bg-black/70 text-white text-sm">
+                            Tippe zum Starten
+                          </span>
+                        </button>
                       )}
                     </div>
                   ) : (
