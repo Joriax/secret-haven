@@ -7,18 +7,22 @@ import { VoiceCommandButton } from '../VoiceCommandButton';
 import { OfflineStatusBanner } from '../OfflineStatusBanner';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { useAuth } from '@/contexts/AuthContext';
+import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
 export const MainLayout: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const { isAuthenticated } = useAuth();
   const location = useLocation();
+  const queryClient = useQueryClient();
 
-  // Pull-to-refresh handler
+  // Pull-to-refresh handler - invalidate all queries instead of page reload
   const handleRefresh = useCallback(async () => {
-    // Trigger a page reload or data refetch
-    window.location.reload();
-  }, []);
+    // Invalidate all React Query caches to refetch data
+    await queryClient.invalidateQueries();
+    toast.success('Aktualisiert', { duration: 1500 });
+  }, [queryClient]);
 
   const { pullDistance, isRefreshing, isPulling, containerProps } = usePullToRefresh({
     onRefresh: handleRefresh,
